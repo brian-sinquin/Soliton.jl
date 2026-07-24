@@ -74,8 +74,11 @@ using LinearAlgebra
 # Physical constants - natural SI units
 const c = 299792458.0  # Speed of light [m/s]
 
-# Include submodules
-include("types.jl")
+include("Types.jl")
+using .Types
+
+# All core types, physics definitions, and related functions
+include("core.jl")
 include("grid.jl")
 include("pulses.jl")
 include("dispersion.jl")
