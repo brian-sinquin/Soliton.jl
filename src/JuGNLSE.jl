@@ -51,7 +51,7 @@ solution = solve(pulse, params)
 
 # Main Exports
 
-**Types**: `Medium`, `Grid`, `Pulse`, `SimParams`, `Solution`, `RamanModel`, `BlowWood`, `LinAgrawal`, `Hollenbeck`
+**Types**: `Medium`, `Grid`, `Pulse`, `SimParams`, `Solution`, `RamanModel`, `BlowWood`, `LinAgrawal`, `Hollenbeck`, `SellmeierDispersion`
 
 **Pulses**: `sech_pulse`, `gaussian_pulse`, `lorentzian_pulse`, `cw_pulse`
 
@@ -91,7 +91,7 @@ include("analysis.jl")
 # Export types
 export Medium, SimParams, Grid, Pulse, Solution
 export RamanModel, BlowWood, LinAgrawal, Hollenbeck
-export DispersionModel, TaylorDispersion, TabulatedDispersion
+export DispersionModel, TaylorDispersion, TabulatedDispersion, SellmeierDispersion
 export PhysicsModel  # Internal physics model struct
 
 # Export grid functions

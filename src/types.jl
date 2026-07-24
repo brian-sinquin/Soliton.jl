@@ -58,6 +58,32 @@ struct TabulatedDispersion <: DispersionModel
 end
 
 """
+    SellmeierDispersion(B, C)
+
+Dispersion computed directly from Sellmeier coefficients:
+
+    n²(λ) = 1 + Σ Bᵢ · λ² / (λ² - Cᵢ)
+
+`B` is a vector of dimensionless coefficients, and `C` is a vector of resonance wavelengths squared (usually in μm²).
+
+# Constructors
+```julia
+SellmeierDispersion(B, C; microns=true)
+```
+If `microns` is `true` (default), the `C` coefficients are assumed to be in μm² and will be converted to m² for natural SI unit calculations.
+"""
+struct SellmeierDispersion <: DispersionModel
+    B::Vector{Float64}
+    C::Vector{Float64}
+
+    function SellmeierDispersion(B::AbstractVector{<:Real}, C::AbstractVector{<:Real}; microns::Bool=true)
+        length(B) == length(C) || throw(ArgumentError("B and C must have equal length"))
+        C_val = microns ? collect(Float64, C) .* 1e-12 : collect(Float64, C) # 1 μm² = 1e-12 m²
+        new(collect(Float64, B), C_val)
+    end
+end
+
+"""
     Medium{T<:Real}
 
 Fiber medium parameters for GNLSE propagation.

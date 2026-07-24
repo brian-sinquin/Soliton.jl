@@ -80,7 +80,8 @@ See [`medium.loss`](@ref Medium) for units.
 """
 function dispersion_operator(V::AbstractVector{Float64}, medium::Medium)
     alpha = log(10.0^(medium.loss / 10.0))
-    B = propagation_constant(V, medium.dispersion)
+    omega0 = 2π * c / medium.lambda0
+    B = propagation_constant(V, medium.dispersion, omega0)
     return @. 1im * B - alpha / 2
 end
 
@@ -90,3 +91,48 @@ end
 Convenience wrapper that extracts `V` from `grid`.
 """
 dispersion_operator(grid::Grid, medium::Medium) = dispersion_operator(grid.V, medium)
+
+# 3-argument compatibility fallback
+propagation_constant(V::AbstractVector{Float64}, model::DispersionModel, omega0::Float64) = propagation_constant(V, model)
+
+"""
+    propagation_constant(V::AbstractVector{Float64}, model::SellmeierDispersion, omega0::Float64)
+
+Compute the propagation constant deviation B(V) using the Sellmeier dispersion equation.
+"""
+function propagation_constant(V::AbstractVector{Float64}, model::SellmeierDispersion, omega0::Float64)
+    lambda0 = 2π * c / omega0
+
+    # Calculate refractive index and derivative at central frequency
+    n2_0 = 1.0
+    sum_deriv_0 = 0.0
+    for i in 1:length(model.B)
+        Bi = model.B[i]
+        Ci = model.C[i]
+        n2_0 += Bi * lambda0^2 / (lambda0^2 - Ci)
+        sum_deriv_0 += Bi * Ci / (lambda0^2 - Ci)^2
+    end
+    n_0 = sqrt(n2_0)
+    beta0 = n_0 * omega0 / c
+    beta1_0 = n_0 / c + (lambda0^2 / (c * n_0)) * sum_deriv_0
+
+    # Calculate propagation constant deviation for each frequency bin
+    B = similar(V)
+    @inbounds for k in eachindex(V)
+        omega = omega0 + V[k]
+        if omega <= 0
+            throw(ArgumentError("Absolute frequency must be positive. Check grid size and central frequency."))
+        end
+        lk = 2π * c / omega
+
+        n2 = 1.0
+        for i in 1:length(model.B)
+            n2 += model.B[i] * lk^2 / (lk^2 - model.C[i])
+        end
+        nk = sqrt(n2)
+        betak = nk * omega / c
+        B[k] = betak - beta0 - beta1_0 * V[k]
+    end
+
+    return B
+end

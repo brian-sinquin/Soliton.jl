@@ -45,6 +45,33 @@ using JuGNLSE
         @test propagation_constant(grid.V, TaylorDispersion(Float64[])) == zeros(grid.N)
     end
 
+    @testset "Sellmeier dispersion" begin
+        # Fused Silica Sellmeier coefficients (in microns^2 for C)
+        B = [0.6961663, 0.4079426, 0.8974794]
+        C = [4.67914826e-3, 1.35120631e-2, 97.9340025]
+        
+        # Test constructor and defaults
+        sd = SellmeierDispersion(B, C; microns=true)
+        @test sd.B == B
+        @test sd.C == C .* 1e-12
+        
+        @test_throws ArgumentError SellmeierDispersion([1.0], [1.0, 2.0])
+
+        grid = create_grid(2^9, 10e-12, 835e-9)
+        omega0 = grid.omega0
+        
+        # Test propagation_constant
+        B_vals = propagation_constant(grid.V, sd, omega0)
+        @test length(B_vals) == grid.N
+        @test B_vals[grid.N ÷ 2 + 1] == 0.0 # B(0) = 0
+        
+        # Test that dispersion_operator works with Medium constructed with SellmeierDispersion
+        medium = Medium(0.15, 0.11, 0.0, sd, 835e-9)
+        D = dispersion_operator(grid, medium)
+        @test length(D) == grid.N
+        @test real(D[grid.N ÷ 2 + 1]) == 0.0 # Loss is 0, real part at center should be 0
+    end
+
     @testset "Raman models" begin
         @test BlowWood().fr == 0.18
         @test LinAgrawal().fr == 0.245
