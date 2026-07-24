@@ -25,8 +25,8 @@ the tabulated frequency range. This is more accurate for complex materials (PCF,
 highly dispersive windows) but requires tabulated data.
 """
 function propagation_constant(V::AbstractVector{Float64}, model::TaylorDispersion)
-    # Taylor series: B = Σ βₙ/n! · Vⁿ, n ≥ 2
-    B = zeros(Float64, length(V))
+    # Taylor series: B = β₁ · V + Σ βₙ/n! · Vⁿ, n ≥ 2
+    B = model.beta1 .* V
     for (i, beta) in enumerate(model.betas)
         n = i + 1  # betas[1]=β₂ → n=2, betas[2]=β₃ → n=3, etc.
         B .+= beta ./ factorial(n) .* (V .^ n)

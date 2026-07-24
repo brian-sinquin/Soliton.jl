@@ -26,10 +26,11 @@ Dispersion from a Taylor expansion of the propagation constant about ω₀:
 """
 struct TaylorDispersion <: DispersionModel
     betas::Vector{Float64}
+    beta1::Float64
 end
 
 # An empty `betas` vector means no dispersion (pure SPM).
-TaylorDispersion(betas::AbstractVector{<:Real}) = TaylorDispersion(collect(Float64, betas))
+TaylorDispersion(betas::AbstractVector{<:Real}, beta1::Real=0.0) = TaylorDispersion(collect(Float64, betas), Float64(beta1))
 
 """
     TabulatedDispersion(detuning, beta)
@@ -109,7 +110,9 @@ Medium(; length, gamma, loss=0.0, betas=…, dispersion=…, lambda0)
   - Taylor `betas` exclude β₀ and β₁; `betas[1] = β₂`
   - loss in dB/m converted to α = ln(10^(loss/10)) Np/m in the operator
 """
-struct Medium{T <: Real, TG}
+abstract type AbstractMedium end
+
+struct Medium{T <: Real, TG} <: AbstractMedium
     length::T
     gamma::TG
     loss::T
@@ -364,28 +367,28 @@ Following gnlse-python's GNLSESetup structure:
   - Raman disabled by setting raman_model = nothing or fr = 0
   - Self-steepening modifies W frequency grid
 """
-struct SimParams{S <: GNLSESolver}
-    medium::Medium
+struct SimParams{S <: GNLSESolver, M <: AbstractMedium}
+    medium::M
     z_saves::Int
     raman_model::Union{RamanModel, Nothing}
     self_steepening::Bool
     solver::S
 
     function SimParams(
-        medium::Medium,
+        medium::M,
         z_saves::Int,
         raman_model::Union{RamanModel, Nothing},
         self_steepening::Bool,
         solver::S,
-    ) where {S <: GNLSESolver}
+    ) where {S <: GNLSESolver, M <: AbstractMedium}
         z_saves > 0 || throw(ArgumentError("z_saves must be positive"))
-        new{S}(medium, z_saves, raman_model, self_steepening, solver)
+        new{S, M}(medium, z_saves, raman_model, self_steepening, solver)
     end
 end
 
 # Backward-compatible positional constructor
 function SimParams(
-    medium::Medium,
+    medium::AbstractMedium,
     z_saves::Int,
     raman_model::Union{RamanModel, Nothing},
     self_steepening::Bool,
@@ -397,7 +400,7 @@ end
 
 # Keyword constructor supporting both generic solver and backward-compatible rtol/atol
 function SimParams(;
-    medium::Medium,
+    medium::AbstractMedium,
     z_saves::Int=200,
     raman_model::Union{RamanModel, Nothing}=BlowWood(),
     self_steepening::Bool=false,
@@ -539,5 +542,75 @@ Display a Solution compactly in the REPL. Shows:
 """
 function Base.show(io::IO, s::Solution)
     print(io, "Solution(", length(s.Z), " saves over ",
+          round(s.Z[end]; sigdigits=4), " m, N=", size(s.At, 1), ")")
+end
+
+# BirefringentMedium definition
+struct BirefringentMedium{T <: Real, TG} <: AbstractMedium
+    length::T
+    gamma::TG
+    loss::T
+    dispersion_x::DispersionModel
+    dispersion_y::DispersionModel
+    deltabeta0::T
+    lambda0::T
+
+    function BirefringentMedium(
+        length::T, gamma::TG, loss::T, dispersion_x::DispersionModel, dispersion_y::DispersionModel, deltabeta0::T, lambda0::T
+    ) where {T <: Real, TG}
+        length > 0 || throw(ArgumentError("Fiber length must be positive"))
+        if TG <: Real
+            gamma >= 0 || throw(ArgumentError("Nonlinear coefficient must be non-negative"))
+        end
+        loss >= 0 || throw(ArgumentError("Loss must be non-negative"))
+        lambda0 > 0 || throw(ArgumentError("Center wavelength must be positive"))
+        new{T, TG}(length, gamma, loss, dispersion_x, dispersion_y, deltabeta0, lambda0)
+    end
+end
+
+# VectorialPulse definition
+struct VectorialPulse
+    At::Matrix{ComplexF64} # N x 2
+    AW::Matrix{ComplexF64} # N x 2
+    grid::Grid
+
+    function VectorialPulse(At::Matrix{<:Complex}, grid::Grid)
+        size(At, 1) == grid.N || throw(ArgumentError("Pulse dimensions must match grid resolution"))
+        size(At, 2) == 2 || throw(ArgumentError("Vectorial pulse must have exactly 2 components (x and y)"))
+        AW = similar(At)
+        AW[:, 1] .= ifft(At[:, 1])
+        AW[:, 2] .= ifft(At[:, 2])
+        new(Matrix{ComplexF64}(At), AW, grid)
+    end
+end
+
+function VectorialPulse(At_x::AbstractVector{<:Number}, At_y::AbstractVector{<:Number}, grid::Grid)
+    length(At_x) == grid.N || throw(ArgumentError("x component length must match grid resolution"))
+    length(At_y) == grid.N || throw(ArgumentError("y component length must match grid resolution"))
+    At = Matrix{ComplexF64}(undef, grid.N, 2)
+    At[:, 1] .= At_x
+    At[:, 2] .= At_y
+    return VectorialPulse(At, grid)
+end
+
+# VectorialSolution definition
+struct VectorialSolution{T <: Complex}
+    t::Vector{Float64}
+    W::Vector{Float64}
+    omega0::Float64
+    Z::Vector{Float64}
+    At::Array{T, 3} # N x 2 x z_saves
+    AW::Array{T, 3} # N x 2 x z_saves
+end
+
+# Base.show definitions for Vectorial types
+function Base.show(io::IO, p::VectorialPulse)
+    Pmax_x = maximum(abs2, p.At[:, 1])
+    Pmax_y = maximum(abs2, p.At[:, 2])
+    print(io, "VectorialPulse(N=", p.grid.N, ", peak_x=", round(Pmax_x; sigdigits=4), " W, peak_y=", round(Pmax_y; sigdigits=4), " W)")
+end
+
+function Base.show(io::IO, s::VectorialSolution)
+    print(io, "VectorialSolution(", length(s.Z), " saves over ",
           round(s.Z[end]; sigdigits=4), " m, N=", size(s.At, 1), ")")
 end

@@ -134,3 +134,44 @@ end
 # Make SimParams callable for piping support
 (params::SimParams)(pulse::Pulse) = solve(pulse, params; progress=false)
 (params::SimParams)(sol::Solution) = solve(Pulse(sol), params; progress=false)
+
+# Vectorial solver implementations
+function propagate(pulse::VectorialPulse, params::SimParams, solver::GNLSESolver; progress::Bool=true)
+    model = build_physics_model(pulse.grid, params)
+    return propagate(model, pulse, params, solver, progress)
+end
+
+"""
+    solve(pulse::VectorialPulse, params::SimParams; progress=true)
+
+Propagate a `VectorialPulse` through a `BirefringentMedium` according to `SimParams`.
+"""
+function solve(pulse::VectorialPulse, params::SimParams; progress::Bool=true)
+    z, At, AW = propagate(pulse, params, params.solver; progress=progress)
+    return VectorialSolution(
+        pulse.grid.t,
+        pulse.grid.W,
+        pulse.grid.omega0,
+        z,
+        At,
+        AW
+    )
+end
+
+"""
+    VectorialPulse(sol::VectorialSolution)
+
+Extract the final state from a `VectorialSolution` as a new `VectorialPulse` object.
+"""
+function VectorialPulse(sol::VectorialSolution)
+    N = length(sol.t)
+    dt = sol.t[2] - sol.t[1]
+    V = sol.W .- sol.omega0
+    lambda0 = 2π * c / sol.omega0
+    grid = Grid(N, sol.t, V, sol.W, dt, sol.omega0, lambda0)
+    return VectorialPulse(sol.At[:, :, end], grid)
+end
+
+# Make SimParams callable for vectorial piping support
+(params::SimParams)(pulse::VectorialPulse) = solve(pulse, params; progress=false)
+(params::SimParams)(sol::VectorialSolution) = solve(VectorialPulse(sol), params; progress=false)

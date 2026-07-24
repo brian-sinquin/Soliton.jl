@@ -179,7 +179,7 @@ PhysicsModel struct ready for propagation
 [`PhysicsModel`](@ref), [`propagate_erk4ip`](@ref), [`dispersion_operator`](@ref),
 [`raman_response`](@ref)
 """
-function build_physics_model(grid::Grid, params::SimParams)
+function build_physics_model(grid::Grid, params::SimParams{S, M}) where {S, M <: Medium}
     medium = params.medium
     N = grid.N
 
@@ -259,6 +259,131 @@ function build_physics_model(grid::Grid, params::SimParams)
         N,
         fr,
         raman_freq_response,
+        nonlinear_function,
+        buf_t1,
+        buf_t2,
+        buf_f1,
+    )
+end
+
+# ===========================================================================
+# Vectorial/Birefringent Coupled GNLSE Support
+# ===========================================================================
+
+"""
+    VectorialPhysicsModel
+
+Internal physics model holding operators and pre-allocated buffers for Couples GNLSE.
+"""
+struct VectorialPhysicsModel{TF, TT, NL, TG}
+    to_freq::TF
+    to_time::TT
+    Dx::Vector{ComplexF64}
+    Dy::Vector{ComplexF64}
+    gamma::TG
+    omega0::Float64
+    gamma_W::Vector{Float64}
+    deltabeta0::Float64
+    N::Int
+    nonlinear_function::NL
+    buf_t1::Matrix{ComplexF64}
+    buf_t2::Matrix{ComplexF64}
+    buf_f1::Matrix{ComplexF64}
+end
+
+"""
+    _vectorial_spm_fwm(u, model::VectorialPhysicsModel, z)
+
+Coupled Kerr (SPM, XPM, and FWM coherent coupling) nonlinear operator.
+"""
+function _vectorial_spm_fwm(u::Matrix{ComplexF64}, model::VectorialPhysicsModel, z::Real)
+    ux = @view u[:, 1]
+    uy = @view u[:, 2]
+
+    # Coherent coupling phase mismatch factors
+    ph_x = exp(-2.0im * model.deltabeta0 * z)
+    ph_y = conj(ph_x)
+
+    # Compute SPM + XPM + FWM in time domain
+    @. model.buf_t1[:, 1] = (abs2(ux) + (2.0 / 3.0) * abs2(uy)) * ux + (1.0 / 3.0) * (uy^2) * conj(ux) * ph_x
+    @. model.buf_t1[:, 2] = (abs2(uy) + (2.0 / 3.0) * abs2(ux)) * uy + (1.0 / 3.0) * (ux^2) * conj(uy) * ph_y
+
+    # Transform to frequency domain
+    mul!(@view(model.buf_f1[:, 1]), model.to_freq, @view(model.buf_t1[:, 1]))
+    mul!(@view(model.buf_f1[:, 2]), model.to_freq, @view(model.buf_t1[:, 2]))
+
+    # Get gamma at z
+    gamma_z = eval_gamma(model.gamma, z, model.omega0)
+
+    # Multiply by i * gamma_z * gamma_W
+    @. model.buf_f1[:, 1] = 1.0im * gamma_z * model.gamma_W * model.buf_f1[:, 1]
+    @. model.buf_f1[:, 2] = 1.0im * gamma_z * model.gamma_W * model.buf_f1[:, 2]
+
+    return model.buf_f1
+end
+
+"""
+    build_physics_model(grid::Grid, params::SimParams{S, <:BirefringentMedium})
+
+Construct VectorialPhysicsModel for Coupled GNLSE propagation.
+"""
+function build_physics_model(grid::Grid, params::SimParams{S, M}) where {S, M <: BirefringentMedium}
+    medium = params.medium
+    N = grid.N
+    enable_shock = params.self_steepening
+
+    # Transform plans
+    tmp_col = zeros(ComplexF64, N)
+    to_freq = plan_ifft(tmp_col; flags=FFTW.MEASURE)
+    to_time = plan_fft(tmp_col; flags=FFTW.MEASURE)
+
+    # Compute dispersion operators for x and y
+    Dx = fftshift(dispersion_operator(grid, Medium(medium.length, medium.gamma, medium.loss, medium.dispersion_x, medium.lambda0)))
+    Dy = fftshift(dispersion_operator(grid, Medium(medium.length, medium.gamma, medium.loss, medium.dispersion_y, medium.lambda0)))
+
+    # Compute gamma and gamma_W
+    gamma_input = medium.gamma
+    gamma_z_model, gamma_W_mon = if gamma_input isa Number
+        W_factor = enable_shock ? grid.W : fill(grid.omega0, N)
+        gamma_input / grid.omega0, W_factor
+    elseif gamma_input isa Function
+        W_factor = enable_shock ? grid.W : fill(grid.omega0, N)
+        gamma_input, W_factor
+    elseif gamma_input isa ConstantNonlinearity
+        W_factor = enable_shock ? grid.W : fill(grid.omega0, N)
+        gamma_input.gamma / grid.omega0, W_factor
+    elseif gamma_input isa FrequencyDependentNonlinearity
+        1.0, gamma_input.gamma_function.(grid.W)
+    elseif gamma_input isa NonlinearityFromEffectiveArea
+        c_const = 299792458.0
+        1.0, (gamma_input.n2 .* grid.W) ./ (c_const .* gamma_input.Aeff_function.(grid.W))
+    else
+        throw(ArgumentError("Unsupported nonlinearity type: $(typeof(gamma_input))"))
+    end
+
+    gamma_W = ifftshift(gamma_W_mon)
+
+    if params.raman_model !== nothing
+        @warn "Raman scattering is currently not supported in the Birefringent Vectorial solver; falling back to Coupled Kerr terms only."
+    end
+
+    nonlinear_function = _vectorial_spm_fwm
+
+    # Pre-allocate buffers
+    buf_t1 = zeros(ComplexF64, N, 2)
+    buf_t2 = zeros(ComplexF64, N, 2)
+    buf_f1 = zeros(ComplexF64, N, 2)
+
+    return VectorialPhysicsModel(
+        to_freq,
+        to_time,
+        Dx,
+        Dy,
+        gamma_z_model,
+        grid.omega0,
+        gamma_W,
+        Float64(medium.deltabeta0),
+        N,
         nonlinear_function,
         buf_t1,
         buf_t2,
