@@ -1,7 +1,7 @@
 using Test
 using JuGNLSE
 
-@testset "API" begin
+@testset verbose = true "API" begin
     @testset "Medium" begin
         medium = Medium(0.15, 0.11, 0.0, [-1.0e-26], 835e-9)
         @test medium.length == 0.15
