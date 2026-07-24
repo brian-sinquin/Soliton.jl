@@ -51,10 +51,13 @@ Integrates the GNLSE with the adaptive ERK4IP solver. All quantities are in
 natural SI units; the envelope spectrum follows the standard optics convention
 `AW = ifft(At)`.
 """
+function propagate(pulse::Pulse, params::SimParams, solver::GNLSESolver; progress::Bool=true)
+    model = build_physics_model(pulse.grid, params)
+    return propagate(model, pulse, params, solver, progress)
+end
+
 function solve(pulse::Pulse, params::SimParams; progress::Bool=true)
-    z, At, AW = propagate_erk4ip(
-        pulse, params; progress=progress, rtol=params.rtol, atol=params.atol
-    )
+    z, At, AW = propagate(pulse, params, params.solver; progress=progress)
 
     # Build solution
     grid = pulse.grid

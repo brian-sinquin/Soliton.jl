@@ -58,6 +58,16 @@ reusing computations and working in interaction picture throughout.
 
 Balac & Fernandez (2013), Heidt (2009)
 """
+function propagate(
+    model::PhysicsModel,
+    pulse::Pulse,
+    params::SimParams,
+    solver::ERK4IP,
+    progress::Bool,
+)
+    return _propagate_erk4ip!(model, pulse, params, progress, solver.rtol, solver.atol, solver.dz_init)
+end
+
 function propagate_erk4ip(
     pulse::Pulse,
     params::SimParams;
@@ -66,13 +76,8 @@ function propagate_erk4ip(
     atol::Float64=1e-8,
     dz::Union{Float64, Nothing}=nothing,
 )
-    # Build the physics model, then run the loop behind a function barrier.
-    # build_physics_model's return type is not fully inferred (the nonlinear
-    # operator is selected at runtime), so running the loop in its own function
-    # lets Julia specialise it on the concrete model type — making every
-    # model-field access in the hot loop type-stable and allocation-free.
-    model = build_physics_model(pulse.grid, params)
-    return _propagate_erk4ip!(model, pulse, params, progress, rtol, atol, dz)
+    solver = ERK4IP(; rtol=rtol, atol=atol, dz_init=dz)
+    return propagate(pulse, params, solver; progress=progress)
 end
 
 function _propagate_erk4ip!(
@@ -139,7 +144,7 @@ function _propagate_erk4ip!(
 
     # Initialize Nu = N(U(0)) for FSAL property
     mul!(u_temp, model.to_time, U)  # frequency → time
-    copyto!(Nu, model.nonlinear_function(u_temp, model))
+    copyto!(Nu, model.nonlinear_function(u_temp, model, 0.0))
 
     while z < z_end && save_idx <= n_saves
         # Target for next save
@@ -161,17 +166,17 @@ function _propagate_erk4ip!(
         # u₂ = exp(D̂h/2)·U + h/2·k₁, compute N(IFFT(u₂))
         @. U_temp = exp_half_dz_D * U + 0.5 * dz * k1
         mul!(u_temp, model.to_time, U_temp)  # frequency → time
-        copyto!(k2, model.nonlinear_function(u_temp, model))
+        copyto!(k2, model.nonlinear_function(u_temp, model, z + 0.5 * dz))
 
         # u₃ = exp(D̂h/2)·U + h/2·k₂
         @. U_temp = exp_half_dz_D * U + 0.5 * dz * k2
         mul!(u_temp, model.to_time, U_temp)  # frequency → time
-        copyto!(k3, model.nonlinear_function(u_temp, model))
+        copyto!(k3, model.nonlinear_function(u_temp, model, z + 0.5 * dz))
 
         # u₄ = exp(D̂h/2)·(exp(D̂h/2)·U + h·k₃) = exp(D̂h)·U + exp(D̂h/2)·h·k₃
         @. U_temp = exp_half_dz_D * (exp_half_dz_D * U + dz * k3)
         mul!(u_temp, model.to_time, U_temp)  # frequency → time
-        copyto!(k4, model.nonlinear_function(u_temp, model))
+        copyto!(k4, model.nonlinear_function(u_temp, model, z + dz))
 
         # ============================================================
         # 4th Order Solution (following SPIP exactly)
@@ -184,7 +189,7 @@ function _propagate_erk4ip!(
 
         # Transform to time domain and compute k₅ = N(u₄)
         mul!(u4, model.to_time, U4_fft)  # frequency → time
-        copyto!(k5, model.nonlinear_function(u4, model))
+        copyto!(k5, model.nonlinear_function(u4, model, z + dz))
 
         # ============================================================
         # 3rd Order Solution for Error Estimation (SPIP formula)

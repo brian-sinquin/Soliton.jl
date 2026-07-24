@@ -75,6 +75,7 @@ using LinearAlgebra
 const c = 299792458.0  # Speed of light [m/s]
 
 # Include submodules
+include("solvers.jl")
 include("types.jl")
 include("grid.jl")
 include("pulses.jl")
@@ -92,6 +93,7 @@ include("analysis.jl")
 export Medium, SimParams, Grid, Pulse, Solution
 export RamanModel, BlowWood, LinAgrawal, Hollenbeck
 export DispersionModel, TaylorDispersion, TabulatedDispersion, SellmeierDispersion
+export GNLSESolver, ERK4IP
 export PhysicsModel  # Internal physics model struct
 
 # Export grid functions

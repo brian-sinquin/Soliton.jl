@@ -76,4 +76,33 @@ using JuGNLSE
               sum(abs2, st.At[:, end])
         @test rel < 1e-6
     end
+
+    @testset "Solver abstraction (GNLSESolver / ERK4IP)" begin
+        grid = create_grid(2^10, 10e-12, 835e-9)
+        medium = Medium(0.02, 0.11, 0.0, [-1.0e-26], 835e-9)
+        pulse = sech_pulse(grid, 100.0, 100e-15)
+
+        # Test constructor validation
+        @test_throws ArgumentError ERK4IP(; rtol=-1e-6)
+        @test_throws ArgumentError ERK4IP(; atol=-1e-8)
+
+        # Explicitly construct ERK4IP solver
+        solver = ERK4IP(; rtol=1e-5, atol=1e-7, dz_init=1e-5)
+        @test solver.rtol == 1e-5
+        @test solver.atol == 1e-7
+        @test solver.dz_init == 1e-5
+
+        # Create SimParams with explicit solver
+        params = SimParams(; medium=medium, z_saves=4, solver=solver)
+        @test params.solver isa ERK4IP
+        @test params.solver === solver
+
+        # Run solve
+        sol = solve(pulse, params; progress=false)
+        @test length(sol.Z) == 4
+        @test all(isfinite, sol.At)
+
+        # Try to specify both solver and rtol (should throw)
+        @test_throws ArgumentError SimParams(; medium=medium, solver=solver, rtol=1e-6)
+    end
 end

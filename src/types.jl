@@ -109,36 +109,40 @@ Medium(; length, gamma, loss=0.0, betas=…, dispersion=…, lambda0)
   - Taylor `betas` exclude β₀ and β₁; `betas[1] = β₂`
   - loss in dB/m converted to α = ln(10^(loss/10)) Np/m in the operator
 """
-struct Medium{T <: Real}
+struct Medium{T <: Real, TG}
     length::T
-    gamma::T
+    gamma::TG
     loss::T
     dispersion::DispersionModel
     lambda0::T
 
-    function Medium{T}(
-        length::T, gamma::T, loss::T, dispersion::DispersionModel, lambda0::T
-    ) where {T <: Real}
+    function Medium{T, TG}(
+        length::T, gamma::TG, loss::T, dispersion::DispersionModel, lambda0::T
+    ) where {T <: Real, TG}
         length > 0 || throw(ArgumentError("Fiber length must be positive"))
-        gamma >= 0 || throw(ArgumentError("Nonlinear coefficient must be non-negative"))
+        if TG <: Real
+            gamma >= 0 || throw(ArgumentError("Nonlinear coefficient must be non-negative"))
+        end
         loss >= 0 || throw(ArgumentError("Loss must be non-negative"))
         lambda0 > 0 || throw(ArgumentError("Center wavelength must be positive"))
 
-        new{T}(length, gamma, loss, dispersion, lambda0)
+        new{T, TG}(length, gamma, loss, dispersion, lambda0)
     end
 end
 
-# Positional constructor — Taylor betas (backward compatible)
-Medium(
-    length::T, gamma::T, loss::T, betas::AbstractVector{<:Real}, lambda0::T
-) where {T <: Real} =
-    Medium{T}(length, gamma, loss, TaylorDispersion(betas), lambda0)
+# Outer constructors
+function Medium(
+    length::Real, gamma::Any, loss::Real, dispersion::DispersionModel, lambda0::Real
+)
+    T = promote_type(typeof(length), typeof(loss), typeof(lambda0), Float64)
+    return Medium{T, typeof(gamma)}(T(length), gamma, T(loss), dispersion, T(lambda0))
+end
 
-# Positional constructor — explicit dispersion model
-Medium(
-    length::T, gamma::T, loss::T, dispersion::DispersionModel, lambda0::T
-) where {T <: Real} =
-    Medium{T}(length, gamma, loss, dispersion, lambda0)
+function Medium(
+    length::Real, gamma::Any, loss::Real, betas::AbstractVector{<:Real}, lambda0::Real
+)
+    return Medium(length, gamma, loss, TaylorDispersion(betas), lambda0)
+end
 
 """
     Medium(; length, gamma, loss=0.0, betas=nothing, dispersion=nothing, lambda0)
@@ -149,7 +153,7 @@ one of the two).
 """
 function Medium(;
     length::Real,
-    gamma::Real,
+    gamma::Any,
     loss::Real=0.0,
     betas::Union{AbstractVector{<:Real}, Nothing}=nothing,
     dispersion::Union{DispersionModel, Nothing}=nothing,
@@ -159,9 +163,9 @@ function Medium(;
         throw(ArgumentError("provide exactly one of `betas` or `dispersion`"))
     disp = dispersion === nothing ? TaylorDispersion(betas) : dispersion
     T = promote_type(
-        typeof(length), typeof(gamma), typeof(loss), typeof(lambda0), Float64
+        typeof(length), typeof(loss), typeof(lambda0), Float64
     )
-    Medium{T}(T(length), T(gamma), T(loss), disp, T(lambda0))
+    Medium{T, typeof(gamma)}(T(length), gamma, T(loss), disp, T(lambda0))
 end
 
 """
@@ -323,40 +327,57 @@ Following gnlse-python's GNLSESetup structure:
   - Raman disabled by setting raman_model = nothing or fr = 0
   - Self-steepening modifies W frequency grid
 """
-struct SimParams
+struct SimParams{S <: GNLSESolver}
     medium::Medium
     z_saves::Int
     raman_model::Union{RamanModel, Nothing}
     self_steepening::Bool
-    rtol::Float64
-    atol::Float64
+    solver::S
 
     function SimParams(
         medium::Medium,
         z_saves::Int,
         raman_model::Union{RamanModel, Nothing},
         self_steepening::Bool,
-        rtol::Float64,
-        atol::Float64,
-    )
+        solver::S,
+    ) where {S <: GNLSESolver}
         z_saves > 0 || throw(ArgumentError("z_saves must be positive"))
-        rtol > 0 || throw(ArgumentError("rtol must be positive"))
-        atol > 0 || throw(ArgumentError("atol must be positive"))
-
-        new(medium, z_saves, raman_model, self_steepening, rtol, atol)
+        new{S}(medium, z_saves, raman_model, self_steepening, solver)
     end
 end
 
-# Simplified constructor with keyword arguments
+# Backward-compatible positional constructor
+function SimParams(
+    medium::Medium,
+    z_saves::Int,
+    raman_model::Union{RamanModel, Nothing},
+    self_steepening::Bool,
+    rtol::Float64,
+    atol::Float64,
+)
+    return SimParams(medium, z_saves, raman_model, self_steepening, ERK4IP(; rtol=rtol, atol=atol))
+end
+
+# Keyword constructor supporting both generic solver and backward-compatible rtol/atol
 function SimParams(;
     medium::Medium,
     z_saves::Int=200,
     raman_model::Union{RamanModel, Nothing}=BlowWood(),
     self_steepening::Bool=false,
-    rtol::Float64=1e-6,
-    atol::Float64=1e-8,
+    rtol::Union{Float64, Nothing}=nothing,
+    atol::Union{Float64, Nothing}=nothing,
+    solver::Union{GNLSESolver, Nothing}=nothing,
 )
-    SimParams(medium, z_saves, raman_model, self_steepening, rtol, atol)
+    if solver === nothing
+        rtol_val = rtol === nothing ? 1e-6 : rtol
+        atol_val = atol === nothing ? 1e-8 : atol
+        solv = ERK4IP(; rtol=rtol_val, atol=atol_val)
+    else
+        (rtol === nothing && atol === nothing) ||
+            throw(ArgumentError("Cannot specify both `solver` and `rtol`/`atol` compatibility options"))
+        solv = solver
+    end
+    return SimParams(medium, z_saves, raman_model, self_steepening, solv)
 end
 
 """
