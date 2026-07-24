@@ -204,5 +204,11 @@ using JuGNLSE
         # Output of stage 2 (amplifier) energy
         e2 = sum(abs2, results[2].At)
         @test e2 ≈ e1 * 10.0^(amp.gain_db / 10.0) rtol=1e-5
+
+        # Test piping |> interface
+        # pulse |> stage1 |> stage2 |> stage3 |> stage4
+        piped_result = pulse |> stage1 |> stage2 |> stage3 |> stage4
+        @test piped_result isa Solution
+        @test piped_result.At[:, end] ≈ results[4].At[:, end]
     end
 end

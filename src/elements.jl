@@ -58,3 +58,7 @@ function apply(pulse::Pulse, filt::Filter)
     At = fft(AW) # fft is standard optics convention: At = fft(AW)
     return Pulse(At, AW, pulse.grid)
 end
+
+# Make LumpedElement callable for piping support
+(element::LumpedElement)(pulse::Pulse) = apply(pulse, element)
+(element::LumpedElement)(sol::Solution) = apply(Pulse(sol), element)

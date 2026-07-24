@@ -116,3 +116,21 @@ function solve(pulse::Pulse, stages::AbstractVector; progress::Bool=true)
 
     return results
 end
+
+"""
+    Pulse(sol::Solution)
+
+Extract the final state from a `Solution` as a new `Pulse` object.
+"""
+function Pulse(sol::Solution)
+    N = length(sol.t)
+    dt = sol.t[2] - sol.t[1]
+    V = sol.W .- sol.omega0
+    lambda0 = 2π * c / sol.omega0
+    grid = Grid(N, sol.t, V, sol.W, dt, sol.omega0, lambda0)
+    return Pulse(sol.At[:, end], sol.AW[:, end], grid)
+end
+
+# Make SimParams callable for piping support
+(params::SimParams)(pulse::Pulse) = solve(pulse, params; progress=false)
+(params::SimParams)(sol::Solution) = solve(Pulse(sol), params; progress=false)
