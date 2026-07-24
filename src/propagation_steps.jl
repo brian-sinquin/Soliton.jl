@@ -1,5 +1,11 @@
-# Propagation steps for GNLSE
-# This file is included directly in the JuGNLSE module.
+module PropagationSteps
+
+using ..Types: Medium, Pulse, SimParams, GNLSEProblem, Solution, ConstantGamma
+using ..Solvers: solve
+import ..JuGNLSE: c
+using FFTW: ifft
+
+export AbstractPropagationStep, Fiber, Loss, Filter, Amplifier, propagate!
 
 abstract type AbstractPropagationStep end
 
@@ -104,3 +110,5 @@ function propagate!(pulse::Pulse, steps::Vector{<:AbstractPropagationStep}; kwar
         return Solution(current_pulse.grid.t, current_pulse.grid.W, current_pulse.grid.omega0, full_solution_Z, full_solution_At, full_solution_AW)
     end
 end
+
+end # module

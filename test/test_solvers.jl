@@ -9,7 +9,7 @@ using JuGNLSE
         params = SimParams(; medium=medium, z_saves=8,
             raman_model=nothing, self_steepening=false)
 
-        sol = solve(pulse, params; progress=false)
+        sol = solve(pulse, params, ERK4IP(); progress=false)
 
         @test length(sol.Z) == 8
         @test sol.Z[1] == 0.0
@@ -33,7 +33,7 @@ using JuGNLSE
             for shock in (false, true)
                 params = SimParams(; medium=medium, z_saves=4,
                     raman_model=raman, self_steepening=shock)
-                sol = solve(pulse, params; progress=false)
+                sol = solve(pulse, params, ERK4IP(); progress=false)
                 @test all(isfinite, sol.At)
                 @test all(isfinite, sol.AW)
             end
@@ -46,9 +46,9 @@ using JuGNLSE
         pulse = sech_pulse(grid, 200.0, 80e-15)
 
         loose = solve(pulse, SimParams(; medium=medium, z_saves=4,
-            raman_model=nothing, rtol=1e-3, atol=1e-4); progress=false)
+            raman_model=nothing, rtol=1e-3, atol=1e-4), ERK4IP(); progress=false)
         tight = solve(pulse, SimParams(; medium=medium, z_saves=4,
-            raman_model=nothing, rtol=1e-7, atol=1e-9); progress=false)
+            raman_model=nothing, rtol=1e-7, atol=1e-9), ERK4IP(); progress=false)
 
         # Both integrations should agree closely on the final field
         rel = sum(abs2, loose.At[:, end] .- tight.At[:, end]) /
@@ -68,9 +68,9 @@ using JuGNLSE
         tabulated = Medium(0.05, 0.11, 0.0, tab_disp, 835e-9)
 
         st = solve(pulse, SimParams(; medium=taylor, z_saves=3,
-            raman_model=BlowWood(), self_steepening=true); progress=false)
+            raman_model=BlowWood(), self_steepening=true), ERK4IP(); progress=false)
         sb = solve(pulse, SimParams(; medium=tabulated, z_saves=3,
-            raman_model=BlowWood(), self_steepening=true); progress=false)
+            raman_model=BlowWood(), self_steepening=true), ERK4IP(); progress=false)
 
         rel = sum(abs2, st.At[:, end] .- sb.At[:, end]) /
               sum(abs2, st.At[:, end])

@@ -1,12 +1,13 @@
-"""
-Analysis functions for pulse characterization (natural SI units).
+module Analysis
 
-Provides energy, peak power, bandwidth, pulse-duration, soliton, noise-seeding
-and coherence metrics.
-"""
-
+using ..Types: Pulse, Solution
 using FFTW
 using Random: Random, AbstractRNG, default_rng
+
+export pulse_energy, peak_power, fwhm, spectral_bandwidth, time_bandwidth_product
+export photon_number, spectral_centroid
+export dispersion_length, nonlinear_length, soliton_number
+export add_noise, rin_rms, spectral_coherence
 
 # Reduced Planck constant [J·s]
 const ħ = 1.054571817e-34
@@ -361,3 +362,5 @@ then computes coherence across the ensemble.
 """
 spectral_coherence(solutions::AbstractVector{<:Solution}) =
     spectral_coherence([@view(sol.AW[:, end]) for sol in solutions])
+
+end # module
