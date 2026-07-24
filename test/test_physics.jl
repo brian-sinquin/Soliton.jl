@@ -115,4 +115,36 @@ end
         w1 = _rms_width(sol.AW[:, end], grid.V)
         @test w1 > w0
     end
+
+    @testset "Tapered fiber varying gamma matches SPM analytical phase" begin
+        grid = create_grid(2^10, 10e-12, 835e-9)
+        # Taper parameters
+        gamma0 = 50.0
+        alpha_taper = 8.0
+        L = 0.15
+        
+        # z-dependent gamma
+        g(z) = gamma0 * exp(-alpha_taper * z)
+        
+        # No dispersion, no loss, no self-steepening, no Raman
+        medium = Medium(L, g, 0.0, Float64[], 835e-9)
+        pulse = gaussian_pulse(grid, 50.0, 200e-15) # Pmax = 50 W
+        
+        # Solve GNLSE
+        sol = solve(pulse, SimParams(; medium=medium, z_saves=2,
+            raman_model=nothing, self_steepening=false, rtol=1e-8, atol=1e-10); progress=false)
+            
+        # Analytical phase shift: ϕ = |A(0,t)|² * ∫₀ˡ γ(z) dz
+        # ∫₀ˡ γ(z) dz = gamma0 * (1 - exp(-alpha_taper * L)) / alpha_taper
+        gamma_integrated = gamma0 * (1.0 - exp(-alpha_taper * L)) / alpha_taper
+        
+        phase_analytical = abs2.(sol.At[:, 1]) .* gamma_integrated
+        significant_indices = findall(x -> x > 1.0, abs2.(sol.At[:, 1]))
+
+        # Compare complex phasors directly to avoid phase wrapping issues
+        phasor_numerical = sol.At[significant_indices, end] ./ sol.At[significant_indices, 1]
+        phasor_analytical = exp.(1im .* phase_analytical[significant_indices])
+        
+        @test phasor_numerical ≈ phasor_analytical rtol=1e-4
+    end
 end
