@@ -39,15 +39,21 @@ function solve(problem::GNLSEProblem, solver::ERK4IP; progress::Bool=true)
     model = build_physics_model(grid, sim_params, gamma_coefficient)
 
     # Initialize solution arrays
-    Z = collect(0.0:solver.dz:medium.length)
-    Nz = length(Z)
-    At = Matrix{ComplexF64}(undef, grid.N, Nz)
-    AW = Matrix{ComplexF64}(undef, grid.N, Nz)
-
-    # Initial condition
+    # Subsample z_saves points across medium.length
+    Z = collect(range(0.0, medium.length, length=sim_params.z_saves))
+    dz = solver.dz
+    # Calculate step indices to save
+    save_indices = round.(Int, range(1, (medium.length/dz)+1, length=sim_params.z_saves))
+    
+    At = Matrix{ComplexF64}(undef, grid.N, sim_params.z_saves)
+    AW = Matrix{ComplexF64}(undef, grid.N, sim_params.z_saves)
+    
+    # Store initial condition
     At[:, 1] = initial_pulse.At
     AW[:, 1] = initial_pulse.AW
 
+    save_idx = 2
+    
     # Pre-allocate k-arrays for ERK4IP method
     k1_f = similar(model.buf_f1)
     k2_f = similar(model.buf_f1)
@@ -55,55 +61,52 @@ function solve(problem::GNLSEProblem, solver::ERK4IP; progress::Bool=true)
     k4_f = similar(model.buf_f1)
 
     # Progress meter
-    pm = Progress(Nz - 1; showspeed=true, enabled=progress, barlen=20)
+    Nz = Int(round(medium.length / dz))
+    pm = Progress(Nz; showspeed=true, enabled=progress, barlen=20)
 
     # Propagation loop
-    for i = 1:Nz-1
-        z = Z[i]
-        dz = solver.dz
-
-        # ERK4IP steps (solving u_z = L*u + N(u)) in Interaction Picture
+    current_AW = copy(AW[:, 1])
+    for i = 1:Nz
+        z = (i-1) * dz
         
         # Step 1: k1 = N(u_n)
-        k1_f = model.nonlinear_function(At[:, i], model, z)
+        At_temp = ifft(current_AW) .* grid.N
+        k1_f .= model.nonlinear_function(At_temp, model, z)
 
         # Step 2: k2 = N(exp(L*dz/2)*u_n + (dz/2)*exp(L*dz/2)*k1)
-        # Linear part: exp(L*dz/2)*u_n = ifft(exp(D*dz/2) * fft(u_n))
-        # Note: AW is in FFT order, D is in FFT order.
-        model.buf_f1 .= AW[:, i] .* exp.(model.D .* (dz / 2))
+        model.buf_f1 .= current_AW .* exp.(model.D .* (dz / 2))
         mul!(model.buf_t1, model.to_time, model.buf_f1)
         mul!(model.buf_t2, model.to_time, k1_f)
-        # Combine At_n + (dz/2)*k1_t
-        for j in 1:length(model.buf_t1)
-            model.buf_t1[j] += (dz / 2) * model.buf_t2[j]
-        end
+        model.buf_t1 .+= (dz / 2) .* model.buf_t2
         k2_f .= model.nonlinear_function(model.buf_t1, model, z + dz / 2)
 
         # Step 3: k3 = N(exp(L*dz/2)*u_n + (dz/2)*exp(L*dz/2)*k2)
-        # Recalculate linear part for step 3
-        model.buf_f1 .= AW[:, i] .* exp.(model.D .* (dz / 2))
+        model.buf_f1 .= current_AW .* exp.(model.D .* (dz / 2))
         mul!(model.buf_t1, model.to_time, model.buf_f1)
         mul!(model.buf_t2, model.to_time, k2_f)
         model.buf_t1 .+= (dz / 2) .* model.buf_t2
         k3_f .= model.nonlinear_function(model.buf_t1, model, z + dz / 2)
 
         # Step 4: k4 = N(exp(L*dz)*u_n + dz*exp(L*dz)*k3)
-        model.buf_f1 .= AW[:, i] .* exp.(model.D .* dz)
+        model.buf_f1 .= current_AW .* exp.(model.D .* dz)
         mul!(model.buf_t1, model.to_time, model.buf_f1)
         mul!(model.buf_t2, model.to_time, k3_f)
         model.buf_t1 .+= dz .* model.buf_t2
         k4_f .= model.nonlinear_function(model.buf_t1, model, z + dz)
 
         # Combine the steps (frequency domain)
-        # Using explicit broadcasting to avoid broadcasting over 'model' or other non-array fields
-        AW[:, i+1] .= AW[:, i] .* exp.(model.D .* dz) .+ (dz / 6) .* (
+        current_AW .= current_AW .* exp.(model.D .* dz) .+ (dz / 6) .* (
             k1_f .* exp.(model.D .* dz) .+
             2 .* k2_f .* exp.(model.D .* (dz / 2)) .+
             2 .* k3_f .* exp.(model.D .* (dz / 2)) .+
             k4_f
         )
-        mul!(At[:, i+1], model.to_time, AW[:, i+1])
-
+        
+        if (i+1) in save_indices && save_idx <= sim_params.z_saves
+            At[:, save_idx] .= ifft(current_AW) .* grid.N
+            AW[:, save_idx] .= current_AW
+            save_idx += 1
+        end
         next!(pm)
     end
 
