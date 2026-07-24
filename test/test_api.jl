@@ -211,4 +211,52 @@ using JuGNLSE
         @test piped_result isa Solution
         @test piped_result.At[:, end] ≈ results[4].At[:, end]
     end
+
+    @testset "Frequency-dependent and Effective-area Nonlinearity" begin
+        grid = create_grid(2^10, 10e-12, 835e-9)
+        pulse = sech_pulse(grid, 100.0, 100e-15)
+
+        # 1. ConstantNonlinearity matches Float64 gamma
+        m_float = Medium(0.02, 0.11, 0.0, [-1.0e-26], 835e-9)
+        m_const = Medium(0.02, ConstantNonlinearity(0.11), 0.0, [-1.0e-26], 835e-9)
+
+        params_float = SimParams(; medium=m_float, self_steepening=true)
+        params_const = SimParams(; medium=m_const, self_steepening=true)
+
+        sol_float = solve(pulse, params_float; progress=false)
+        sol_const = solve(pulse, params_const; progress=false)
+
+        @test sol_float.At[:, end] ≈ sol_const.At[:, end]
+
+        # 2. FrequencyDependentNonlinearity
+        # Let's define a flat frequency-dependent gamma
+        g_func(w) = 0.11
+        m_freq = Medium(0.02, FrequencyDependentNonlinearity(g_func), 0.0, [-1.0e-26], 835e-9)
+        params_freq = SimParams(; medium=m_freq, self_steepening=false)
+        sol_freq = solve(pulse, params_freq; progress=false)
+        
+        # Without self-steepening, a flat frequency-dependent gamma matches flat constant gamma
+        params_no_shock = SimParams(; medium=m_const, self_steepening=false)
+        sol_no_shock = solve(pulse, params_no_shock; progress=false)
+        @test sol_freq.At[:, end] ≈ sol_no_shock.At[:, end]
+
+        # 3. NonlinearityFromEffectiveArea
+        # n2 = 2.5e-20 m^2/W, Aeff(w) = 10e-12 m^2 (constant 10 um^2)
+        # gamma(omega0) = n2 * omega0 / (c * Aeff(omega0))
+        c_const = 299792458.0
+        n2 = 2.5e-20
+        Aeff_const = 10e-12
+        gamma_expected = n2 * grid.omega0 / (c_const * Aeff_const)
+
+        m_area = Medium(0.02, NonlinearityFromEffectiveArea(n2, w -> Aeff_const), 0.0, [-1.0e-26], 835e-9)
+        params_area = SimParams(; medium=m_area, self_steepening=true)
+        sol_area = solve(pulse, params_area; progress=false)
+
+        # Should match ConstantNonlinearity with the calculated gamma_expected
+        m_expected = Medium(0.02, ConstantNonlinearity(gamma_expected), 0.0, [-1.0e-26], 835e-9)
+        params_expected = SimParams(; medium=m_expected, self_steepening=true)
+        sol_expected = solve(pulse, params_expected; progress=false)
+
+        @test sol_area.At[:, end] ≈ sol_expected.At[:, end]
+    end
 end

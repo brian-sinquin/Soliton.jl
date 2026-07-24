@@ -249,6 +249,43 @@ struct Hollenbeck <: RamanModel
 end
 
 """
+    NonlinearityModel
+
+Abstract base type for nonlinearity models.
+"""
+abstract type NonlinearityModel end
+
+"""
+    ConstantNonlinearity(gamma)
+
+Constant nonlinear coefficient γ [1/(W·m)].
+"""
+struct ConstantNonlinearity <: NonlinearityModel
+    gamma::Float64
+end
+
+"""
+    FrequencyDependentNonlinearity(gamma_func)
+
+Frequency-dependent nonlinear coefficient where `gamma_func(w)` takes absolute angular frequency w [rad/s]
+and returns γ [1/(W·m)].
+"""
+struct FrequencyDependentNonlinearity{F} <: NonlinearityModel
+    gamma_function::F
+end
+
+"""
+    NonlinearityFromEffectiveArea(n2, Aeff_func)
+
+Nonlinearity calculated from nonlinear index n₂ [m²/W] and a frequency-dependent effective mode area.
+`Aeff_func` takes absolute frequency w [rad/s] and returns mode area A_eff [m²].
+"""
+struct NonlinearityFromEffectiveArea{F} <: NonlinearityModel
+    n2::Float64
+    Aeff_function::F
+end
+
+"""
     Grid{T<:Real}
 
 Time and frequency grid for GNLSE propagation.

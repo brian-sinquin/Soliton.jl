@@ -28,11 +28,13 @@ Pre-computed operators and FFT plans for GNLSE propagation.
 - `buf_t1`, `buf_t2`: Pre-allocated time-domain buffers
 - `buf_f1`: Pre-allocated frequency-domain buffer
 """
-struct PhysicsModel{TF, TT, NL}
+struct PhysicsModel{TF, TT, NL, TG}
     to_freq::TF
     to_time::TT
     D::Vector{ComplexF64}
-    gamma::Float64
+    gamma::TG
+    omega0::Float64
+    gamma_W::Vector{Float64}
     W::Vector{Float64}
     dt::Float64
     N::Int
@@ -45,34 +47,43 @@ struct PhysicsModel{TF, TT, NL}
     buf_f1::Vector{ComplexF64}
 end
 
+@inline function eval_gamma(gamma::Number, ::Real, ::Real)
+    return gamma
+end
+
+@inline function eval_gamma(gamma::Function, z::Real, omega0::Float64)
+    return gamma(z) / omega0
+end
+
 """
-    _spm(u, model::PhysicsModel)
+    _spm(u, model::PhysicsModel, z::Real)
 
 Kerr (self-phase modulation) nonlinear operator.
 
-Computes `iγ·W·to_freq(u|u|²)`. Self-steepening is carried by `model.W`: with
-self-steepening off, `W = ω₀` (constant) and iγ·W = iγ_phys; with it on,
-`W = ω₀+V`, giving the shock term iγ_phys(1+V/ω₀). Zero allocations.
+Computes `iγ·gamma_W·to_freq(u|u|²)`. Zero allocations.
 
 # See also
 
 [`_spm_raman`](@ref)
 """
-function _spm(u, model::PhysicsModel)
+function _spm(u, model::PhysicsModel, z::Real)
     # SPM term u·|u|²
     @. model.buf_t1 = u * abs2(u)
 
     # Transform to the frequency domain
     mul!(model.buf_f1, model.to_freq, model.buf_t1)
 
-    # Multiply by iγW
-    @. model.buf_f1 = 1.0im * model.gamma * model.W * model.buf_f1
+    # Get gamma at z
+    gamma_z = eval_gamma(model.gamma, z, model.omega0)
+
+    # Multiply by iγ_z * gamma_W
+    @. model.buf_f1 = 1.0im * gamma_z * model.gamma_W * model.buf_f1
 
     return model.buf_f1
 end
 
 """
-    _spm_raman(u, model::PhysicsModel)
+    _spm_raman(u, model::PhysicsModel, z)
 
 SPM with Raman scattering nonlinear operator.
 
@@ -90,13 +101,13 @@ Raman fraction. Convolution implemented efficiently via FFT multiplication.
 
     conv = (|u|²) ⊛ hᵣ      via  to_time(to_freq(|u|²) .* RW)
     op   = u .* ((1-fr)|u|² + fr·dt·conv)
-    result = iγ·W · to_freq(op)
+    result = iγ_z · gamma_W · to_freq(op)
 
 # See also
 
 [`raman_response`](@ref), [`_spm`](@ref)
 """
-function _spm_raman(u, model::PhysicsModel)
+function _spm_raman(u, model::PhysicsModel, z::Real)
     # `_spm_raman` is only selected when Raman is enabled, so RW is a Vector.
     # The assertion narrows the Union{Nothing,Vector} field type, keeping the
     # broadcast below type-stable and allocation-free.
@@ -113,9 +124,13 @@ function _spm_raman(u, model::PhysicsModel)
     # Total nonlinearity (instantaneous Kerr + delayed Raman) times u
     @. model.buf_t1 = u * ((1.0 - model.fr) * abs2(u) + model.fr * model.dt * model.buf_t2)
 
-    # Transform to the frequency domain and multiply by iγW
+    # Transform to the frequency domain and multiply by iγ_z * gamma_W
     mul!(model.buf_f1, model.to_freq, model.buf_t1)
-    @. model.buf_f1 = 1.0im * model.gamma * model.W * model.buf_f1
+    
+    # Get gamma at z
+    gamma_z = eval_gamma(model.gamma, z, model.omega0)
+    
+    @. model.buf_f1 = 1.0im * gamma_z * model.gamma_W * model.buf_f1
 
     return model.buf_f1
 end
@@ -182,9 +197,29 @@ function build_physics_model(grid::Grid, params::SimParams)
     # operator must be fftshifted to FFT-natural order to align with AW.
     D = fftshift(dispersion_operator(grid, medium))
 
-    # Gamma (nonlinear coefficient) - normalize by ω₀ as in gnlse-python
-    # gnlse-python: self.gamma = gamma / self.w_0
-    gamma = (medium.gamma isa Number ? medium.gamma : medium.gamma[1]) / grid.omega0
+    # Gamma (nonlinear coefficient) - normalize by ω₀ if constant
+    # Resolve gamma input and frequency-dependent gamma_W vector
+    gamma_input = medium.gamma
+    gamma_z_model, gamma_W_mon = if gamma_input isa Number
+        W_factor = enable_shock ? grid.W : fill(grid.omega0, N)
+        gamma_input / grid.omega0, W_factor
+    elseif gamma_input isa Function
+        W_factor = enable_shock ? grid.W : fill(grid.omega0, N)
+        gamma_input, W_factor
+    elseif gamma_input isa ConstantNonlinearity
+        W_factor = enable_shock ? grid.W : fill(grid.omega0, N)
+        gamma_input.gamma / grid.omega0, W_factor
+    elseif gamma_input isa FrequencyDependentNonlinearity
+        1.0, gamma_input.gamma_function.(grid.W)
+    elseif gamma_input isa NonlinearityFromEffectiveArea
+        # gamma(w) = n2 * w / (c * Aeff(w))
+        1.0, (gamma_input.n2 .* grid.W) ./ (c .* gamma_input.Aeff_function.(grid.W))
+    else
+        throw(ArgumentError("Unsupported nonlinearity type: $(typeof(gamma_input))"))
+    end
+
+    # Put gamma_W in FFT-natural order
+    gamma_W = ifftshift(gamma_W_mon)
 
     # Raman response in frequency domain (if enabled)
     raman_freq_response = nothing
@@ -200,13 +235,10 @@ function build_physics_model(grid::Grid, params::SimParams)
         raman_freq_response = N .* ifft(ifftshift(h_R))
     end
 
-    # Frequency factor for the nonlinear term iγ·W·FFT(...).
-    # With self-steepening: W = ω₀+Δω (the true absolute frequency), giving the
-    # shock term iγ_phys(1+Δω/ω₀). Without it: W = ω₀ (constant), so iγ·W reduces
-    # to iγ_phys. grid.W is monotonic; ifftshift puts it in FFT-natural order.
+    # Frequency factor for the nonlinear term (for backward compatibility and test assertions)
     W = enable_shock ? ifftshift(grid.W) : fill(grid.omega0, N)
 
-    # Select nonlinear function (self-steepening is carried by W, not the operator)
+    # Select nonlinear function
     nonlinear_function = choose_nonlinear_term(enable_raman)
 
     # Pre-allocate working buffers for zero-allocation nonlinear operators
@@ -219,7 +251,9 @@ function build_physics_model(grid::Grid, params::SimParams)
         to_freq,
         to_time,
         D,
-        gamma,
+        gamma_z_model,
+        grid.omega0,
+        gamma_W,
         W,
         grid.dt,
         N,

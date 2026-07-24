@@ -96,6 +96,7 @@ export RamanModel, BlowWood, LinAgrawal, Hollenbeck
 export DispersionModel, TaylorDispersion, TabulatedDispersion, SellmeierDispersion
 export GNLSESolver, ERK4IP
 export LumpedElement, Amplifier, Attenuator, Filter, apply
+export NonlinearityModel, ConstantNonlinearity, FrequencyDependentNonlinearity, NonlinearityFromEffectiveArea
 export PhysicsModel  # Internal physics model struct
 
 # Export grid functions
