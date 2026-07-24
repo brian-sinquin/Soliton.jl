@@ -1,7 +1,7 @@
 module Physics
 
 using ..Types: Grid, Medium, SimParams, AbstractGammaCoefficient, Pulse
-using ..Operators: dispersion_operator, gamma
+using ..Operators: dispersion_operator, compute_gamma
 using ..Raman: raman_response
 import FFTW
 using FFTW: plan_ifft, plan_fft, ifft, fft, ifftshift, fftshift # For FFT plans and shifts
@@ -73,7 +73,7 @@ function _spm(u, model::PhysicsModel, z::Float64)
 
     # Get gamma value using the central wavelength (for WavelengthDependentGamma simplification)
     # and the current z for ZDependentGamma
-    gamma_val = gamma(model.gamma_coefficient, model.lambda0, z)
+    gamma_val = compute_gamma(model.gamma_coefficient, model.lambda0, z)
 
     # Multiply by iγW. The W in model.W already includes omega0 or omega0+V,
     # so we just need the physical gamma.
@@ -112,7 +112,7 @@ function _spm_raman(u, model::PhysicsModel, z::Float64)
     mul!(model.buf_t2, model.to_time, model.buf_f1)   # buf_t2 = |u|² ⊛ h_R
 
     # Get gamma value for the current z and central lambda
-    gamma_val = gamma(model.gamma_coefficient, model.lambda0, z)
+    gamma_val = compute_gamma(model.gamma_coefficient, model.lambda0, z)
 
     # Total nonlinearity (instantaneous Kerr + delayed Raman) times u
     @. model.buf_t1 = u * ((1.0 - model.fr) * abs2(u) + model.fr * model.dt * model.buf_t2)
