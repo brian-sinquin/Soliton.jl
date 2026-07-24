@@ -32,6 +32,21 @@ using ProgressMeter: Progress, update!
 import ..build_physics_model, ..PhysicsModel
 
 """
+    propagate(model::PhysicsModel, pulse::Pulse, params::SimParams, solver::ERK4IP, progress::Bool)
+
+Propagate the pulse using the adaptive Runge-Kutta 4(3) interaction picture solver.
+"""
+function propagate(
+    model::PhysicsModel,
+    pulse::Pulse,
+    params::SimParams,
+    solver::ERK4IP,
+    progress::Bool,
+)
+    return _propagate_erk4ip!(model, pulse, params, progress, solver.rtol, solver.atol, solver.dz_init)
+end
+
+"""
     propagate_erk4ip(pulse::Pulse, params::SimParams; rtol=1e-6, atol=1e-8, dz=nothing)
 
 Embedded Runge-Kutta 4(3) method in interaction picture with adaptive stepping.
@@ -58,16 +73,6 @@ reusing computations and working in interaction picture throughout.
 
 Balac & Fernandez (2013), Heidt (2009)
 """
-function propagate(
-    model::PhysicsModel,
-    pulse::Pulse,
-    params::SimParams,
-    solver::ERK4IP,
-    progress::Bool,
-)
-    return _propagate_erk4ip!(model, pulse, params, progress, solver.rtol, solver.atol, solver.dz_init)
-end
-
 function propagate_erk4ip(
     pulse::Pulse,
     params::SimParams;
