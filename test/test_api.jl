@@ -139,4 +139,70 @@ using JuGNLSE
         # Self-steepening on: W carries the absolute frequency ω₀ + Δω
         @test !all(m2.W .== grid.omega0)
     end
+
+    @testset "Z-dependent gamma" begin
+        grid = create_grid(2^10, 10e-12, 835e-9)
+        pulse = sech_pulse(grid, 1000.0, 100e-15)
+        
+        # Define z-dependent gamma function
+        g(z) = 0.11 * exp(-z)
+        
+        medium = Medium(0.15, g, 0.0, [-1.0e-26], 835e-9)
+        @test medium.gamma isa Function
+        @test medium.gamma(0.0) == 0.11
+        @test medium.gamma(0.1) ≈ 0.11 * exp(-0.1)
+
+        # Run solver with z-dependent gamma
+        params = SimParams(; medium=medium, z_saves=50, raman_model=nothing)
+        sol = solve(pulse, params; progress=false)
+        @test length(sol.Z) == 50
+        @test size(sol.At, 2) == 50
+    end
+
+    @testset "Cascaded propagation & Lumped Elements" begin
+        grid = create_grid(2^10, 10e-12, 835e-9)
+        pulse = gaussian_pulse(grid, 10.0, 200e-15) # Pmax = 10 W
+        
+        # Test Amplifier
+        amp = Amplifier(6.0) # 6 dB gain
+        pulse_amp = apply(pulse, amp)
+        @test peak_power(pulse_amp) ≈ peak_power(pulse) * 10.0^(6.0 / 10.0) rtol=1e-5
+        
+        # Test Attenuator
+        att = Attenuator(3.0) # 3 dB loss
+        pulse_att = apply(pulse, att)
+        @test peak_power(pulse_att) ≈ peak_power(pulse) * 10.0^(-3.0 / 10.0) rtol=1e-5
+        
+        # Test Filter
+        # Simple super-Gaussian low-pass filter in frequency
+        filt_func(w) = abs(w - grid.omega0) < 1e12 ? 1.0 : 0.0
+        filt = Filter(filt_func)
+        pulse_filt = apply(pulse, filt)
+        @test peak_power(pulse_filt) < peak_power(pulse)
+        
+        # Test Cascade: Fiber -> Amplifier -> Filter -> Fiber
+        medium1 = Medium(0.01, 0.11, 0.0, [-1.0e-26], 835e-9)
+        medium2 = Medium(0.01, 0.11, 0.0, [-1.0e-26], 835e-9)
+        
+        stage1 = SimParams(; medium=medium1, z_saves=5, raman_model=nothing)
+        stage2 = amp
+        stage3 = filt
+        stage4 = SimParams(; medium=medium2, z_saves=5, raman_model=nothing)
+        
+        cascade = [stage1, stage2, stage3, stage4]
+        results = solve(pulse, cascade; progress=false)
+        
+        @test length(results) == 4
+        @test results[1] isa Solution
+        @test results[2] isa Pulse
+        @test results[3] isa Pulse
+        @test results[4] isa Solution
+        
+        # Verify energy flow
+        # Output of stage 1 final slice energy
+        e1 = sum(abs2, results[1].At[:, end])
+        # Output of stage 2 (amplifier) energy
+        e2 = sum(abs2, results[2].At)
+        @test e2 ≈ e1 * 10.0^(amp.gain_db / 10.0) rtol=1e-5
+    end
 end

@@ -81,3 +81,38 @@ function solve(pulse::Pulse, params::SimParams; progress::Bool=true)
 
     return solution
 end
+
+"""
+    solve(pulse::Pulse, stages::AbstractVector; progress::Bool=true)
+
+Propagate an optical pulse through a sequence of stages (fibers, amplifiers, filters, etc.).
+
+Returns a vector of results corresponding to each stage (either a `Solution` for propagation stages,
+or a new `Pulse` for lumped elements / functional stages).
+"""
+function solve(pulse::Pulse, stages::AbstractVector; progress::Bool=true)
+    current_pulse = pulse
+    results = Any[]
+
+    for (i, stage) in enumerate(stages)
+        if stage isa SimParams
+            # Fiber propagation stage (returns a Solution)
+            sol = solve(current_pulse, stage; progress=progress)
+            push!(results, sol)
+            # Use final state of the fiber propagation for the next stage
+            current_pulse = Pulse(sol.At[:, end], sol.AW[:, end], pulse.grid)
+        elseif stage isa LumpedElement
+            # Lumped element stage (returns a Pulse)
+            current_pulse = apply(current_pulse, stage)
+            push!(results, current_pulse)
+        elseif stage isa Function
+            # Custom functional stage (returns a Pulse)
+            current_pulse = stage(current_pulse)
+            push!(results, current_pulse)
+        else
+            throw(ArgumentError("Unsupported stage type: $(typeof(stage))"))
+        end
+    end
+
+    return results
+end
