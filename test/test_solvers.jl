@@ -105,4 +105,31 @@ using JuGNLSE
         # Try to specify both solver and rtol (should throw)
         @test_throws ArgumentError SimParams(; medium=medium, solver=solver, rtol=1e-6)
     end
+
+    @testset "Symmetric Split-Step Fourier Method (SSFM)" begin
+        grid = create_grid(2^10, 10e-12, 835e-9)
+        medium = Medium(0.02, 0.11, 0.0, [-1.0e-26], 835e-9)
+        pulse = sech_pulse(grid, 100.0, 100e-15)
+
+        # Test constructor validation
+        @test_throws ArgumentError SSFM(0.0)
+        @test_throws ArgumentError SSFM(-1e-5)
+
+        # Run SSFM
+        solver_ssfm = SSFM(1e-5)
+        params_ssfm = SimParams(; medium=medium, z_saves=5, solver=solver_ssfm)
+        sol_ssfm = solve(pulse, params_ssfm; progress=false)
+
+        @test length(sol_ssfm.Z) == 5
+        @test all(isfinite, sol_ssfm.At)
+
+        # Compare with ERK4IP
+        solver_erk = ERK4IP(; rtol=1e-6, atol=1e-8)
+        params_erk = SimParams(; medium=medium, z_saves=5, solver=solver_erk)
+        sol_erk = solve(pulse, params_erk; progress=false)
+
+        # Verify that both solvers agree closely on the final field profile
+        rel_diff = sum(abs2, sol_ssfm.At[:, end] .- sol_erk.At[:, end]) / sum(abs2, sol_erk.At[:, end])
+        @test rel_diff < 1e-4
+    end
 end

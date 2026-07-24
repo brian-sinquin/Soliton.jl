@@ -86,6 +86,7 @@ include("nonlinearity.jl")
 
 # Solvers
 include("solvers/erk4ip.jl")
+include("solvers/ssfm.jl")
 
 include("solver.jl")
 include("analysis.jl")
@@ -94,7 +95,7 @@ include("analysis.jl")
 export Medium, SimParams, Grid, Pulse, Solution
 export RamanModel, BlowWood, LinAgrawal, Hollenbeck
 export DispersionModel, TaylorDispersion, TabulatedDispersion, SellmeierDispersion
-export GNLSESolver, ERK4IP
+export GNLSESolver, ERK4IP, SSFM
 export LumpedElement, Amplifier, Attenuator, Filter, apply
 export NonlinearityModel, ConstantNonlinearity, FrequencyDependentNonlinearity, NonlinearityFromEffectiveArea
 export PhysicsModel  # Internal physics model struct

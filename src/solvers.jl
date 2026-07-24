@@ -29,3 +29,17 @@ struct ERK4IP <: GNLSESolver
         new(Float64(rtol), Float64(atol), dz_val)
     end
 end
+
+"""
+    SSFM(dz)
+
+Fixed-step Symmetric Split-Step Fourier Method (SSFM) solver configuration.
+"""
+struct SSFM <: GNLSESolver
+    dz::Float64
+
+    function SSFM(dz::Real)
+        dz > 0 || throw(ArgumentError("Fixed step size dz must be positive"))
+        return new(Float64(dz))
+    end
+end
