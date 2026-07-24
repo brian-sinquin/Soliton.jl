@@ -91,9 +91,7 @@ function solve(problem::GNLSEProblem, solver::ERK4IP; progress::Bool=true)
         model.buf_f1 .= AW[:, i] .* exp.(model.D .* dz)
         mul!(model.buf_t1, model.to_time, model.buf_f1)
         mul!(model.buf_t2, model.to_time, k3_f)
-        for j in 1:length(model.buf_t1)
-            model.buf_t1[j] += dz * model.buf_t2[j]
-        end
+        model.buf_t1 .+= dz .* model.buf_t2
         k4_f .= model.nonlinear_function(model.buf_t1, model, z + dz)
 
         # Combine the steps (frequency domain)
