@@ -68,26 +68,50 @@ function solve(problem::GNLSEProblem, solver::ERK4IP; progress::Bool=true)
         k1_f = model.nonlinear_function(At[:, i], model, z)
 
         # Step 2: k2 = N(exp(L*dz/2)*u_n + (dz/2)*exp(L*dz/2)*k1)
+        # Linear part: exp(L*dz/2)*u_n = ifft(exp(D*dz/2) * fft(u_n))
+        # Note: AW is in FFT order, D is in FFT order.
         model.buf_f1 .= AW[:, i] .* exp.(model.D .* (dz / 2))
         mul!(model.buf_t1, model.to_time, model.buf_f1)
         mul!(model.buf_t2, model.to_time, k1_f)
-        k2_f .= model.nonlinear_function(model.buf_t1 .+ (dz / 2) .* model.buf_t2, model, z + dz / 2)
+        # Combine At_n + (dz/2)*k1_t
+        for j in 1:length(model.buf_t1)
+            model.buf_t1[j] += (dz / 2) * model.buf_t2[j]
+        end
+        k2_f .= model.nonlinear_function(model.buf_t1, model, z + dz / 2)
 
         # Step 3: k3 = N(exp(L*dz/2)*u_n + (dz/2)*exp(L*dz/2)*k2)
+        # Linear part: already computed in model.buf_t1 (At_n at z+dz/2 via exp(D*dz/2)*u_n)
+        # Nonlinear part: (dz/2)*exp(L*dz/2)*k2_f
         mul!(model.buf_t2, model.to_time, k2_f)
-        k3_f .= model.nonlinear_function(model.buf_t1 .+ (dz / 2) .* model.buf_t2, model, z + dz / 2)
+        for j in 1:length(model.buf_t1)
+            model.buf_t1[j] -= (dz / 2) * model.buf_t2[j] # Remove old k2 effect
+            model.buf_t1[j] += (dz / 2) * model.buf_t2[j] # This is wrong logic, simplified below.
+        end
+        # Correct logic: We need to re-calculate buf_t1 for each step properly.
+        # Recalculate linear part for step 3
+        model.buf_f1 .= AW[:, i] .* exp.(model.D .* (dz / 2))
+        mul!(model.buf_t1, model.to_time, model.buf_f1)
+        mul!(model.buf_t2, model.to_time, k2_f)
+        for j in 1:length(model.buf_t1)
+            model.buf_t1[j] += (dz / 2) * model.buf_t2[j]
+        end
+        k3_f .= model.nonlinear_function(model.buf_t1, model, z + dz / 2)
 
         # Step 4: k4 = N(exp(L*dz)*u_n + dz*exp(L*dz)*k3)
         model.buf_f1 .= AW[:, i] .* exp.(model.D .* dz)
         mul!(model.buf_t1, model.to_time, model.buf_f1)
         mul!(model.buf_t2, model.to_time, k3_f)
-        k4_f .= model.nonlinear_function(model.buf_t1 .+ dz .* model.buf_t2, model, z + dz)
+        for j in 1:length(model.buf_t1)
+            model.buf_t1[j] += dz * model.buf_t2[j]
+        end
+        k4_f .= model.nonlinear_function(model.buf_t1, model, z + dz)
 
         # Combine the steps (frequency domain)
-        @. AW[:, i+1] = AW[:, i] * exp(model.D * dz) + (dz / 6) * (
-            k1_f .* exp(model.D * dz) +
-            2 * k2_f .* exp(model.D * dz / 2) +
-            2 * k3_f .* exp(model.D * dz / 2) +
+        # Using explicit broadcasting to avoid broadcasting over 'model' or other non-array fields
+        AW[:, i+1] .= AW[:, i] .* exp.(model.D .* dz) .+ (dz / 6) .* (
+            k1_f .* exp.(model.D .* dz) .+
+            2 .* k2_f .* exp.(model.D .* (dz / 2)) .+
+            2 .* k3_f .* exp.(model.D .* (dz / 2)) .+
             k4_f
         )
         mul!(At[:, i+1], model.to_time, AW[:, i+1])
@@ -155,8 +179,8 @@ function solve(problem::GNLSEProblem, solver::RK4; progress::Bool=true)
         @. model.buf_f1 = AW[:, i] + k3_f
         mul!(model.buf_t1, model.to_time, model.buf_f1)
         @. k4_f = dz * (model.D * model.buf_f1 + model.nonlinear_function(model.buf_t1, model, z + dz))
-
-        @. AW[:, i+1] = AW[:, i] + (k1_f + 2*k2_f + 2*k3_f + k4_f) / 6
+        # Update AW
+        AW[:, i+1] .= AW[:, i] .+ (k1_f .+ 2 .* k2_f .+ 2 .* k3_f .+ k4_f) ./ 6
         mul!(At[:, i+1], model.to_time, AW[:, i+1])
 
         next!(pm)
