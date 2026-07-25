@@ -102,9 +102,10 @@ export VectorialPulse, BirefringentMedium, VectorialSolution, AmplifyingMedium
 export LumpedElement, Amplifier, Attenuator, Filter, PMDElement, apply
 export NonlinearityModel, ConstantNonlinearity, FrequencyDependentNonlinearity, NonlinearityFromEffectiveArea
 
-# Commercial Fibers & Refractive Index Presets
-export FiberSpec, FiberLibrary, commercial_fiber
+# Commercial Fibers, Gas-Filled Hollow Core & Refractive Index Presets
+export FiberSpec, FiberLibrary, commercial_fiber, HollowCoreFiber, gas_refractive_index
 export FusedSilica, SF6, SF57, GeO2DopedSilica
+export MolecularRamanGas
 
 
 # Export grid functions

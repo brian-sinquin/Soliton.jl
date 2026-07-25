@@ -179,3 +179,133 @@ function commercial_fiber(
     alpha = loss === nothing ? spec.default_loss : Float64(loss)
     return Medium(length, spec.gamma, alpha, spec.dispersion, wl)
 end
+
+# ===========================================================================
+# 3. Gas Refractive Index & Hollow-Core Fiber (HC-PCF) Guidance Models
+# ===========================================================================
+
+"""
+    gas_refractive_index(gas::Symbol, lambda_m::Real, pressure_bar::Real; temperature_K::Real=293.15) -> Float64
+
+Refractive index of gas at wavelength `lambda_m` [m], pressure `pressure_bar` [bar], and temperature `temperature_K` [K].
+Supported gases: `:Ar`, `:Ne`, `:Kr`, `:Xe`, `:H2`, `:N2`, `:Air`.
+
+Reference: Börzsönyi et al., Opt. Express 21, 21086 (2013); Peck & Khanna, J. Opt. Soc. Am. 67, 1550 (1977).
+"""
+function gas_refractive_index(gas::Symbol, lambda_m::Real, pressure_bar::Real; temperature_K::Real=293.15)
+    l_um = lambda_m * 1e6 # [μm]
+    inv_l2 = 1.0 / (l_um^2)
+
+    # (n_STP - 1) * 1e8 at 1 bar, 273.15 K
+    n_minus_1_1e8 = if gas === :Ar
+        5547.61 + 515.39 / (1.0 - 0.003029 * inv_l2)
+    elseif gas === :Ne
+        6151.7 + 382.4 / (1.0 - 0.0035 * inv_l2)
+    elseif gas === :Kr
+        2610.5 + 26116.3 / (1.0 - 0.00494 * inv_l2)
+    elseif gas === :Xe
+        10657.0 + 35147.0 / (1.0 - 0.0084 * inv_l2)
+    elseif gas === :H2
+        1358.0 + 7799.0 / (1.0 - 0.0041 * inv_l2)
+    elseif gas === :N2 || gas === :Air
+        6498.2 + 29398.0 / (1.0 - 0.0073 * inv_l2)
+    else
+        throw(ArgumentError("Unsupported gas '$gas'. Supported: :Ar, :Ne, :Kr, :Xe, :H2, :N2, :Air"))
+    end
+
+    n_stp_minus_1 = n_minus_1_1e8 * 1e-8
+    # Scaling with pressure and temperature: (P / 1.0) * (273.15 / T)
+    n_gas = 1.0 + n_stp_minus_1 * pressure_bar * (273.15 / temperature_K)
+    return n_gas
+end
+
+"""
+    gas_n2(gas::Symbol, pressure_bar::Real) -> Float64
+
+Nonlinear index n₂ [m²/W] of gas at pressure `pressure_bar` [bar] (STP values scaled linearly with pressure).
+"""
+function gas_n2(gas::Symbol, pressure_bar::Real)
+    n2_stp = if gas === :Ar
+        1.0e-23
+    elseif gas === :Ne
+        0.8e-24
+    elseif gas === :Kr
+        3.4e-23
+    elseif gas === :Xe
+        1.0e-22
+    elseif gas === :H2
+        1.2e-23
+    elseif gas === :N2 || gas === :Air
+        2.5e-23
+    else
+        1.0e-23
+    end
+    return n2_stp * pressure_bar
+end
+
+"""
+    HollowCoreFiber(; radius, gas, pressure, length, lambda0, loss=0.0, temperature=293.15) -> Medium
+
+Construct a [`Medium`](@ref) for a gas-filled Hollow-Core Photonic Crystal Fiber (HC-PCF).
+
+Calculates pressure-dependent dispersion using the Marcatili-Schmeltzer / Zeisberger capillary
+anti-resonance guidance model:
+
+    β(ω, P) = (ω/c) · √(n_gas²(ω, P) - (u₀₁ c / (ω R_core))²)
+
+where u₀₁ ≈ 2.40483 is the fundamental HE₁₁ mode Bessel root, and R_core is the hollow core radius [m].
+
+# Arguments
+- `radius::Real`: Core radius R_core [m] (e.g. 15e-6 for 30 μm core diameter)
+- `gas::Symbol`: Gas species (`:Ar`, `:Ne`, `:Kr`, `:Xe`, `:H2`, `:N2`)
+- `pressure::Real`: Gas pressure P [bar]
+- `length::Real`: Propagation length [m]
+- `lambda0::Real`: Central wavelength [m]
+- `loss::Real`: Fiber attenuation [dB/m] (default 0.0)
+- `temperature::Real`: Temperature T [K] (default 293.15 K)
+
+# Example
+```julia
+# 30 μm core HC-PCF filled with 5 bar Argon at 800 nm
+hcf = HollowCoreFiber(radius=15e-6, gas=:Ar, pressure=5.0, length=0.5, lambda0=800e-9)
+```
+"""
+function HollowCoreFiber(;
+    radius::Real,
+    gas::Symbol,
+    pressure::Real,
+    length::Real,
+    lambda0::Real,
+    loss::Real=0.0,
+    temperature::Real=293.15
+)
+    radius > 0 || throw(ArgumentError("Core radius must be positive"))
+    pressure >= 0 || throw(ArgumentError("Pressure must be non-negative"))
+    
+    u01 = 2.4048255577
+    w0 = 2π * c / lambda0
+    dw = 1e-4 * w0
+
+    function beta_at_w(w)
+        lam = 2π * c / w
+        ngas = gas_refractive_index(gas, lam, pressure; temperature_K=temperature)
+        k0 = w / c
+        arg = ngas^2 - (u01 / (k0 * radius))^2
+        arg_clamped = max(1e-10, arg)
+        return k0 * sqrt(arg_clamped)
+    end
+
+    b0 = beta_at_w(w0)
+    bp = (beta_at_w(w0 + dw) - beta_at_w(w0 - dw)) / (2dw)
+    b2 = (beta_at_w(w0 + dw) - 2b0 + beta_at_w(w0 - dw)) / (dw^2)
+    b3 = (beta_at_w(w0 + 2dw) - 2beta_at_w(w0 + dw) + 2beta_at_w(w0 - dw) - beta_at_w(w0 - 2dw)) / (2dw^3)
+    b4 = (beta_at_w(w0 + 2dw) - 4beta_at_w(w0 + dw) + 6b0 - 4beta_at_w(w0 - dw) + beta_at_w(w0 - 2dw)) / (dw^4)
+
+    disp = TaylorDispersion([b2, b3, b4])
+
+    Aeff = 0.84 * π * radius^2
+    n2_val = gas_n2(gas, pressure)
+    gamma_val = 2π * n2_val / (lambda0 * Aeff)
+
+    return Medium(length, gamma_val, loss, disp, lambda0)
+end

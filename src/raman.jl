@@ -175,6 +175,19 @@ function raman_response(T::Vector{Float64}, model::Hollenbeck)
 end
 
 """
+    raman_response(T::Vector{Float64}, model::MolecularRamanGas)
+
+Compute Raman impulse response for molecular gases (H₂, N₂).
+"""
+function raman_response(T::Vector{Float64}, model::MolecularRamanGas)
+    tau1 = model.tau1
+    tau2 = model.tau2
+    RT = (tau1^2 + tau2^2) / tau1 / (tau2^2) .* exp.(-T ./ tau2) .* sin.(T ./ tau1)
+    RT[T .< 0] .= 0
+    return model.fr, RT
+end
+
+"""
     raman_response(grid::Grid, model::RamanModel)
 
 Convenience wrapper that extracts time vector from grid.

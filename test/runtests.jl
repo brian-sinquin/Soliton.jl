@@ -9,4 +9,5 @@ using JuGNLSE
     include("test_vectorial.jl")
     include("test_fibers.jl")
     include("test_edfa.jl")
+    include("test_hollowcore.jl")
 end

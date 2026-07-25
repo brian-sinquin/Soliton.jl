@@ -26,6 +26,7 @@ makedocs(;
             "Birefringent Propagation" => "guide/vectorial.md",
             "Commercial Fiber Catalog" => "guide/fibers.md",
             "Amplifying Fibers (EDFA)" => "guide/edfa.md",
+            "Hollow-Core PCF"          => "guide/hollowcore.md",
             "Noise Modeling"           => "guide/noise.md",
         ],
         "Examples" => [

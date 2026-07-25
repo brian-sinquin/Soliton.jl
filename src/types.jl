@@ -318,6 +318,35 @@ struct Hollenbeck <: RamanModel
 end
 
 """
+    MolecularRamanGas(gas::Symbol)
+
+Raman response model for molecular gases (H₂, N₂) in hollow-core fibers.
+
+Supported gases:
+- `:H2_rotational`: Rotational S(1) Raman line (Δν_R = 17.6 THz, τ₁ = 9 fs, τ₂ = 100 ps, f_R = 0.12)
+- `:H2_vibrational`: Vibrational Q(1) Raman line (Δν_R = 124.6 THz, τ₁ = 1.28 fs, τ₂ = 100 ps, f_R = 0.08)
+- `:N2`: Molecular nitrogen Raman line (Δν_R = 2.2 THz, τ₁ = 72 fs, τ₂ = 50 ps, f_R = 0.10)
+"""
+struct MolecularRamanGas <: RamanModel
+    gas::Symbol
+    fr::Float64
+    tau1::Float64
+    tau2::Float64
+end
+
+function MolecularRamanGas(gas::Symbol)
+    if gas === :H2_rotational
+        return MolecularRamanGas(:H2_rotational, 0.12, 9.0e-15, 100.0e-12)
+    elseif gas === :H2_vibrational
+        return MolecularRamanGas(:H2_vibrational, 0.08, 1.28e-15, 100.0e-12)
+    elseif gas === :N2
+        return MolecularRamanGas(:N2, 0.10, 72.0e-15, 50.0e-12)
+    else
+        throw(ArgumentError("Unsupported gas '$gas'. Supported: :H2_rotational, :H2_vibrational, :N2"))
+    end
+end
+
+"""
     NonlinearityModel
 
 Abstract base type for nonlinearity models.
