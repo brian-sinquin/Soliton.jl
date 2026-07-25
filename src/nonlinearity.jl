@@ -28,23 +28,24 @@ Pre-computed operators and FFT plans for GNLSE propagation.
 - `buf_t1`, `buf_t2`: Pre-allocated time-domain buffers
 - `buf_f1`: Pre-allocated frequency-domain buffer
 """
-struct PhysicsModel{TF, TT, NL, TG}
+struct PhysicsModel{TF, TT, NL, TG, TA <: AbstractArray{ComplexF64}, TVR <: AbstractVector{Float64}, TRW}
     to_freq::TF
     to_time::TT
-    D::Vector{ComplexF64}
+    D::TA
     gamma::TG
     omega0::Float64
-    gamma_W::Vector{Float64}
-    W::Vector{Float64}
+    gamma_W::TVR
+    W::TVR
     dt::Float64
     N::Int
     fr::Float64
-    RW::Union{Nothing, Vector{ComplexF64}}
+    RW::TRW
     nonlinear_function::NL
     # Pre-allocated buffers
-    buf_t1::Vector{ComplexF64}
-    buf_t2::Vector{ComplexF64}
-    buf_f1::Vector{ComplexF64}
+    buf_t1::TA
+    buf_t2::TA
+    buf_f1::TA
+    aux_data::NamedTuple
 end
 
 @inline function eval_gamma(gamma::Number, ::Real, ::Real)
@@ -148,8 +149,15 @@ presence of Raman scattering selects between operators.
 """
 choose_nonlinear_term(raman::Bool) = raman ? _spm_raman : _spm
 
+# Helper to transfer arrays to the same device/type as a template array
+function _to_device(template::AbstractArray, host_array::AbstractArray)
+    dev_array = similar(template, eltype(host_array), size(host_array))
+    copyto!(dev_array, host_array)
+    return dev_array
+end
+
 """
-    build_physics_model(grid::Grid, params::SimParams)
+    build_physics_model(grid::Grid, params::SimParams, [template::AbstractArray])
 
 Construct PhysicsModel with pre-computed operators for GNLSE propagation.
 
@@ -176,26 +184,15 @@ PhysicsModel struct ready for propagation
 
 # See also
 
-[`PhysicsModel`](@ref), [`propagate_erk4ip`](@ref), [`dispersion_operator`](@ref),
-[`raman_response`](@ref)
+[`dispersion_operator`](@ref), [`raman_response`](@ref)
 """
-function build_physics_model(grid::Grid, params::SimParams{S, M}) where {S, M <: Medium}
+function build_physics_model(grid::Grid, params::SimParams{S, M}, template::AbstractVector=zeros(ComplexF64, grid.N)) where {S, M <: Medium}
     medium = params.medium
     N = grid.N
 
     # Extract physics flags
     enable_raman = params.raman_model !== nothing
     enable_shock = params.self_steepening
-
-    # Transform plans (FFTW.MEASURE for optimal performance). Standard optics
-    # convention: time → frequency is ifft, frequency → time is fft.
-    tmp = zeros(ComplexF64, N)
-    to_freq = plan_ifft(tmp; flags=FFTW.MEASURE)
-    to_time = plan_fft(tmp; flags=FFTW.MEASURE)
-
-    # Compute dispersion operator. grid.V is in monotonic order, so the
-    # operator must be fftshifted to FFT-natural order to align with AW.
-    D = fftshift(dispersion_operator(grid, medium))
 
     # Gamma (nonlinear coefficient) - normalize by ω₀ if constant
     # Resolve gamma input and frequency-dependent gamma_W vector
@@ -212,39 +209,51 @@ function build_physics_model(grid::Grid, params::SimParams{S, M}) where {S, M <:
     elseif gamma_input isa FrequencyDependentNonlinearity
         1.0, gamma_input.gamma_function.(grid.W)
     elseif gamma_input isa NonlinearityFromEffectiveArea
-        # gamma(w) = n2 * w / (c * Aeff(w))
+        c = 299792458.0
         1.0, (gamma_input.n2 .* grid.W) ./ (c .* gamma_input.Aeff_function.(grid.W))
     else
         throw(ArgumentError("Unsupported nonlinearity type: $(typeof(gamma_input))"))
     end
 
-    # Put gamma_W in FFT-natural order
-    gamma_W = ifftshift(gamma_W_mon)
+    # Put gamma_W in FFT-natural order and move to device
+    gamma_W_host = ifftshift(gamma_W_mon)
+    gamma_W = _to_device(template, gamma_W_host)
+
+    # Optional GPU-compatible arrays for W (used in shocks)
+    W_host = enable_shock ? ifftshift(grid.W) : fill(grid.omega0, N)
+    W = _to_device(template, W_host)
 
     # Raman response in frequency domain (if enabled)
-    raman_freq_response = nothing
     fr = 0.0
+    raman_freq_response = nothing
     if enable_raman
         # Compute the Raman response h_R(t) in the time domain
         fr, h_R = raman_response(grid, params.raman_model)
-
-        # Frequency-domain Raman response. ifftshift puts the causal response
-        # (zero for t<0) into FFT-natural order with zero delay at index 1.
-        # RW = N·ifft(h_R) so that to_time(to_freq(I) .* RW) evaluates the
-        # circular convolution I ⊛ h_R for the ifft/fft transform pair.
-        raman_freq_response = N .* ifft(ifftshift(h_R))
+        # Frequency-domain Raman response
+        raman_freq_response = _to_device(template, N .* ifft(ifftshift(h_R)))
     end
 
-    # Frequency factor for the nonlinear term (for backward compatibility and test assertions)
-    W = enable_shock ? ifftshift(grid.W) : fill(grid.omega0, N)
+    # Compute dispersion operator. grid.V is in monotonic order, so the
+    # operator must be fftshifted to FFT-natural order to align with AW.
+    D_host = fftshift(dispersion_operator(grid, medium))
+    D = _to_device(template, D_host)
+
+    # Transform plans (FFTW.MEASURE for optimal performance). Standard optics
+    # convention: time → frequency is ifft, frequency → time is fft.
+    # By using `similar(template)` we allow for future GPU arrays.
+    tmp = similar(template)
+    to_freq = plan_ifft(tmp; flags=FFTW.MEASURE)
+    to_time = plan_fft(tmp; flags=FFTW.MEASURE)
 
     # Select nonlinear function
     nonlinear_function = choose_nonlinear_term(enable_raman)
 
     # Pre-allocate working buffers for zero-allocation nonlinear operators
-    buf_t1 = zeros(ComplexF64, N)
-    buf_t2 = zeros(ComplexF64, N)
-    buf_f1 = zeros(ComplexF64, N)
+    # Using `similar(D)` links the buffer dimension to the field size, and
+    # ensures they inherit any GPU array traits.
+    buf_t1 = similar(D)
+    buf_t2 = similar(D)
+    buf_f1 = similar(D)
 
     # Construct model
     PhysicsModel(
@@ -263,6 +272,7 @@ function build_physics_model(grid::Grid, params::SimParams{S, M}) where {S, M <:
         buf_t1,
         buf_t2,
         buf_f1,
+        NamedTuple()
     )
 end
 
@@ -271,75 +281,57 @@ end
 # ===========================================================================
 
 """
-    VectorialPhysicsModel
-
-Internal physics model holding operators and pre-allocated buffers for Couples GNLSE.
-"""
-struct VectorialPhysicsModel{TF, TT, NL, TG}
-    to_freq::TF
-    to_time::TT
-    Dx::Vector{ComplexF64}
-    Dy::Vector{ComplexF64}
-    gamma::TG
-    omega0::Float64
-    gamma_W::Vector{Float64}
-    deltabeta0::Float64
-    N::Int
-    nonlinear_function::NL
-    buf_t1::Matrix{ComplexF64}
-    buf_t2::Matrix{ComplexF64}
-    buf_f1::Matrix{ComplexF64}
-end
-
-"""
-    _vectorial_spm_fwm(u, model::VectorialPhysicsModel, z)
+    _vectorial_spm_fwm(u, model::PhysicsModel, z)
 
 Coupled Kerr (SPM, XPM, and FWM coherent coupling) nonlinear operator.
 """
-function _vectorial_spm_fwm(u::Matrix{ComplexF64}, model::VectorialPhysicsModel, z::Real)
+function _vectorial_spm_fwm(u::AbstractMatrix{ComplexF64}, model::PhysicsModel, z::Real)
     ux = @view u[:, 1]
     uy = @view u[:, 2]
 
-    # Coherent coupling phase mismatch factors
-    ph_x = exp(-2.0im * model.deltabeta0 * z)
+    deltabeta0 = model.aux_data.deltabeta0
+    
+    ph_x = exp(-2.0im * deltabeta0 * z)
     ph_y = conj(ph_x)
 
-    # Compute SPM + XPM + FWM in time domain
-    @. model.buf_t1[:, 1] = (abs2(ux) + (2.0 / 3.0) * abs2(uy)) * ux + (1.0 / 3.0) * (uy^2) * conj(ux) * ph_x
-    @. model.buf_t1[:, 2] = (abs2(uy) + (2.0 / 3.0) * abs2(ux)) * uy + (1.0 / 3.0) * (ux^2) * conj(uy) * ph_y
+    # Compute SPM + XPM + FWM in time domain (zero allocations via @views)
+    @views @. model.buf_t1[:, 1] = (abs2(ux) + (2.0 / 3.0) * abs2(uy)) * ux + (1.0 / 3.0) * (uy^2) * conj(ux) * ph_x
+    @views @. model.buf_t1[:, 2] = (abs2(uy) + (2.0 / 3.0) * abs2(ux)) * uy + (1.0 / 3.0) * (ux^2) * conj(uy) * ph_y
 
     # Transform to frequency domain
-    mul!(@view(model.buf_f1[:, 1]), model.to_freq, @view(model.buf_t1[:, 1]))
-    mul!(@view(model.buf_f1[:, 2]), model.to_freq, @view(model.buf_t1[:, 2]))
+    mul!(model.buf_f1, model.to_freq, model.buf_t1)
 
     # Get gamma at z
     gamma_z = eval_gamma(model.gamma, z, model.omega0)
 
-    # Multiply by i * gamma_z * gamma_W
-    @. model.buf_f1[:, 1] = 1.0im * gamma_z * model.gamma_W * model.buf_f1[:, 1]
-    @. model.buf_f1[:, 2] = 1.0im * gamma_z * model.gamma_W * model.buf_f1[:, 2]
+    # Multiply by i * gamma_z * gamma_W (broadcasting vector over matrix works natively)
+    @. model.buf_f1 = 1.0im * gamma_z * model.gamma_W * model.buf_f1
 
     return model.buf_f1
 end
 
 """
-    build_physics_model(grid::Grid, params::SimParams{S, <:BirefringentMedium})
+    build_physics_model(grid::Grid, params::SimParams{S, <:BirefringentMedium}, [template::AbstractMatrix])
 
-Construct VectorialPhysicsModel for Coupled GNLSE propagation.
+Construct PhysicsModel for Coupled GNLSE propagation.
 """
-function build_physics_model(grid::Grid, params::SimParams{S, M}) where {S, M <: BirefringentMedium}
+function build_physics_model(grid::Grid, params::SimParams{S, M}, template::AbstractMatrix=zeros(ComplexF64, grid.N, 2)) where {S, M <: BirefringentMedium}
     medium = params.medium
     N = grid.N
     enable_shock = params.self_steepening
 
-    # Transform plans
-    tmp_col = zeros(ComplexF64, N)
-    to_freq = plan_ifft(tmp_col; flags=FFTW.MEASURE)
-    to_time = plan_fft(tmp_col; flags=FFTW.MEASURE)
+    # Transform plans. By using `similar` and `template`, we prepare for GPU.
+    tmp = similar(template)
+    to_freq = plan_ifft(tmp, 1; flags=FFTW.MEASURE) # FFT along dimension 1
+    to_time = plan_fft(tmp, 1; flags=FFTW.MEASURE)
 
     # Compute dispersion operators for x and y
     Dx = fftshift(dispersion_operator(grid, Medium(medium.length, medium.gamma, medium.loss, medium.dispersion_x, medium.lambda0)))
     Dy = fftshift(dispersion_operator(grid, Medium(medium.length, medium.gamma, medium.loss, medium.dispersion_y, medium.lambda0)))
+    
+    # Combine into an N x 2 matrix
+    D_host = hcat(Dx, Dy)
+    D = _to_device(template, D_host)
 
     # Compute gamma and gamma_W
     gamma_input = medium.gamma
@@ -361,7 +353,8 @@ function build_physics_model(grid::Grid, params::SimParams{S, M}) where {S, M <:
         throw(ArgumentError("Unsupported nonlinearity type: $(typeof(gamma_input))"))
     end
 
-    gamma_W = ifftshift(gamma_W_mon)
+    gamma_W_host = ifftshift(gamma_W_mon)
+    gamma_W = _to_device(template, gamma_W_host)
 
     if params.raman_model !== nothing
         @warn "Raman scattering is currently not supported in the Birefringent Vectorial solver; falling back to Coupled Kerr terms only."
@@ -370,23 +363,29 @@ function build_physics_model(grid::Grid, params::SimParams{S, M}) where {S, M <:
     nonlinear_function = _vectorial_spm_fwm
 
     # Pre-allocate buffers
-    buf_t1 = zeros(ComplexF64, N, 2)
-    buf_t2 = zeros(ComplexF64, N, 2)
-    buf_f1 = zeros(ComplexF64, N, 2)
+    buf_t1 = similar(template)
+    buf_t2 = similar(template)
+    buf_f1 = similar(template)
+    
+    W_host = enable_shock ? ifftshift(grid.W) : fill(grid.omega0, N)
+    W = _to_device(template, W_host)
 
-    return VectorialPhysicsModel(
+    return PhysicsModel(
         to_freq,
         to_time,
-        Dx,
-        Dy,
+        D,
         gamma_z_model,
         grid.omega0,
         gamma_W,
-        Float64(medium.deltabeta0),
+        W,
+        grid.dt,
         N,
+        0.0,
+        nothing,
         nonlinear_function,
         buf_t1,
         buf_t2,
         buf_f1,
+        (deltabeta0 = Float64(medium.deltabeta0),) # Auxiliary data
     )
 end

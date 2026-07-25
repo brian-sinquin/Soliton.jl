@@ -7,4 +7,5 @@ using JuGNLSE
     include("test_solvers.jl")
     include("test_physics.jl")
     include("test_vectorial.jl")
+    include("test_fibers.jl")
 end

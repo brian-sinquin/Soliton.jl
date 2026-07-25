@@ -1,0 +1,54 @@
+name: Per-Commit Performance Benchmark
+
+on:
+  push:
+    branches:
+      - master
+      - v0.2.0
+  pull_request:
+    branches:
+      - master
+      - v0.2.0
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    name: Benchmark (Julia 1.12 - ubuntu-latest)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      actions: read
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Julia
+        uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.12'
+
+      - name: Cache Julia Packages & Benchmarks
+        uses: julia-actions/cache@v2
+
+      - name: Run JuGNLSE Benchmark Suite
+        run: |
+          julia --project=benchmark benchmark/run_benchmarks.jl
+
+      - name: Attach Summary to GitHub Actions Job Summary
+        if: always()
+        run: |
+          cat benchmark/summary.md >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload Benchmark Results Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: |
+            benchmark/results.json
+            benchmark/summary.md

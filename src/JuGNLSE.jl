@@ -91,6 +91,7 @@ include("solvers/ssfm_vectorial.jl")
 
 include("solver.jl")
 include("analysis.jl")
+include("fibers.jl")
 
 # Export types
 export Medium, SimParams, Grid, Pulse, Solution
@@ -98,9 +99,13 @@ export RamanModel, BlowWood, LinAgrawal, Hollenbeck
 export DispersionModel, TaylorDispersion, TabulatedDispersion, SellmeierDispersion
 export GNLSESolver, ERK4IP, SSFM
 export VectorialPulse, BirefringentMedium, VectorialSolution
-export LumpedElement, Amplifier, Attenuator, Filter, apply
+export LumpedElement, Amplifier, Attenuator, Filter, PMDElement, apply
 export NonlinearityModel, ConstantNonlinearity, FrequencyDependentNonlinearity, NonlinearityFromEffectiveArea
-export PhysicsModel  # Internal physics model struct
+
+# Commercial Fibers & Refractive Index Presets
+export FiberSpec, FiberLibrary, commercial_fiber
+export FusedSilica, SF6, SF57, GeO2DopedSilica
+
 
 # Export grid functions
 export create_grid, wavelength_grid
@@ -128,5 +133,18 @@ export add_noise, rin_rms, spectral_coherence
 
 # Physical constant
 export c
+
+using PrecompileTools
+
+@setup_workload begin
+    # Setup dummy parameters for precompilation
+    grid = create_grid(1024, 5e-12, 1000e-9)
+    pulse = sech_pulse(grid, 1000.0, 100e-15)
+    medium = Medium(0.1, 0.01, 0.0, [1e-26], 1000e-9)
+    params = SimParams(medium=medium, z_saves=2)
+    @compile_workload begin
+        solve(pulse, params; progress=false)
+    end
+end
 
 end # module

@@ -20,6 +20,10 @@ function pulse_energy(pulse::Pulse)
     return sum(abs2, pulse.At) * pulse.grid.dt
 end
 
+function pulse_energy(vpulse::VectorialPulse)
+    return (sum(abs2, @view(vpulse.At[:, 1])) + sum(abs2, @view(vpulse.At[:, 2]))) * vpulse.grid.dt
+end
+
 """
     peak_power(pulse::Pulse)
 
@@ -27,6 +31,10 @@ Peak power P_peak = max(|A(t)|²) [W].
 """
 function peak_power(pulse::Pulse)
     return maximum(abs2, pulse.At)
+end
+
+function peak_power(vpulse::VectorialPulse)
+    return maximum(abs2.(vpulse.At[:, 1]) .+ abs2.(vpulse.At[:, 2]))
 end
 
 """
@@ -205,7 +213,7 @@ end
     add_noise(pulse::Pulse; kwargs...) -> Pulse
 
 Return a copy of `pulse` with a physically motivated realization of input noise
-added. Three independent contributions can be enabled and tuned separately:
+added. Four independent contributions can be enabled and tuned separately:
 
  1. **Quantum noise** — vacuum fluctuations of the optical field, modelled as
     `photons_per_mode` photons per spectral mode. This is the fundamental seed
@@ -213,7 +221,13 @@ added. Three independent contributions can be enabled and tuned separately:
     decoherence) and is the only term enabled by default.
  2. **Relative intensity noise (RIN)** — classical shot-to-shot fluctuation of
     the laser output power, applied as a multiplicative amplitude scaling.
- 3. **Phase noise** — shot-to-shot common-mode optical phase jitter.
+ 3. **Phase noise (shot-to-shot)** — common-mode optical phase jitter drawn
+    from a single Gaussian deviate (white phase noise).
+ 4. **Laser linewidth** — frequency-domain colored phase noise with a
+    Lorentzian power spectrum corresponding to a laser of linewidth `linewidth_hz`.
+    Modeled as a Wiener (random-walk) phase process: the phase evolves as
+    Brownian motion in time, giving a Lorentzian electric-field spectrum with
+    FWHM = `linewidth_hz`.
 
 Independent `rng` draws give statistically independent realizations, so calling
 `add_noise` repeatedly on the same clean pulse builds the ensemble needed for a
@@ -233,18 +247,28 @@ Independent `rng` draws give statistically independent realizations, so calling
   - `rin::Real = 0.0`: RMS relative intensity noise σ_P/P (fractional, e.g.
     `0.01` = 1 % RMS power fluctuation). Convert a dBc/Hz spec with
     [`rin_rms`](@ref).
-  - `phase_rms::Real = 0.0`: RMS optical phase jitter [rad].
+  - `phase_rms::Real = 0.0`: RMS common-mode optical phase jitter [rad]
+    (shot-to-shot; white phase noise).
+  - `linewidth_hz::Real = 0.0`: Laser linewidth [Hz] (half-maximum of the
+    Lorentzian power spectrum). Generates a time-domain Wiener phase process
+    with diffusion coefficient `D = 2π · linewidth_hz`. Typical values:
+    < 1 kHz (narrow-linewidth CW), 1–100 MHz (standard DFB), > 10 GHz (free-running).
 
 # Physics
 
 In the package FFT convention the energy of spectral mode `m` is
 `N·dt·|AW[m]|²`, so a mode carrying `nₚ` photons of energy ħω satisfies
 `N·dt·⟨|δAW|²⟩ = nₚ·ħω`. RIN scales the field by `√(1 + δ)` with
-`δ ~ 𝒩(0, rin²)`; phase noise multiplies it by `exp(iφ)` with
+`δ ~ 𝒩(0, rin²)`; the shot-to-shot phase noise multiplies it by `exp(iφ)` with
 `φ ~ 𝒩(0, phase_rms²)`.
 
+The Wiener phase process satisfies `φ(t+dt) = φ(t) + 𝒩(0, 2π·Δν·dt)`, giving
+a Lorentzian electric-field autocorrelation `⟨E*(0)E(τ)⟩ ∝ exp(−π|Δν||τ|)` and
+power spectrum FWHM = Δν (Schawlow–Townes white-frequency-noise limit).
+
 Reference: J. M. Dudley & S. Coen, Opt. Lett. 27, 1180 (2002);
-J. M. Dudley, G. Genty & S. Coen, Rev. Mod. Phys. 78, 1135 (2006).
+J. M. Dudley, G. Genty & S. Coen, Rev. Mod. Phys. 78, 1135 (2006);
+A. L. Schawlow & C. H. Townes, Phys. Rev. 112, 1940 (1958).
 """
 function add_noise(
     pulse::Pulse;
@@ -253,10 +277,12 @@ function add_noise(
     quantum_model::Symbol=:gaussian,
     rin::Real=0.0,
     phase_rms::Real=0.0,
+    linewidth_hz::Real=0.0,
 )
     photons_per_mode >= 0 ||
         throw(ArgumentError("photons_per_mode must be non-negative"))
     rin >= 0 || throw(ArgumentError("rin must be non-negative"))
+    linewidth_hz >= 0 || throw(ArgumentError("linewidth_hz must be non-negative"))
     quantum_model in (:gaussian, :phase_only) ||
         throw(ArgumentError("quantum_model must be :gaussian or :phase_only"))
 
@@ -270,6 +296,16 @@ function add_noise(
         amp = rin > 0 ? sqrt(max(0.0, 1.0 + rin * randn(rng))) : 1.0
         ϕ = phase_rms > 0 ? phase_rms * randn(rng) : 0.0
         @. At *= amp * cis(ϕ)
+    end
+
+    # --- Laser linewidth: Wiener phase process (colored phase noise) -----------
+    # φ(t) is a Brownian-motion phase with diffusion D = 2π · Δν [rad²/s].
+    # Per-step variance: Var[dφ] = 2π · Δν · dt.
+    # This gives a Lorentzian electric-field PSD with FWHM = Δν [Hz].
+    if linewidth_hz > 0
+        σ_step = sqrt(2π * linewidth_hz * pulse.grid.dt)
+        φ = cumsum(σ_step .* randn(rng, pulse.grid.N))
+        @. At *= cis(φ)
     end
 
     AW = ifft(At)

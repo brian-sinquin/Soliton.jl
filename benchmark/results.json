@@ -1,0 +1,53 @@
+{
+  "analysis": {
+    "add_noise": {
+      "allocs": 36383,
+      "memory_bytes": 1074156,
+      "time_ns": 447800.0
+    },
+    "pulse_energy": {
+      "allocs": 3,
+      "memory_bytes": 48,
+      "time_ns": 695.187165775401
+    },
+    "spectral_coherence": {
+      "allocs": 10,
+      "memory_bytes": 131397,
+      "time_ns": 49000.0
+    }
+  },
+  "operators": {
+    "build_physics_model": {
+      "allocs": 86,
+      "memory_bytes": 1133994,
+      "time_ns": 113700.0
+    },
+    "spm_raman_eval": {
+      "allocs": 0,
+      "memory_bytes": 0,
+      "time_ns": 33900.0
+    },
+    "vectorial_spm_fwm_eval": {
+      "allocs": 22,
+      "memory_bytes": 1632,
+      "time_ns": 40200.0
+    }
+  },
+  "solvers": {
+    "erk4ip_scalar": {
+      "allocs": 207,
+      "memory_bytes": 5398157,
+      "time_ns": 2.264855e8
+    },
+    "ssfm_scalar": {
+      "allocs": 186,
+      "memory_bytes": 4938668,
+      "time_ns": 4.929535e7
+    },
+    "ssfm_vectorial": {
+      "allocs": 22472,
+      "memory_bytes": 9621376,
+      "time_ns": 7.42493e7
+    }
+  }
+}

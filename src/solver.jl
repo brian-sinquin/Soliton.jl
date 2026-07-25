@@ -5,13 +5,13 @@ Reference: gnlse-python GNLSE.run()
 """
 
 """
-    solve(pulse::Pulse, params::SimParams; progress::Bool=true)
+    solve(pulse::AbstractPulse, params::SimParams; progress::Bool=true)
 
 Solve GNLSE following gnlse-python conventions using adaptive ERK4IP method.
 
 # Arguments
 
-  - `pulse::Pulse`: Initial pulse condition
+  - `pulse::AbstractPulse`: Initial pulse condition
   - `params::SimParams`: Simulation parameters
   - `progress::Bool`: Show progress bar (default: true)
 
@@ -51,12 +51,12 @@ Integrates the GNLSE with the adaptive ERK4IP solver. All quantities are in
 natural SI units; the envelope spectrum follows the standard optics convention
 `AW = ifft(At)`.
 """
-function propagate(pulse::Pulse, params::SimParams, solver::GNLSESolver; progress::Bool=true)
-    model = build_physics_model(pulse.grid, params)
+function propagate(pulse::AbstractPulse, params::SimParams, solver::GNLSESolver; progress::Bool=true)
+    model = build_physics_model(pulse.grid, params, pulse.At)
     return propagate(model, pulse, params, solver, progress)
 end
 
-function solve(pulse::Pulse, params::SimParams; progress::Bool=true)
+function solve(pulse::AbstractPulse, params::SimParams; progress::Bool=true)
     z, At, AW = propagate(pulse, params, params.solver; progress=progress)
 
     # Build solution
@@ -83,14 +83,14 @@ function solve(pulse::Pulse, params::SimParams; progress::Bool=true)
 end
 
 """
-    solve(pulse::Pulse, stages::AbstractVector; progress::Bool=true)
+    solve(pulse::AbstractPulse, stages::AbstractVector; progress::Bool=true)
 
 Propagate an optical pulse through a sequence of stages (fibers, amplifiers, filters, etc.).
 
 Returns a vector of results corresponding to each stage (either a `Solution` for propagation stages,
 or a new `Pulse` for lumped elements / functional stages).
 """
-function solve(pulse::Pulse, stages::AbstractVector; progress::Bool=true)
+function solve(pulse::AbstractPulse, stages::AbstractVector; progress::Bool=true)
     current_pulse = pulse
     results = Any[]
 
@@ -100,7 +100,7 @@ function solve(pulse::Pulse, stages::AbstractVector; progress::Bool=true)
             sol = solve(current_pulse, stage; progress=progress)
             push!(results, sol)
             # Use final state of the fiber propagation for the next stage
-            current_pulse = Pulse(sol.At[:, end], sol.AW[:, end], pulse.grid)
+            current_pulse = sol isa VectorialSolution ? VectorialPulse(sol) : Pulse(sol)
         elseif stage isa LumpedElement
             # Lumped element stage (returns a Pulse)
             current_pulse = apply(current_pulse, stage)
@@ -132,12 +132,12 @@ function Pulse(sol::Solution)
 end
 
 # Make SimParams callable for piping support
-(params::SimParams)(pulse::Pulse) = solve(pulse, params; progress=false)
+(params::SimParams)(pulse::AbstractPulse) = solve(pulse, params; progress=false)
 (params::SimParams)(sol::Solution) = solve(Pulse(sol), params; progress=false)
 
 # Vectorial solver implementations
 function propagate(pulse::VectorialPulse, params::SimParams, solver::GNLSESolver; progress::Bool=true)
-    model = build_physics_model(pulse.grid, params)
+    model = build_physics_model(pulse.grid, params, pulse.At)
     return propagate(model, pulse, params, solver, progress)
 end
 

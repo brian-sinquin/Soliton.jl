@@ -85,6 +85,13 @@ struct SellmeierDispersion <: DispersionModel
 end
 
 """
+    AbstractComponent
+
+Abstract base type for all optical components (fibers, amplifiers, filters, etc.).
+"""
+abstract type AbstractComponent end
+
+"""
     Medium{T<:Real}
 
 Fiber medium parameters for GNLSE propagation.
@@ -110,7 +117,7 @@ Medium(; length, gamma, loss=0.0, betas=…, dispersion=…, lambda0)
   - Taylor `betas` exclude β₀ and β₁; `betas[1] = β₂`
   - loss in dB/m converted to α = ln(10^(loss/10)) Np/m in the operator
 """
-abstract type AbstractMedium end
+abstract type AbstractMedium <: AbstractComponent end
 
 struct Medium{T <: Real, TG} <: AbstractMedium
     length::T
@@ -320,6 +327,13 @@ struct Grid{T <: Real}
 end
 
 """
+    AbstractPulse
+
+Abstract base type for optical pulses.
+"""
+abstract type AbstractPulse end
+
+"""
     Pulse{T<:Complex}
 
 Optical pulse envelope in time and frequency domains.
@@ -339,7 +353,7 @@ Following gnlse-python convention:
   - Power: P(t) = |A(t)|²
   - Energy: E = ∫|A(t)|²dt
 """
-mutable struct Pulse{T <: Complex}
+mutable struct Pulse{T <: Complex} <: AbstractPulse
     At::Vector{T}
     AW::Vector{T}
     grid::Grid
@@ -545,7 +559,20 @@ function Base.show(io::IO, s::Solution)
           round(s.Z[end]; sigdigits=4), " m, N=", size(s.At, 1), ")")
 end
 
-# BirefringentMedium definition
+"""
+    BirefringentMedium(length, gamma, loss, dispersion_x, dispersion_y, deltabeta0, lambda0)
+
+Birefringent fiber medium parameters for coupled vector GNLSE propagation.
+
+# Fields
+- `length::T`: Propagation length [m]
+- `gamma::TG`: Nonlinear coefficient γ [1/(W·m)]
+- `loss::T`: Loss factor [dB/m]
+- `dispersion_x::DispersionModel`: Dispersion model for x-polarization
+- `dispersion_y::DispersionModel`: Dispersion model for y-polarization
+- `deltabeta0::T`: Modal birefringence Δβ₀ [1/m] (difference in propagation constants β₀,x - β₀,y)
+- `lambda0::T`: Center wavelength [m]
+"""
 struct BirefringentMedium{T <: Real, TG} <: AbstractMedium
     length::T
     gamma::TG
@@ -568,11 +595,28 @@ struct BirefringentMedium{T <: Real, TG} <: AbstractMedium
     end
 end
 
-# VectorialPulse definition
-struct VectorialPulse
+"""
+    VectorialPulse(At, grid)
+    VectorialPulse(At_x, At_y, grid)
+
+Two-component (orthogonal polarization) optical pulse envelope in time and frequency domains.
+
+# Fields
+- `At::Matrix{ComplexF64}`: Time domain envelope matrix of size `N × 2` [√W]
+- `AW::Matrix{ComplexF64}`: Frequency domain envelope matrix of size `N × 2` [√W·s]
+- `grid::Grid`: Associated time-frequency grid
+"""
+struct VectorialPulse <: AbstractPulse
     At::Matrix{ComplexF64} # N x 2
     AW::Matrix{ComplexF64} # N x 2
     grid::Grid
+
+    function VectorialPulse(At::Matrix{<:Complex}, AW::Matrix{<:Complex}, grid::Grid)
+        size(At, 1) == grid.N || throw(ArgumentError("Pulse dimensions must match grid resolution"))
+        size(At, 2) == 2 || throw(ArgumentError("Vectorial pulse must have exactly 2 components (x and y)"))
+        size(AW) == size(At) || throw(ArgumentError("AW dimensions must match At dimensions"))
+        new(Matrix{ComplexF64}(At), Matrix{ComplexF64}(AW), grid)
+    end
 
     function VectorialPulse(At::Matrix{<:Complex}, grid::Grid)
         size(At, 1) == grid.N || throw(ArgumentError("Pulse dimensions must match grid resolution"))
@@ -593,7 +637,19 @@ function VectorialPulse(At_x::AbstractVector{<:Number}, At_y::AbstractVector{<:N
     return VectorialPulse(At, grid)
 end
 
-# VectorialSolution definition
+"""
+    VectorialSolution{T<:Complex}
+
+Solution to coupled vector GNLSE propagation.
+
+# Fields
+- `t::Vector{Float64}`: Time domain grid [ps]
+- `W::Vector{Float64}`: Absolute angular frequency grid [rad/ps = THz]
+- `omega0::Float64`: Central angular frequency [rad/ps = THz]
+- `Z::Vector{Float64}`: Propagation distances [m]
+- `At::Array{T, 3}`: Time domain solution array of size `N × 2 × z_saves`
+- `AW::Array{T, 3}`: Frequency domain solution array of size `N × 2 × z_saves`
+"""
 struct VectorialSolution{T <: Complex}
     t::Vector{Float64}
     W::Vector{Float64}

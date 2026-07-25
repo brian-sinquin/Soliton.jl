@@ -3,16 +3,16 @@ using FFTW: fftshift!
 using LinearAlgebra: mul!
 using ProgressMeter: Progress, update!
 
-import ..build_physics_model, ..VectorialPhysicsModel
+import ..build_physics_model, ..PhysicsModel
 import ..SSFM, ..propagate, ..VectorialPulse, ..SimParams
 
 """
-    propagate(model::VectorialPhysicsModel, pulse::VectorialPulse, params::SimParams, solver::SSFM, progress::Bool)
+    propagate(model::PhysicsModel, pulse::VectorialPulse, params::SimParams, solver::SSFM, progress::Bool)
 
 Propagate a `VectorialPulse` using the fixed-step Symmetric Split-Step Fourier Method (SSFM) for Coupled GNLSE.
 """
 function propagate(
-    model::VectorialPhysicsModel,
+    model::PhysicsModel,
     pulse::VectorialPulse,
     params::SimParams,
     solver::SSFM,
@@ -54,57 +54,50 @@ function propagate(
     dz_eff = dz_save / n_steps
 
     # Pre-compute exp(D * dz_eff / 2) and exp(D * dz_eff) operators
-    exp_half_dz_Dx = exp.(model.Dx .* (dz_eff / 2.0))
-    exp_half_dz_Dy = exp.(model.Dy .* (dz_eff / 2.0))
-    exp_full_dz_Dx = exp.(model.Dx .* dz_eff)
-    exp_full_dz_Dy = exp.(model.Dy .* dz_eff)
+    exp_half_dz_D = exp.(model.D .* (dz_eff / 2.0))
+    exp_full_dz_D = exp.(model.D .* dz_eff)
 
     z = 0.0
+
+    # Initialize first step midpoint: linear half-step from z=0
+    @. U_mid = U * exp_half_dz_D
 
     for save_idx in 2:n_saves
         # Propagate from save_points[save_idx-1] to save_points[save_idx]
         for step in 1:n_steps
-            z_mid = z + (step - 0.5) * dz_eff
-
-            if step == 1
-                # First step: linear half step from z to z_mid
-                @. U_mid[:, 1] = U[:, 1] * exp_half_dz_Dx
-                @. U_mid[:, 2] = U[:, 2] * exp_half_dz_Dy
-            else
-                # Subsequent steps: linear full step
-                @. U_mid[:, 1] = U_nl[:, 1] * exp_full_dz_Dx
-                @. U_mid[:, 2] = U_nl[:, 2] * exp_full_dz_Dy
-            end
+            step_global = (save_idx - 2) * n_steps + step
+            z_mid = (step_global - 0.5) * dz_eff
 
             # Transform to time domain (lab frame)
-            mul!(@view(u_mid[:, 1]), model.to_time, @view(U_mid[:, 1]))
-            mul!(@view(u_mid[:, 2]), model.to_time, @view(U_mid[:, 2]))
+            mul!(u_mid, model.to_time, U_mid)
 
             # Evaluate Coupled Kerr nonlinearity at midpoint
             Nu = model.nonlinear_function(u_mid, model, z_mid)
 
             # Apply nonlinear step: Euler step at midpoint
             @. U_nl = U_mid + dz_eff * Nu
+
+            if step < n_steps || save_idx < n_saves
+                # Advance midpoint to next step via linear full step
+                @. U_mid = U_nl * exp_full_dz_D
+            end
         end
 
-        # After n_steps, apply final linear half step to land exactly on the save point
-        @. U[:, 1] = U_nl[:, 1] * exp_half_dz_Dx
-        @. U[:, 2] = U_nl[:, 2] * exp_half_dz_Dy
+        # Land exactly on save point with final linear half-step for output
+        @. U = U_nl * exp_half_dz_D
         z = save_points[save_idx]
 
         # Save state
         z_out[save_idx] = z
         
-        # Save x component
-        copyto!(@view(model.buf_f1[:, 1]), @view(U[:, 1]))
+        # Save U components
+        copyto!(model.buf_f1, U)
         fftshift!(@view(Aw_out[:, 1, save_idx]), @view(model.buf_f1[:, 1]))
-        mul!(@view(u_temp[:, 1]), model.to_time, @view(model.buf_f1[:, 1]))
-        copyto!(@view(At_out[:, 1, save_idx]), @view(u_temp[:, 1]))
-
-        # Save y component
-        copyto!(@view(model.buf_f1[:, 2]), @view(U[:, 2]))
         fftshift!(@view(Aw_out[:, 2, save_idx]), @view(model.buf_f1[:, 2]))
-        mul!(@view(u_temp[:, 2]), model.to_time, @view(model.buf_f1[:, 2]))
+
+        # Transform back to time domain
+        mul!(u_temp, model.to_time, model.buf_f1)
+        copyto!(@view(At_out[:, 1, save_idx]), @view(u_temp[:, 1]))
         copyto!(@view(At_out[:, 2, save_idx]), @view(u_temp[:, 2]))
 
         if !isnothing(prog)

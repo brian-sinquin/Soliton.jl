@@ -86,4 +86,39 @@ using JuGNLSE
         t_diff = grid.t[idx_y] - grid.t[idx_x]
         @test t_diff ≈ 1.0e-12 rtol=0.02
     end
+
+    @testset "Vectorial Analysis and Multi-stage Cascading" begin
+        grid = create_grid(2^10, 10e-12, 835e-9)
+        px = gaussian_pulse(grid, 100.0, 100e-15)
+        py = gaussian_pulse(grid, 50.0, 100e-15)
+        vpulse = VectorialPulse(px.At, py.At, grid)
+
+        # pulse_energy and peak_power for VectorialPulse
+        E_v = pulse_energy(vpulse)
+        P_v = peak_power(vpulse)
+        @test E_v ≈ pulse_energy(px) + pulse_energy(py)
+        @test P_v ≈ peak_power(px) + peak_power(py)
+
+        # Lumped elements on VectorialPulse
+        amp = Amplifier(6.0) # ~2x amplitude boost (+6 dB)
+        vpulse_amp = apply(vpulse, amp)
+        @test peak_power(vpulse_amp) ≈ P_v * (10.0^(6.0/10.0))
+
+        # Multi-stage cascaded propagation with VectorialPulse & LumpedElements
+        dis_x = TaylorDispersion([-1.0e-26])
+        dis_y = TaylorDispersion([-1.0e-26])
+        medium = BirefringentMedium(0.01, 0.11, 0.0, dis_x, dis_y, 0.0, 835e-9)
+        params = SimParams(; medium=medium, z_saves=3, solver=SSFM(1e-5), raman_model=nothing)
+
+        stages = [params, amp, PMDElement(0.1e-12)]
+        results = solve(vpulse, stages; progress=false)
+        @test length(results) == 3
+        @test results[1] isa VectorialSolution
+        @test results[2] isa VectorialPulse
+        @test results[3] isa VectorialPulse
+
+        # Callable piping syntax
+        vpulse_piped = vpulse |> Amplifier(3.0) |> params |> VectorialPulse
+        @test vpulse_piped isa VectorialPulse
+    end
 end

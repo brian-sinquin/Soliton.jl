@@ -58,18 +58,14 @@ function propagate(
 
     z = 0.0
 
+    # Initialize first step midpoint: linear half-step from z=0
+    @. U_mid = U * exp_half_dz_D
+
     for save_idx in 2:n_saves
         # Propagate from save_points[save_idx-1] to save_points[save_idx]
         for step in 1:n_steps
-            z_mid = z + (step - 0.5) * dz_eff
-
-            if step == 1
-                # First step: linear half step from z to z_mid
-                @. U_mid = U * exp_half_dz_D
-            else
-                # Subsequent steps: linear full step from midpoint of prev step to midpoint of current step
-                @. U_mid = U_nl * exp_full_dz_D
-            end
+            step_global = (save_idx - 2) * n_steps + step
+            z_mid = (step_global - 0.5) * dz_eff
 
             # Transform to time domain (lab frame)
             mul!(u_mid, model.to_time, U_mid)
@@ -77,11 +73,16 @@ function propagate(
             # Evaluate nonlinear operator at midpoint
             Nu = model.nonlinear_function(u_mid, model, z_mid)
 
-            # Apply nonlinear step: Euler step at the midpoint
+            # Apply nonlinear step: Euler step at midpoint
             @. U_nl = U_mid + dz_eff * Nu
+
+            if step < n_steps || save_idx < n_saves
+                # Advance midpoint to next step via linear full step
+                @. U_mid = U_nl * exp_full_dz_D
+            end
         end
 
-        # After n_steps, apply final linear half step to land exactly on the save point
+        # Land exactly on save point with final linear half-step for output
         @. U = U_nl * exp_half_dz_D
         z = save_points[save_idx]
 
