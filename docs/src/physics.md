@@ -84,6 +84,52 @@ For birefringent fibers or waveguides, two orthogonal polarization envelopes ``A
 
 where ``\Delta\beta_0 = \beta_{0x} - \beta_{0y}`` is the birefringence phase mismatch, and ``D_x``, ``D_y`` are independent dispersion operators including any group-velocity mismatch (walk-off) via ``\beta_1``.
 
+## Active Amplifying Fibers (EDFA / YDFA)
+
+Active rare-earth doped fibers experience single-pass amplification with dynamic gain saturation:
+
+```math
+g(z, \omega) = \frac{g_0(\omega)}{1 + E_{\text{pulse}}(z) / E_{\text{sat}}}
+```
+
+where $E_{\text{pulse}}(z) = \int |A(z,t)|^2 dt$ is the local pulse energy and $E_{\text{sat}}$ is the saturation energy. Spontaneous emission quantum noise (ASE) is seeded at each step:
+
+```math
+S_{\text{ASE}}(\omega) = n_{\text{sp}} \cdot \hbar \omega_0 \cdot \left(e^{g(z) \Delta z} - 1\right), \qquad n_{\text{sp}} = \frac{10^{F_{\text{dB}}/10}}{2}
+```
+
+where $F_{\text{dB}}$ is the amplifier Noise Figure in dB.
+
+## Gas-Filled Hollow-Core PCF
+
+Gas guidance in hollow-core anti-resonant / photonic crystal fibers (HC-PCF) combines:
+1. **Marcatili-Schmeltzer Capillary Loss**:
+   ```math
+   \alpha(\lambda) = \left( \frac{u_{01}}{2\pi} \right)^2 \frac{\lambda^2}{a^3} \frac{\nu^2 + 1}{\sqrt{\nu^2 - 1}}
+   ```
+   where $a$ is the core radius and $\nu$ is the cladding index ratio.
+2. **Pressure-Dependent Gas Sellmeier**:
+   ```math
+   n(\lambda, P) = 1 + P \cdot \frac{C_1}{C_2 - \lambda^{-2}}
+   ```
+   with coefficients from Börzsönyi et al. (2013) for noble gases (`:Ar`, `:Ne`, `:Kr`, `:Xe`) and molecular gases (`:H2`, `:N2`).
+3. **Molecular Gas Raman Response**: Rotational ($S(1)$ shift $17.6\text{ THz}$) and vibrational ($Q(1)$ shift $124.6\text{ THz}$) Raman lines for $\text{H}_2$ and $\text{N}_2$.
+
+## Semiconductor Photonics & TPA / Free Carriers
+
+In silicon nanowires, Germanium, and GaAs PIC waveguides, two-photon absorption (TPA) and free-carrier dynamics modify pulse propagation:
+
+1. **Two-Photon Absorption (TPA)**:
+   ```math
+   \frac{\partial A}{\partial z} \Big|_{\text{TPA}} = -\frac{\alpha_2}{2 A_{\text{eff}}} |A|^2 A
+   ```
+2. **Free-Carrier Dynamics**:
+   Carrier density $N_c(t)$ evolves via the TPA rate equation:
+   ```math
+   \frac{d N_c}{dt} = \frac{\alpha_2}{2 \hbar \omega_0 A_{\text{eff}}^2} |A(t)|^4 - \frac{N_c(t)}{\tau_c}
+   ```
+   producing Free-Carrier Absorption (FCA loss $\sigma_{\text{FCA}} N_c$) and Free-Carrier Refraction (FCR index blue-shifting $-k_{\text{FCR}} N_c$).
+
 ## Interaction Picture
 
 All solvers work in the **interaction picture** — the simulation variable ``U = e^{-D z} A`` eliminates the linear dispersion operator from the equation of motion. This allows the solver to take larger steps in weakly nonlinear regimes and enables high-accuracy adaptive stepping.
@@ -92,6 +138,9 @@ All solvers work in the **interaction picture** — the simulation variable ``U 
 
 - G. P. Agrawal, *Nonlinear Fiber Optics*, 6th ed. (Academic Press, 2019)
 - J. M. Dudley, G. Genty & S. Coen, Rev. Mod. Phys. **78**, 1135 (2006)
+- P. St.J. Russell et al., Nat. Photonics **8**, 278 (2014)
+- L. Yin et al., Opt. Express **15**, 13833 (2007)
+- A. Börzsönyi et al., Opt. Express **21**, 21086 (2013)
 - Q. Lin & G. P. Agrawal, Opt. Lett. **31**, 3086 (2006)
 - D. Hollenbeck & C. D. Cantrell, J. Opt. Soc. Am. B **19**, 2886 (2002)
 - W. H. Blow & D. Wood, IEEE J. Quantum Electron. **25**, 2665 (1989)

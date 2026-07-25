@@ -16,18 +16,20 @@ JuGNLSE
 
 It implements the **Generalized Nonlinear Schrödinger Equation (GNLSE)** in natural SI units, with a rich physical model and a modern, composable API.
 
-## Physical Effects
+## Physical Effects & Capabilities
 
-| Effect | Description |
-|:---|:---|
-| **Chromatic dispersion** | Taylor expansion (β₂, β₃, ...) or tabulated or Sellmeier dispersion |
-| **Kerr nonlinearity (SPM)** | Self-phase modulation: `i γ |A|² A` |
-| **Raman scattering** | Delayed molecular response (Blow–Wood, Lin–Agrawal, Hollenbeck) |
-| **Self-steepening** | Shock term for sub-100 fs pulses |
-| **Fiber loss** | Constant attenuation `α` [dB/m] |
-| **Wavelength-dependent γ** | Frequency-dependent or Aeff-derived nonlinear coefficient |
-| **Tapered/varying fiber** | z-dependent nonlinearity `γ(z)` |
-| **Polarization / birefringence** | Coupled GNLSE: SPM + XPM + coherent FWM on two polarization axes |
+| Feature / Model | Description | Reference Module |
+|:---|:---|:---|
+| **Chromatic dispersion** | Taylor expansion ($\beta_2, \beta_3, \dots$), tabulated, or Sellmeier glass presets (`FusedSilica`, `SF6`, `SF57`) | `TaylorDispersion`, `Sellmeier` |
+| **Kerr nonlinearity (SPM)** | Self-phase modulation \(i \gamma |A|^2 A\) | `Medium` |
+| **Raman scattering** | Delayed silica response (Blow–Wood, Lin–Agrawal, Hollenbeck) | `BlowWood`, `Hollenbeck` |
+| **Self-steepening** | Frequency-dependent shock term $\gamma \omega / \omega_0$ | `SimParams` |
+| **Commercial Fiber Catalog** | Built-in presets (`Corning_SMF28`, `NKT_NL_PM_750`, `Thorlabs_PM780`, etc.) | `commercial_fiber` |
+| **Active Amplifiers (EDFA/YDFA)** | Dynamic gain saturation $g(z)$ & quantum ASE noise seeding ($F_{\text{dB}}$) | `AmplifyingMedium` |
+| **Gas Hollow-Core PCF** | Marcatili-Schmeltzer capillary model, noble & molecular gas Raman ($\text{H}_2, \text{N}_2$) | `HollowCoreFiber`, `MolecularRamanGas` |
+| **Silicon Photonics (PICs)** | Two-Photon Absorption (TPA $\alpha_2$), Free-Carrier Absorption (FCA), & Refraction (FCR) | `SemiconductorMedium` |
+| **Birefringence / Vectorial** | Coupled GNLSE: SPM + XPM + coherent FWM across fast and slow axes | `BirefringentMedium`, `VectorialPulse` |
+| **Cascaded System Dynamics** | Multi-stage propagation & lumped element processing (`Amplifier`, `Attenuator`, `Filter`) | `LumpedElement`, `solve` |
 
 ## Solvers
 
@@ -53,38 +55,23 @@ Pkg.add(url="https://github.com/brian-sinquin/JuGNLSE.jl")
 ```julia
 using JuGNLSE
 
-# 1. Define the time–frequency grid
-grid = create_grid(2^13, 12.5e-12, 835e-9)   # N, window [s], λ₀ [m]
+# 1. Define time-frequency grid
+grid = create_grid(2^13, 12.5e-12, 835e-9)
 
-# 2. Create the fiber medium
-medium = Medium(;
-    length   = 0.15,                         # m
-    gamma    = 0.11,                         # 1/(W·m)
-    loss     = 0.0,                          # dB/m
-    betas    = [-11.83e-27, 8.13e-41],       # β₂ [s²/m], β₃ [s³/m]
-    lambda0  = 835e-9,                       # m
-)
+# 2. Select commercial fiber or custom medium
+medium = commercial_fiber("Corning_SMF28"; length=1.0, lambda0=1550e-9)
 
-# 3. Generate an initial pulse
-pulse = sech_pulse(grid, 10000.0, 50e-15)    # Pmax [W], FWHM [s]
+# 3. Generate initial pulse
+pulse = sech_pulse(grid, 100.0, 100e-15)
 
-# 4. Configure simulation parameters and solve
-params = SimParams(; medium=medium, raman_model=BlowWood(), self_steepening=true)
-sol = solve(pulse, params)
-
-# 5. Access the results
-# sol.t   → time grid [s]
-# sol.W   → frequency grid [rad/s]
-# sol.Z   → propagation distances [m]
-# sol.At  → time-domain field  (N × z_saves)
-# sol.AW  → freq-domain field  (N × z_saves)
+# 4. Solve GNLSE
+sol = solve(pulse, SimParams(; medium=medium, raman_model=BlowWood()))
 ```
 
-## Contents
+## Documentation Contents
 
 ```@contents
 Pages = [
-    "installation.md",
     "physics.md",
     "guide/basic.md",
     "guide/dispersion.md",
@@ -92,12 +79,21 @@ Pages = [
     "guide/nonlinearity.md",
     "guide/cascading.md",
     "guide/vectorial.md",
+    "guide/fibers.md",
+    "guide/edfa.md",
+    "guide/hollowcore.md",
+    "guide/semiconductor.md",
+    "guide/noise.md",
+    "examples/index.md",
     "api/medium.md",
     "api/grid.md",
     "api/pulse.md",
     "api/solvers.md",
-    "api/analysis.md",
+    "api/dispersion.md",
+    "api/nonlinearity.md",
     "api/elements.md",
+    "api/fibers.md",
+    "api/analysis.md",
 ]
 Depth = 2
 ```
