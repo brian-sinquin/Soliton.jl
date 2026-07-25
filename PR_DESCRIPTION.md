@@ -54,6 +54,8 @@ This PR introduces **JuGNLSE v0.2.0**, bringing comprehensive physical models fo
 
 | Commit | Description |
 | :--- | :--- |
+| `6458810` | `docs: critical documentation review, expanded examples index, and math equations` |
+| `4532f4d` | `docs: add PR_DESCRIPTION.md tracking all changelogs` |
 | `8db4b9c` | `docs: list Examples 7, 8, 9 in examples index` |
 | `65bac9c` | `docs & ci: executable example plot rendering, PR doc artifact upload, and precompiled JLL release workflow` |
 | `c507e0d` | `docs & test: add examples 7-9 and expanded physical test coverage` |
