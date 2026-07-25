@@ -25,6 +25,7 @@ makedocs(;
             "Cascaded Propagation"     => "guide/cascading.md",
             "Birefringent Propagation" => "guide/vectorial.md",
             "Commercial Fiber Catalog" => "guide/fibers.md",
+            "Amplifying Fibers (EDFA)" => "guide/edfa.md",
             "Noise Modeling"           => "guide/noise.md",
         ],
         "Examples" => [

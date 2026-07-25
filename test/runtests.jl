@@ -8,4 +8,5 @@ using JuGNLSE
     include("test_physics.jl")
     include("test_vectorial.jl")
     include("test_fibers.jl")
+    include("test_edfa.jl")
 end

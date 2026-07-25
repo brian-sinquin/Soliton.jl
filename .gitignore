@@ -11,6 +11,10 @@ Manifest.toml
 /docs/build/
 /docs/site/
 
+# Benchmark environment
+/benchmark/venv/
+/benchmark/Manifest.toml
+
 # IDE and editor files
 .vscode/
 .idea/

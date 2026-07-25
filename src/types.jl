@@ -179,6 +179,65 @@ function Medium(;
 end
 
 """
+    AmplifyingMedium(length, gamma, g0, Esat, noise_figure_db, loss, dispersion, lambda0)
+
+Active rare-earth-doped amplifying fiber medium (EDFA, YDFA, TDFA) with gain saturation and ASE noise.
+
+# Fields
+- `length::T`: Fiber length [m]
+- `gamma::TG`: Nonlinear coefficient [1/(W·m)]
+- `g0::GD`: Small-signal gain [1/m] (dB/m converted to Np/m: `g_Np = ln(10^(g_dB/10))`)
+- `Esat::T`: Saturation energy [J]
+- `noise_figure_db::T`: Amplifier Noise Figure [dB] (default: 4.0 dB)
+- `loss::T`: Background loss factor [dB/m]
+- `dispersion::DispersionModel`: Chromatic dispersion model
+- `lambda0::T`: Center wavelength [m]
+"""
+struct AmplifyingMedium{T <: Real, TG, GD} <: AbstractMedium
+    length::T
+    gamma::TG
+    g0::GD
+    Esat::T
+    noise_figure_db::T
+    loss::T
+    dispersion::DispersionModel
+    lambda0::T
+
+    function AmplifyingMedium(
+        length::T, gamma::TG, g0::GD, Esat::T, noise_figure_db::T, loss::T, dispersion::DispersionModel, lambda0::T
+    ) where {T <: Real, TG, GD}
+        length > 0 || throw(ArgumentError("Fiber length must be positive"))
+        Esat > 0 || throw(ArgumentError("Saturation energy Esat must be positive"))
+        noise_figure_db >= 0 || throw(ArgumentError("Noise Figure must be non-negative"))
+        loss >= 0 || throw(ArgumentError("Loss must be non-negative"))
+        lambda0 > 0 || throw(ArgumentError("Center wavelength must be positive"))
+        new{T, TG, GD}(length, gamma, g0, Esat, noise_figure_db, loss, dispersion, lambda0)
+    end
+end
+
+function AmplifyingMedium(;
+    length::Real,
+    gamma::Any,
+    g0::Any=nothing,
+    g0_db::Union{Real, Nothing}=nothing,
+    Esat::Real,
+    noise_figure_db::Real=4.0,
+    loss::Real=0.0,
+    betas::Union{AbstractVector{<:Real}, Nothing}=nothing,
+    dispersion::Union{DispersionModel, Nothing}=nothing,
+    lambda0::Real,
+)
+    (betas === nothing) ⊻ (dispersion === nothing) ||
+        throw(ArgumentError("provide exactly one of `betas` or `dispersion`"))
+    (g0 === nothing) ⊻ (g0_db === nothing) ||
+        throw(ArgumentError("provide concentration/gain via exactly one of `g0` or `g0_db`"))
+    disp = dispersion === nothing ? TaylorDispersion(betas) : dispersion
+    gain_val = g0_db !== nothing ? log(10.0^(g0_db / 10.0)) : g0 # Convert dB/m to Np/m if g0_db given
+    T = promote_type(typeof(length), typeof(Esat), typeof(noise_figure_db), typeof(loss), typeof(lambda0), Float64)
+    return AmplifyingMedium(T(length), gamma, gain_val, T(Esat), T(noise_figure_db), T(loss), disp, T(lambda0))
+end
+
+"""
     RamanModel
 
 Abstract base type for Raman response models.

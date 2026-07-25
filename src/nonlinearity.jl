@@ -276,6 +276,85 @@ function build_physics_model(grid::Grid, params::SimParams{S, M}, template::Abst
     )
 end
 
+"""
+    build_physics_model(grid::Grid, params::SimParams{S, <:AmplifyingMedium}, [template])
+
+Construct PhysicsModel for active amplifying fiber propagation with gain saturation & ASE.
+"""
+function build_physics_model(grid::Grid, params::SimParams{S, M}, template::AbstractVector=zeros(ComplexF64, grid.N)) where {S, M <: AmplifyingMedium}
+    medium = params.medium
+    N = grid.N
+
+    enable_raman = params.raman_model !== nothing
+    enable_shock = params.self_steepening
+
+    gamma_input = medium.gamma
+    gamma_z_model, gamma_W_mon = if gamma_input isa Number
+        W_factor = enable_shock ? grid.W : fill(grid.omega0, N)
+        gamma_input / grid.omega0, W_factor
+    else
+        W_factor = enable_shock ? grid.W : fill(grid.omega0, N)
+        gamma_input, W_factor
+    end
+
+    gamma_W_host = ifftshift(gamma_W_mon)
+    gamma_W = _to_device(template, gamma_W_host)
+
+    W_host = enable_shock ? ifftshift(grid.W) : fill(grid.omega0, N)
+    W = _to_device(template, W_host)
+
+    fr = 0.0
+    raman_freq_response = nothing
+    if enable_raman
+        fr, h_R = raman_response(grid, params.raman_model)
+        raman_freq_response = _to_device(template, N .* ifft(ifftshift(h_R)))
+    end
+
+    D_host = fftshift(dispersion_operator(grid, Medium(medium.length, medium.gamma, medium.loss, medium.dispersion, medium.lambda0)))
+    if medium.g0 isa Number
+        D_host .+= medium.g0 / 2.0
+    else
+        D_host .+= fftshift(medium.g0.(grid.W) ./ 2.0)
+    end
+    D = _to_device(template, D_host)
+
+    tmp = similar(template)
+    to_freq = plan_ifft(tmp; flags=FFTW.MEASURE)
+    to_time = plan_fft(tmp; flags=FFTW.MEASURE)
+
+    nonlinear_function = choose_nonlinear_term(enable_raman)
+
+    buf_t1 = similar(D)
+    buf_t2 = similar(D)
+    buf_f1 = similar(D)
+
+    aux = (
+        g0 = medium.g0,
+        Esat = medium.Esat,
+        noise_figure_db = medium.noise_figure_db,
+        D_base = _to_device(template, D_host),
+    )
+
+    PhysicsModel(
+        to_freq,
+        to_time,
+        D,
+        gamma_z_model,
+        grid.omega0,
+        gamma_W,
+        W,
+        grid.dt,
+        N,
+        fr,
+        raman_freq_response,
+        nonlinear_function,
+        buf_t1,
+        buf_t2,
+        buf_f1,
+        aux
+    )
+end
+
 # ===========================================================================
 # Vectorial/Birefringent Coupled GNLSE Support
 # ===========================================================================

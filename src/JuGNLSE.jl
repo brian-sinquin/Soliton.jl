@@ -98,7 +98,7 @@ export Medium, SimParams, Grid, Pulse, Solution
 export RamanModel, BlowWood, LinAgrawal, Hollenbeck
 export DispersionModel, TaylorDispersion, TabulatedDispersion, SellmeierDispersion
 export GNLSESolver, ERK4IP, SSFM
-export VectorialPulse, BirefringentMedium, VectorialSolution
+export VectorialPulse, BirefringentMedium, VectorialSolution, AmplifyingMedium
 export LumpedElement, Amplifier, Attenuator, Filter, PMDElement, apply
 export NonlinearityModel, ConstantNonlinearity, FrequencyDependentNonlinearity, NonlinearityFromEffectiveArea
 
