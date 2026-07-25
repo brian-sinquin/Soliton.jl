@@ -32,72 +32,38 @@ The N=3 soliton was the first experimentally observed higher-order soliton in an
 
 ## Simulation
 
-```julia
+```@example ex5
 using JuGNLSE
 
-# ─── Standard silica fiber at 1.06 µm (Mollenauer 1980 experimental regime) ─
-lambda0 = 1060e-9            # [m]
-beta2   = -9.0e-27           # [s²/m] anomalous dispersion
-gamma   = 0.0019             # [1/(W·m)]
+lambda0 = 1060e-9
+beta2   = -9.0e-27
+gamma   = 0.0019
 
-# ─── N=3 soliton ─────────────────────────────────────────────────────────────
 N  = 3
-T0 = 4e-12              # 4 ps half-width (≈ 7 ps FWHM)
-P0 = N^2 * abs(beta2) / (gamma * T0^2)   # N=3 soliton peak power [W]
+T0 = 4e-12
+P0 = N^2 * abs(beta2) / (gamma * T0^2)
 LD = T0^2 / abs(beta2)
-
 FWHM = 2 * log(1 + sqrt(2)) * T0
-Zhalf = (π/2) * LD      # soliton half-period
+Zhalf = (π/2) * LD
 
-println("N=3 Soliton:")
-println("  Peak power P₀ = $(round(P0; sigdigits=3)) W")
-println("  Dispersion length L_D = $(round(LD; sigdigits=3)) m")
-println("  Half-period z₁/₂ = $(round(Zhalf; sigdigits=3)) m")
-println("  Expected compression ratio ≈ $(4.1 * N)x")
-println("  Expected compression point ≈ $(round(0.32 * LD / N; sigdigits=2)) m")
-
-# ─── Grid and medium ─────────────────────────────────────────────────────────
 grid   = create_grid(2^12, 60e-12, lambda0)
-medium = Medium(;
-    length  = Zhalf,         # propagate one half-period (full breathing cycle)
-    gamma   = gamma,
-    loss    = 0.0,
-    betas   = [beta2],
-    lambda0 = lambda0,
-)
-
+medium = Medium(; length=Zhalf, gamma=gamma, loss=0.0, betas=[beta2], lambda0=lambda0)
 pulse  = sech_pulse(grid, P0, FWHM)
 
-# ─── Solve: no Raman (clean higher-order soliton) ────────────────────────────
-params = SimParams(;
-    medium          = medium,
-    z_saves         = 500,        # dense z-sampling to capture the narrow minimum
-    raman_model     = nothing,
-    self_steepening = false,
-)
-sol = solve(pulse, params)
+params = SimParams(; medium=medium, z_saves=200, raman_model=nothing, self_steepening=false)
+sol = solve(pulse, params; progress=false)
 
-# ─── Find compression ratio and position ─────────────────────────────────────
-# Peak power at each saved position
 peaks = [maximum(abs2, sol.At[:, i]) for i in axes(sol.At, 2)]
 Pmax  = maximum(peaks)
-z_max = sol.Z[argmax(peaks)]
 compression_ratio = Pmax / P0
+println("N=3 Soliton Max Compression Ratio: ", round(compression_ratio; digits=2), "x")
+```
 
-println("\nSimulation results:")
-println("  Maximum peak power = $(round(Pmax; sigdigits=3)) W")
-println("  Compression ratio  = $(round(compression_ratio; sigdigits=3))x")
-println("  At z              = $(round(z_max; sigdigits=3)) m")
+```@example ex5; hide = true
+using Plots
+gr()
 
-# ─── N=1 reference: stable (no compression) ───────────────────────────────────
-P0_N1 = abs(beta2) / (gamma * T0^2)
-pulse_N1 = sech_pulse(grid, P0_N1, FWHM)
-sol_N1 = solve(pulse_N1, SimParams(; medium=medium, z_saves=100,
-                                    raman_model=nothing, self_steepening=false))
-
-peaks_N1 = [maximum(abs2, sol_N1.At[:, i]) for i in axes(sol_N1.At, 2)]
-println("\nN=1 soliton (reference): peak power variation = ",
-    round((maximum(peaks_N1) - minimum(peaks_N1)) / P0_N1 * 100; sigdigits=2), " %  (expect ≈ 0)")
+plot(sol.Z .* 100, peaks, label="Peak Power P(z)", xlabel="Distance z (cm)", ylabel="Peak Power (W)", color=:purple, lw=2.0, plot_title="N=3 Soliton Compression & Breathing")
 ```
 
 ## Expected Results

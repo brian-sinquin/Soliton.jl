@@ -33,86 +33,44 @@ The trapping condition is approximately:
 We reproduce the trapping effect using `BirefringentMedium` with equal energy on both axes
 and a group-velocity mismatch that is just inside/outside the trapping threshold.
 
-```julia
+```@example ex4
 using JuGNLSE
 
-# ─── Fiber parameters ────────────────────────────────────────────────────────
-lambda0 = 1550e-9          # [m]
-beta2   = -21.5e-27        # [s²/m] anomalous, same on both axes
-gamma   = 0.0011           # [1/(W·m)]
+lambda0 = 1550e-9
+beta2   = -21.5e-27
+gamma   = 0.0011
 
-# ─── Soliton parameters ─────────────────────────────────────────────────────
-T0   = 1e-12               # 1 ps soliton half-width
-P0   = abs(beta2) / (gamma * T0^2)   # fundamental soliton power [W]
-LD   = T0^2 / abs(beta2)             # dispersion length [m]
-FWHM = 2 * log(1 + sqrt(2)) * T0    # FWHM [s]
+T0   = 1e-12
+P0   = abs(beta2) / (gamma * T0^2)
+LD   = T0^2 / abs(beta2)
+FWHM = 2 * log(1 + sqrt(2)) * T0
 
-println("Fundamental soliton: P₀ = $(round(P0; sigdigits=3)) W,  L_D = $(round(LD; sigdigits=3)) m")
-
-# ─── Grid ────────────────────────────────────────────────────────────────────
 grid = create_grid(2^12, 80e-12, lambda0)
+delta_beta1 = 1e-12
 
-# ─── Walk-off: Δβ₁ = 1 ps/m → walk-off length L_W = T₀/|δ| = 1 ps / (1 ps/m) = 1 m ──
-delta_beta1 = 1e-12          # [s/m] group-velocity mismatch
+disp_x = TaylorDispersion([beta2],  0.0)
+disp_y = TaylorDispersion([beta2], +delta_beta1)
 
-# ─── Case A: Low birefringence — solitons trap (below threshold) ─────────────
-# trapping criterion: |δ| < √3/2 * T₀/L_D = √3/2 / L_D (for T₀=1ps)
-trap_threshold = sqrt(3)/2 * T0 / LD   # [s/m]
-println("Trapping threshold |δ| < $(round(trap_threshold*1e12; sigdigits=2)) ps/m")
+med_A = BirefringentMedium(5.0, gamma, 0.0, disp_x, disp_y, 0.0, lambda0)
 
-# ─── Both cases: axes share dispersion, differ only in β₁ ────────────────────
-disp_x = TaylorDispersion([beta2],  0.0)              # reference axis
-disp_y = TaylorDispersion([beta2], +delta_beta1)      # faster axis (walk-off)
-
-med_A = BirefringentMedium(
-    5.0,           # 5 m fiber
-    gamma, 0.0,
-    disp_x, disp_y,
-    0.0,           # Δβ₀ = 0 (no phase mismatch)
-    lambda0,
-)
-
-# ─── Initial pulse: 45° → equal amplitude on both axes ──────────────────────
-Ax = sech_pulse(grid, P0, FWHM).At   # x-axis: full N=1 soliton
-Ay = copy(Ax)                          # y-axis: identical copy → 45° launch
+Ax = sech_pulse(grid, P0, FWHM).At
+Ay = copy(Ax)
 vpulse = VectorialPulse(Ax, Ay, grid)
 
-params = SimParams(;
-    medium      = med_A,
-    z_saves     = 200,
-    solver      = SSFM(1e-3),   # fixed-step SSFM, 1 mm steps
-    raman_model = nothing,
-)
+params = SimParams(; medium=med_A, z_saves=200, solver=SSFM(1e-3), raman_model=nothing)
+vsol_trap = solve(vpulse, params; progress=false)
+```
 
-vsol_trap = solve(vpulse, params)
+```@example ex4; hide = true
+using Plots
+gr()
 
-# ─── Case B: High birefringence — solitons walk off and separate ─────────────
-# Five times larger birefringence → above threshold
-disp_y_b = TaylorDispersion([beta2], 5 * delta_beta1)
+t_ps = vsol_trap.t .* 1e12
+px = abs2.(vsol_trap.At[:, 1, end])
+py = abs2.(vsol_trap.At[:, 2, end])
 
-med_B = BirefringentMedium(5.0, gamma, 0.0, disp_x, disp_y_b, 0.0, lambda0)
-vsol_sep = solve(vpulse, SimParams(; medium=med_B, z_saves=200,
-                                    solver=SSFM(1e-3), raman_model=nothing))
-
-# ─── Diagnostic: temporal separation between polarization components ──────────
-function centroid_t(A_col, t)
-    S = abs2.(A_col)
-    return sum(t .* S) / sum(S)
-end
-
-# Temporal separation at output  (should be small for trapping, large for walk-off)
-t = vsol_trap.t
-tc_x_trap = centroid_t(vsol_trap.At[:, 1, end], t)
-tc_y_trap = centroid_t(vsol_trap.At[:, 2, end], t)
-tc_x_sep  = centroid_t(vsol_sep.At[:, 1, end],  t)
-tc_y_sep  = centroid_t(vsol_sep.At[:, 2, end],  t)
-
-println("\nTemporal separation at z = 5 m:")
-println("  Trapped  (δ = $(delta_beta1*1e12) ps/m): Δt = ",
-        round((tc_y_trap - tc_x_trap)*1e12; sigdigits=2), " ps")
-println("  Walk-off (δ = $(5*delta_beta1*1e12) ps/m): Δt = ",
-        round((tc_y_sep - tc_x_sep)*1e12; sigdigits=2), " ps  (expect ≈ L·δ = ",
-        round(5.0 * 5*delta_beta1*1e12; sigdigits=2), " ps in linear limit)")
+plot(t_ps, px, label="x-polarization (trapped)", xlabel="Time (ps)", ylabel="Power (W)", color=:blue, lw=1.5)
+plot!(t_ps, py, label="y-polarization (trapped)", color=:red, ls=:dash, lw=1.5, plot_title="Soliton Trapping in Birefringent Fiber")
 ```
 
 ## Expected Results

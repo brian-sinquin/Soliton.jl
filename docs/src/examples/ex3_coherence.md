@@ -31,10 +31,10 @@ Dudley & Coen showed that for **short femtosecond pulses** (high N), coherence
 We run an ensemble of M = 20 independent shots, each seeded with a different quantum noise
 realization, then compute the pairwise coherence estimator.
 
-```julia
+```@example ex3
 using JuGNLSE
+using Statistics
 
-# ─── Fiber parameters: same PCF as Dudley 2006 ──────────────────────────────
 betas = [
     -11.83e-27, 8.1076e-41, -9.5229e-56,
      2.0737e-70, -5.3943e-85, 1.3486e-99,
@@ -42,62 +42,31 @@ betas = [
 ]
 lambda0 = 835e-9
 gamma   = 0.11
-
-# ─── Grid ───────────────────────────────────────────────────────────────────
 grid = create_grid(2^13, 12.5e-12, lambda0)
 
-# ─── Helper: run one ensemble ────────────────────────────────────────────────
-function run_ensemble(T_FWHM, P0, L, M=20)
-    medium = Medium(;
-        length  = L,
-        gamma   = gamma,
-        loss    = 0.0,
-        betas   = betas,
-        lambda0 = lambda0,
-    )
-    params = SimParams(;
-        medium          = medium,
-        z_saves         = 2,           # only need input + output
-        raman_model     = Hollenbeck(),
-        self_steepening = true,
-    )
-
-    # Clean (noise-free) pulse
+function run_ensemble(T_FWHM, P0, L, M=5)
+    medium = Medium(; length=L, gamma=gamma, loss=0.0, betas=betas, lambda0=lambda0)
+    params = SimParams(; medium=medium, z_saves=2, raman_model=Hollenbeck(), self_steepening=true)
     clean_pulse = sech_pulse(grid, P0, T_FWHM)
-
-    # Run M noisy shots
     solutions = Vector{Solution}(undef, M)
     for i in 1:M
         noisy_pulse = add_noise(clean_pulse; photons_per_mode=1.0)
-        solutions[i] = solve(noisy_pulse, params)
+        solutions[i] = solve(noisy_pulse, params; progress=false)
     end
     return solutions
 end
 
-# ─── Case A: 50 fs pulse, 10 kW — coherent SC regime ────────────────────────
-println("Case A: 50 fs pump (coherent regime)...")
 sols_A = run_ensemble(50e-15, 10_000.0, 0.15)
+g12_A = spectral_coherence(sols_A)
+println("Mean coherence |g₁₂⁽¹⁾| (50 fs pump): ", round(mean(g12_A); digits=3))
+```
 
-# ─── Case B: 150 fs pulse, same energy — MI-dominated, incoherent regime ────
-# Scale P₀ to keep same pulse energy (E ∝ P₀ × T_FWHM)
-println("Case B: 150 fs pump (incoherent regime)...")
-E_ref = 10_000.0 * 50e-15           # reference energy
-P0_B  = E_ref / 150e-15             # same energy, longer pulse
-sols_B = run_ensemble(150e-15, P0_B, 0.15)
+```@example ex3; hide = true
+using Plots
+gr()
 
-# ─── Coherence ───────────────────────────────────────────────────────────────
-g12_A = spectral_coherence(sols_A)   # wavelength-resolved |g₁₂⁽¹⁾(ω)|
-g12_B = spectral_coherence(sols_B)
-
-using Statistics
-println("\nMean coherence |g₁₂⁽¹⁾|:")
-println("  50 fs pump  : ", round(mean(g12_A); digits=3), " (expect ≈ 1.0)")
-println("  150 fs pump : ", round(mean(g12_B); digits=3), " (expect < 0.5)")
-
-# ─── Energy conservation check ───────────────────────────────────────────────
-photons_A = photon_number.(sols_A)
-println("\nPhoton number drift (shot 1): ",
-    round((photons_A[1][end] - photons_A[1][1]) / photons_A[1][1] * 100; sigdigits=2), " %")
+wl_nm = 2π * 2.99792458e8 ./ grid.W .* 1e9
+plot(wl_nm, g12_A, label="50 fs Pump Coherence |g₁₂⁽¹⁾|", xlabel="Wavelength (nm)", ylabel="Degree of Coherence", xlims=(400, 1600), ylims=(0, 1.05), color=:navy, lw=1.5, plot_title="Supercontinuum Coherence Spectrum")
 ```
 
 ## Expected Results

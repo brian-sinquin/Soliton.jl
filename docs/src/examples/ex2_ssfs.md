@@ -32,7 +32,7 @@ The shift is **stronger for shorter pulses** (scales as ``T_0^{-4}``).
 We propagate a fundamental sech² soliton (N = 1) over 10 soliton periods and track the
 spectral centroid to directly observe the red-shift.
 
-```julia
+```@example ex2
 using JuGNLSE
 
 # ─── Fiber parameters (standard telecom SMF-like) ───────────────────────────
@@ -46,10 +46,6 @@ P0   = abs(beta2) / (gamma * T0^2)    # fundamental soliton peak power [W]
 LD   = T0^2 / abs(beta2)              # dispersion length [m]
 Zsol = (π / 2) * LD                   # soliton period [m]
 
-println("Peak power P₀      = ", round(P0; sigdigits=4), " W")
-println("Dispersion length  = ", round(LD; sigdigits=4), " m")
-println("Soliton period     = ", round(Zsol * 1e2; sigdigits=3), " cm")
-
 # ─── Grid and medium ────────────────────────────────────────────────────────
 grid = create_grid(2^12, 50e-12, lambda0)
 
@@ -62,7 +58,6 @@ medium = Medium(;
 )
 
 # ─── Fundamental sech² soliton ──────────────────────────────────────────────
-# FWHM = 2 * acosh(√2) * T0 = 2 * ln(1+√2) * T0
 FWHM = 2 * log(1 + sqrt(2)) * T0
 pulse = sech_pulse(grid, P0, FWHM)
 
@@ -70,44 +65,40 @@ pulse = sech_pulse(grid, P0, FWHM)
 params_raman = SimParams(;
     medium          = medium,
     z_saves         = 200,
-    raman_model     = BlowWood(),   # Blow & Wood (1989)
+    raman_model     = BlowWood(),
     self_steepening = false,
 )
-sol_raman = solve(pulse, params_raman)
+sol_raman = solve(pulse, params_raman; progress=false)
 
-# ─── Run: without Raman (reference — no shift) ───────────────────────────────
+# ─── Run: without Raman (reference) ─────────────────────────────────────────
 params_kerr = SimParams(;
     medium          = medium,
     z_saves         = 200,
     raman_model     = nothing,
     self_steepening = false,
 )
-sol_kerr = solve(pulse, params_kerr)
+sol_kerr = solve(pulse, params_kerr; progress=false)
+```
 
-# ─── Analyse: spectral centroid shift ────────────────────────────────────────
-function centroid_wavelength(sol)
-    [begin
-        S = abs2.(sol.AW[:, i])
-        ω_c = sum(sol.W .* S) / sum(S)
-        2π * c / ω_c
-    end for i in axes(sol.AW, 2)]
-end
+```@example ex2; hide = true
+using Plots
+gr()
 
-λ_raman = centroid_wavelength(sol_raman) .* 1e9  # [nm]
-λ_kerr  = centroid_wavelength(sol_kerr)  .* 1e9
+z_cm = sol_raman.Z .* 100
+λ_raman = [begin
+    S = abs2.(sol_raman.AW[:, i])
+    ω_c = sum(sol_raman.W .* S) / sum(S)
+    2π * 2.99792458e8 / ω_c * 1e9
+end for i in axes(sol_raman.AW, 2)]
 
-Δλ = λ_raman[end] - λ_kerr[end]
-println("\nSpectral centroid shift after 10 soliton periods: ",
-        round(Δλ; digits=1), " nm")
+λ_kerr = [begin
+    S = abs2.(sol_kerr.AW[:, i])
+    ω_c = sum(sol_kerr.W .* S) / sum(S)
+    2π * 2.99792458e8 / ω_c * 1e9
+end for i in axes(sol_kerr.AW, 2)]
 
-# ─── Gordon analytical estimate ──────────────────────────────────────────────
-# dΩ/dz = -8 T_R |β₂| / (15 T₀⁴), T_R ≈ 3 fs
-TR = 3e-15
-dΩdz = -8 * TR * abs(beta2) / (15 * T0^4)
-Ω_shift = dΩdz * 10 * Zsol
-ω0 = 2π * c / lambda0
-λ_gordon = 2π * c / (ω0 + Ω_shift) * 1e9  # [nm]
-println("Gordon analytical centroid: ", round(λ_gordon - lambda0 * 1e9; digits=1), " nm shift")
+plot(z_cm, λ_raman, label="With Raman (SSFS)", xlabel="Distance z (cm)", ylabel="Centroid Wavelength (nm)", color=:crimson, lw=2.0)
+plot!(z_cm, λ_kerr, label="No Raman (Kerr only)", color=:black, ls=:dash, lw=1.5, plot_title="Soliton Self-Frequency Shift (SSFS)")
 ```
 
 ## Expected Results

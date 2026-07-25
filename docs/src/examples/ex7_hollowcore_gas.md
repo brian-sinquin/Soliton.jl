@@ -14,15 +14,12 @@ Hollow-core photonic crystal fibers (HC-PCF) guide optical pulses through a cent
 
 ## 💻 Julia Code
 
-```julia
+```@example ex7
 using JuGNLSE
-using Plots
 
-# 1. Setup grid and input pulse (800 nm, 30 fs, 50 kW peak power)
 grid = create_grid(2^13, 15e-12, 800e-9)
-pulse = sech_pulse(grid, 50.0e3, 30e-15) # 50 kW peak power
+pulse = sech_pulse(grid, 50.0e3, 30e-15)
 
-# 2. Define 30 μm core HC-PCF filled with 3.0 bar Argon
 hcf = HollowCoreFiber(
     radius = 15e-6,      # 15 μm core radius (30 μm core diameter)
     gas = :Ar,           # Argon gas
@@ -31,14 +28,23 @@ hcf = HollowCoreFiber(
     lambda0 = 800e-9
 )
 
-# 3. Simulate propagation
 params = SimParams(; medium=hcf, raman_model=nothing, z_saves=100)
-sol = solve(pulse, params)
+sol = solve(pulse, params; progress=false)
 
-# 4. Analyze results
 E_in = pulse_energy(pulse)
 E_out = pulse_energy(Pulse(sol))
-
 println("Input Energy:  ", round(E_in * 1e9, digits=3), " nJ")
 println("Output Energy: ", round(E_out * 1e9, digits=3), " nJ")
+```
+
+```@example ex7; hide = true
+using Plots
+gr()
+
+wl_nm = 2π * 2.99792458e8 ./ grid.W .* 1e9
+psd_db = 10 .* log10.(max.(1e-10, abs2.(Pulse(sol).AW)))
+
+p1 = plot(grid.t .* 1e12, abs2.(Pulse(sol).At), label="Output Pulse (Argon 3 bar)", xlabel="Time (ps)", ylabel="Power (W)", color=:dodgerblue, lw=1.5)
+p2 = plot(wl_nm, psd_db, label="Output Spectrum", xlabel="Wavelength (nm)", ylabel="PSD (dB)", xlims=(500, 1100), color=:teal, lw=1.5)
+plot(p1, p2, layout=(2, 1), size=(800, 500), plot_title="Hollow-Core PCF Soliton Dynamics")
 ```

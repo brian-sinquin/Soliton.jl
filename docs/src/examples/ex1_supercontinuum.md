@@ -37,7 +37,7 @@ All dispersion coefficients from Dudley et al. (2006) Table 1:
 
 ## Julia Code
 
-```julia
+```@example ex1
 using JuGNLSE
 
 # ─── Grid ──────────────────────────────────────────────────────────────────
@@ -45,16 +45,15 @@ using JuGNLSE
 grid = create_grid(2^13, 12.5e-12, 835e-9)
 
 # ─── PCF fiber (Dudley et al. 2006, Table 1) ────────────────────────────────
-# Higher-order dispersion coefficients [s^n/m] up to β₁₀
 betas = [
-    -11.83e-27,   #  β₂ [s²/m]
-     8.1076e-41,  #  β₃ [s³/m]
-    -9.5229e-56,  #  β₄ [s⁴/m]
-     2.0737e-70,  #  β₅
-    -5.3943e-85,  #  β₆
-     1.3486e-99,  #  β₇
-    -2.5495e-114, #  β₈
-     3.0524e-129, #  β₉
+    -11.83e-27,   # β₂ [s²/m]
+     8.1076e-41,  # β₃ [s³/m]
+    -9.5229e-56,  # β₄ [s⁴/m]
+     2.0737e-70,  # β₅
+    -5.3943e-85,  # β₆
+     1.3486e-99,  # β₇
+    -2.5495e-114, # β₈
+     3.0524e-129, # β₉
     -1.7140e-144, # β₁₀
 ]
 
@@ -67,7 +66,6 @@ medium = Medium(;
 )
 
 # ─── Input pulse: 50 fs FWHM sech², 10 kW peak power ───────────────────────
-# sech_pulse expects FWHM; T₀ = FWHM / (2 ln(1+√2)) ≈ FWHM / 1.763
 pulse = sech_pulse(grid, 10_000.0, 50e-15)
 
 # ─── Simulation parameters ──────────────────────────────────────────────────
@@ -79,20 +77,23 @@ params = SimParams(;
 )
 
 # ─── Solve ──────────────────────────────────────────────────────────────────
-sol = solve(pulse, params)
-
-# ─── Diagnostics ────────────────────────────────────────────────────────────
-using FFTW
-
-# Wavelength grid from the frequency solution (for plotting)
-lambda = 2π * c ./ sol.W   # [m]
-
-# Output spectrum at z = 15 cm (last save)
-spectrum_out = abs2.(sol.AW[:, end])
+sol = solve(pulse, params; progress=false)
 
 # Soliton number
 N = soliton_number(betas[1], 0.11, 50e-15 / 1.763, 10_000.0)
-println("Soliton number N = ", round(N; digits=2))   # expect ≈ 6.7
+println("Soliton number N = ", round(N; digits=2))
+```
+
+```@example ex1; hide = true
+using Plots
+gr()
+
+wl_nm = 2π * 2.99792458e8 ./ grid.W .* 1e9
+psd_db = 10 .* log10.(max.(1e-10, abs2.(Pulse(sol).AW)))
+
+p1 = plot(grid.t .* 1e12, abs2.(Pulse(sol).At), label="Temporal Output", xlabel="Time (ps)", ylabel="Power (W)", color=:crimson, lw=1.5)
+p2 = plot(wl_nm, psd_db, label="Spectrum", xlabel="Wavelength (nm)", ylabel="PSD (dB)", xlims=(400, 1600), ylims=(-40, 10), color=:navy, lw=1.5)
+plot(p1, p2, layout=(2, 1), size=(800, 500), plot_title="Supercontinuum Generation in PCF")
 ```
 
 ## Expected Results
