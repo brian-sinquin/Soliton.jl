@@ -16,6 +16,9 @@ All quantities are in natural SI units.
 | [4](ex4_birefringence.md) | Soliton Trapping | Menyuk 1988 | XPM polarization locking |
 | [5](ex5_soliton_compression.md) | Higher-Order Solitons | Mollenauer et al. 1980 | Periodic compression |
 | [6](ex6_stable_n3_soliton.md) | Stable N=3 Soliton | Zakharov & Shabat 1972 | FPUT recurrence, perturbation stability |
+| [7](ex7_hollowcore_gas.md) | Gas-Filled HC-PCF | Russell et al. 2014 | Pressure-tunable dispersion & gas Raman |
+| [8](ex8_silicon_tpa.md) | Silicon Photonics | Yin et al. 2007 | TPA & free-carrier spectral blue-shift |
+| [9](ex9_edfa_amplifier.md) | Femtosecond EDFA | Agrawal Ch. 11 | Gain saturation & ASE quantum noise |
 
 ## Common Setup Pattern
 
