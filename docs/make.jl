@@ -27,6 +27,7 @@ makedocs(;
             "Commercial Fiber Catalog" => "guide/fibers.md",
             "Amplifying Fibers (EDFA)" => "guide/edfa.md",
             "Hollow-Core PCF"          => "guide/hollowcore.md",
+            "Silicon & Semiconductors" => "guide/semiconductor.md",
             "Noise Modeling"           => "guide/noise.md",
         ],
         "Examples" => [
@@ -37,6 +38,9 @@ makedocs(;
             "4 — Soliton Trapping"        => "examples/ex4_birefringence.md",
             "5 — HOSoliton Compression"   => "examples/ex5_soliton_compression.md",
             "6 — Stable N=3 Soliton"      => "examples/ex6_stable_n3_soliton.md",
+            "7 — Hollow-Core Gas Fiber"   => "examples/ex7_hollowcore_gas.md",
+            "8 — Silicon Photonics (TPA)" => "examples/ex8_silicon_tpa.md",
+            "9 — EDFA Pulse Amplifier"   => "examples/ex9_edfa_amplifier.md",
         ],
         "API Reference" => [
             "Medium"           => "api/medium.md",

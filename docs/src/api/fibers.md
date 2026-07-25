@@ -12,4 +12,9 @@ FusedSilica
 SF6
 SF57
 GeO2DopedSilica
+AmplifyingMedium
+SemiconductorMedium
+HollowCoreFiber
+gas_refractive_index
+MolecularRamanGas
 ```

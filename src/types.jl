@@ -238,6 +238,68 @@ function AmplifyingMedium(;
 end
 
 """
+    SemiconductorMedium(; length, gamma, alpha2, Aeff, sigma_fca, k_fcr, tau_c, loss, dispersion, lambda0)
+
+Semiconductor waveguide medium (Silicon-on-Insulator SOI, Germanium, GaAs) with Two-Photon Absorption (TPA) and Free-Carrier Dynamics (FCA, FCR, lifetime τ_c).
+
+# Fields
+- `length::T`: Waveguide length [m]
+- `gamma::TG`: Kerr nonlinear coefficient [1/(W·m)]
+- `alpha2::T`: Two-photon absorption coefficient α₂ [m/W]
+- `Aeff::T`: Effective mode area A_eff [m²]
+- `sigma_fca::T`: Free-carrier absorption cross section σ_FCA [m²] (default: 1.45e-21 m² for Si at 1550 nm)
+- `k_fcr::T`: Free-carrier refraction coefficient k_FCR [m³] (default: 5.3e-27 m³ for Si at 1550 nm)
+- `tau_c::T`: Free-carrier recombination lifetime τ_c [s] (default: 1.0e-9 s)
+- `loss::T`: Linear background attenuation α₀ [dB/m]
+- `dispersion::DispersionModel`: Chromatic dispersion model
+- `lambda0::T`: Center wavelength [m]
+"""
+struct SemiconductorMedium{T <: Real, TG} <: AbstractMedium
+    length::T
+    gamma::TG
+    alpha2::T
+    Aeff::T
+    sigma_fca::T
+    k_fcr::T
+    tau_c::T
+    loss::T
+    dispersion::DispersionModel
+    lambda0::T
+
+    function SemiconductorMedium(
+        length::T, gamma::TG, alpha2::T, Aeff::T, sigma_fca::T, k_fcr::T, tau_c::T, loss::T, dispersion::DispersionModel, lambda0::T
+    ) where {T <: Real, TG}
+        length > 0 || throw(ArgumentError("Waveguide length must be positive"))
+        alpha2 >= 0 || throw(ArgumentError("TPA coefficient alpha2 must be non-negative"))
+        Aeff > 0 || throw(ArgumentError("Effective area Aeff must be positive"))
+        tau_c > 0 || throw(ArgumentError("Carrier lifetime tau_c must be positive"))
+        loss >= 0 || throw(ArgumentError("Loss must be non-negative"))
+        lambda0 > 0 || throw(ArgumentError("Center wavelength must be positive"))
+        new{T, TG}(length, gamma, alpha2, Aeff, sigma_fca, k_fcr, tau_c, loss, dispersion, lambda0)
+    end
+end
+
+function SemiconductorMedium(;
+    length::Real,
+    gamma::Any,
+    alpha2::Real,
+    Aeff::Real,
+    sigma_fca::Real=1.45e-21,
+    k_fcr::Real=5.3e-27,
+    tau_c::Real=1.0e-9,
+    loss::Real=0.0,
+    betas::Union{AbstractVector{<:Real}, Nothing}=nothing,
+    dispersion::Union{DispersionModel, Nothing}=nothing,
+    lambda0::Real,
+)
+    (betas === nothing) ⊻ (dispersion === nothing) ||
+        throw(ArgumentError("provide exactly one of `betas` or `dispersion`"))
+    disp = dispersion === nothing ? TaylorDispersion(betas) : dispersion
+    T = promote_type(typeof(length), typeof(alpha2), typeof(Aeff), typeof(sigma_fca), typeof(k_fcr), typeof(tau_c), typeof(loss), typeof(lambda0), Float64)
+    return SemiconductorMedium(T(length), gamma, T(alpha2), T(Aeff), T(sigma_fca), T(k_fcr), T(tau_c), T(loss), disp, T(lambda0))
+end
+
+"""
     RamanModel
 
 Abstract base type for Raman response models.

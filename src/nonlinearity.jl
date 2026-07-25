@@ -355,6 +355,106 @@ function build_physics_model(grid::Grid, params::SimParams{S, M}, template::Abst
     )
 end
 
+"""
+    _semiconductor_spm(u, model::PhysicsModel, z)
+
+Non-linear step for semiconductor waveguides (SOI, Ge, GaAs) with TPA, FCA, and FCR.
+"""
+function _semiconductor_spm(u, model::PhysicsModel, z)
+    dt = model.dt
+    aux = model.aux_data
+    alpha2 = aux.alpha2
+    Aeff = aux.Aeff
+    sigma_fca = aux.sigma_fca
+    k_fcr = aux.k_fcr
+    tau_c = aux.tau_c
+    omega0 = model.omega0
+    hbar = 1.054571817e-34
+
+    A = u # u is ALREADY in time domain!
+
+    c_gen = alpha2 / (2.0 * hbar * omega0 * Aeff^2)
+    Nc = zeros(Float64, length(A))
+    N_curr = 0.0
+    for i in 1:length(A)
+        P_t = abs2(A[i])
+        rate = c_gen * (P_t^2)
+        N_curr = N_curr * exp(-dt / tau_c) + rate * dt
+        Nc[i] = N_curr
+    end
+
+    gamma_val = (model.gamma isa Number) ? model.gamma * omega0 : model.gamma(z) * omega0
+    tpa_loss = alpha2 / (2.0 * Aeff)
+    fcr_phase = (omega0 / 2.99792458e8) * k_fcr
+
+    @. model.buf_t2 = A * (
+        im * (gamma_val * abs2(A) - fcr_phase * Nc) -
+        (tpa_loss * abs2(A) + 0.5 * sigma_fca * Nc)
+    )
+
+    mul!(model.buf_f1, model.to_freq, model.buf_t2)
+    @. model.buf_f1 = model.buf_f1 * (model.gamma_W / omega0)
+    return model.buf_f1
+end
+
+"""
+    build_physics_model(grid::Grid, params::SimParams{S, <:SemiconductorMedium}, [template])
+
+Construct PhysicsModel for semiconductor waveguides (TPA & Free-Carrier Dynamics).
+"""
+function build_physics_model(grid::Grid, params::SimParams{S, M}, template::AbstractVector=zeros(ComplexF64, grid.N)) where {S, M <: SemiconductorMedium}
+    medium = params.medium
+    N = grid.N
+
+    enable_shock = params.self_steepening
+    gamma_input = medium.gamma
+    gamma_z_model = gamma_input isa Number ? (z -> gamma_input / grid.omega0) : (z -> gamma_input(z) / grid.omega0)
+    W_factor = enable_shock ? grid.W : fill(grid.omega0, N)
+    gamma_W_host = ifftshift(W_factor)
+    gamma_W = _to_device(template, gamma_W_host)
+
+    W_host = enable_shock ? ifftshift(grid.W) : fill(grid.omega0, N)
+    W = _to_device(template, W_host)
+
+    D_host = fftshift(dispersion_operator(grid, Medium(medium.length, medium.gamma, medium.loss, medium.dispersion, medium.lambda0)))
+    D = _to_device(template, D_host)
+
+    tmp = similar(template)
+    to_freq = plan_ifft(tmp; flags=FFTW.MEASURE)
+    to_time = plan_fft(tmp; flags=FFTW.MEASURE)
+
+    buf_t1 = similar(D)
+    buf_t2 = similar(D)
+    buf_f1 = similar(D)
+
+    aux = (
+        alpha2 = medium.alpha2,
+        Aeff = medium.Aeff,
+        sigma_fca = medium.sigma_fca,
+        k_fcr = medium.k_fcr,
+        tau_c = medium.tau_c,
+    )
+
+    PhysicsModel(
+        to_freq,
+        to_time,
+        D,
+        gamma_z_model,
+        grid.omega0,
+        gamma_W,
+        W,
+        grid.dt,
+        N,
+        0.0,
+        nothing,
+        _semiconductor_spm,
+        buf_t1,
+        buf_t2,
+        buf_f1,
+        aux
+    )
+end
+
 # ===========================================================================
 # Vectorial/Birefringent Coupled GNLSE Support
 # ===========================================================================

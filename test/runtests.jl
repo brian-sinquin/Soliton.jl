@@ -10,4 +10,5 @@ using JuGNLSE
     include("test_fibers.jl")
     include("test_edfa.jl")
     include("test_hollowcore.jl")
+    include("test_semiconductor.jl")
 end

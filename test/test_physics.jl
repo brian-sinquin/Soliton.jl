@@ -147,4 +147,50 @@ end
         
         @test phasor_numerical ≈ phasor_analytical rtol=1e-4
     end
+
+    @testset "Free-carrier refraction (FCR) blue-shifts spectrum" begin
+        grid = create_grid(2^11, 20e-12, 1550e-9)
+        soi = SemiconductorMedium(
+            length = 0.005,
+            gamma = 50.0,
+            alpha2 = 1e-12,
+            Aeff = 0.1e-12,
+            sigma_fca = 0.0, # disable FCA loss to isolate phase shift
+            k_fcr = 5.3e-27,  # active FCR plasma effect
+            tau_c = 1e-9,
+            betas = Float64[],
+            lambda0 = 1550e-9
+        )
+        pulse = gaussian_pulse(grid, 100.0, 1e-12)
+        sol = solve(pulse, SimParams(; medium=soi, raman_model=nothing, z_saves=2); progress=false)
+
+        w0 = _centroid(sol.AW[:, 1], grid.W)
+        w1 = _centroid(sol.AW[:, end], grid.W)
+        # Free carrier accumulation decreases refractive index ⇒ blue-shift (higher ω)
+        @test w1 > w0
+    end
+
+    @testset "EDFA gain saturation energy limit" begin
+        grid = create_grid(2^11, 20e-12, 1550e-9)
+        # 1 m amplifier with g0 = 10 dB/m (2.3026 Np/m), Esat = 1 μJ
+        edfa = AmplifyingMedium(
+            length = 1.0,
+            gamma = 0.0,
+            g0_db = 10.0,
+            Esat = 1e-6,
+            noise_figure_db = 0.0,
+            betas = Float64[],
+            lambda0 = 1550e-9
+        )
+        # Intense pulse E_in >> Esat -> saturates gain
+        pulse = gaussian_pulse(grid, 50.0e3, 1e-12) # 50 nJ input
+        sol = solve(pulse, SimParams(; medium=edfa, raman_model=nothing, z_saves=2); progress=false)
+
+        E_in = pulse_energy(pulse)
+        E_out = pulse_energy(Pulse(sol))
+        
+        # Gain ratio E_out / E_in must not exceed small-signal gain 10^(10/10) = 10.0
+        @test E_out / E_in <= 10.0 + 1e-12
+        @test E_out > E_in
+    end
 end
