@@ -57,4 +57,4 @@ makedocs(;
     warnonly=true,
 )
 
-deploydocs(; repo="github.com/brian-sinquin/JuGNLSE.jl", devbranch="master")
+deploydocs(; repo="github.com/brian-sinquin/JuGNLSE.jl", devbranch="master", push_preview=true)
