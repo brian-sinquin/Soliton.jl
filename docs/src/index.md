@@ -21,7 +21,7 @@ It implements the **Generalized Nonlinear Schrödinger Equation (GNLSE)** in nat
 | Feature / Model | Description | Reference Module |
 |:---|:---|:---|
 | **Chromatic dispersion** | Taylor expansion ($\beta_2, \beta_3, \dots$), tabulated, or Sellmeier glass presets (`FusedSilica`, `SF6`, `SF57`) | `TaylorDispersion`, `Sellmeier` |
-| **Kerr nonlinearity (SPM)** | Self-phase modulation \(i \gamma |A|^2 A\) | `Medium` |
+| **Kerr nonlinearity (SPM)** | Self-phase modulation ($i \gamma |A|^2 A$) | `Medium` |
 | **Raman scattering** | Delayed silica response (Blow–Wood, Lin–Agrawal, Hollenbeck) | `BlowWood`, `Hollenbeck` |
 | **Self-steepening** | Frequency-dependent shock term $\gamma \omega / \omega_0$ | `SimParams` |
 | **Commercial Fiber Catalog** | Built-in presets (`Corning_SMF28`, `NKT_NL_PM_750`, `Thorlabs_PM780`, etc.) | `commercial_fiber` |
