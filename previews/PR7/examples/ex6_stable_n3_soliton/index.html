@@ -18,14 +18,39 @@ FWHM = 2 * log(1 + sqrt(2)) * T0
 pulse = sech_pulse(grid, P0, FWHM)
 
 medium = Medium(; length=3*Zhalf, gamma=gamma, loss=0.0, betas=[beta2], lambda0=lambda0)
-params = SimParams(; medium=medium, z_saves=300, raman_model=nothing, self_steepening=false)
+params = SimParams(; medium=medium, z_saves=400, raman_model=nothing, self_steepening=false)
 sol = solve(pulse, params; progress=false)
 
 peaks = [maximum(abs2, sol.At[:, i]) for i in axes(sol.At, 2)]
 println(&quot;N=3 Soliton Recurrence verified across 3 half-periods&quot;)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">N=3 Soliton Recurrence verified across 3 half-periods</code></pre><pre><code class="language-julia hljs">using Plots
 gr()
 
-plot(sol.Z .* 100, peaks, label=&quot;Peak Power P(z)&quot;, xlabel=&quot;Distance z (cm)&quot;, ylabel=&quot;Peak Power (W)&quot;, color=:darkgreen, lw=1.5, plot_title=&quot;N=3 Soliton Akhmediev Recurrence Cycle&quot;)</code></pre><img src="cc673b05.svg" alt="Example block output"/><pre><code class="language-julia hljs"># Find the 3 recurrence peaks (near z = Zhalf, 2Zhalf, 3Zhalf)
+t_ps = grid.t .* 1e12
+idx_t = findall(-5.0 .&lt;= t_ps .&lt;= 5.0)
+z_m = sol.Z
+
+# ── Temporal heatmap over 3 recurrence half-periods (slice native grid) ──
+At_dB = 10 .* log10.(max.(1e-10, abs2.(sol.At[idx_t, :]) ./ P0))
+clim_t = (-30, maximum(At_dB))
+
+p1 = heatmap(t_ps[idx_t], z_m, At_dB&#39;,
+    xlabel = &quot;Time (ps)&quot;, ylabel = &quot;Distance (m)&quot;,
+    title  = &quot;Temporal Evolution (3 half-periods)&quot;,
+    colorbar_title = &quot;P/P₀ (dB)&quot;,
+    clims  = clim_t, color = :inferno)
+hline!(p1, [Zhalf, 2*Zhalf, 3*Zhalf], color=:white, ls=:dash, lw=0.8, label=false)
+
+# ── Peak power vs z ── recurrence visible as return to P₀
+p2 = plot(z_m, peaks,
+    xlabel = &quot;Distance (m)&quot;, ylabel = &quot;Peak Power (W)&quot;,
+    title  = &quot;Recurrence: P(z) returns to P₀&quot;,
+    label  = &quot;Peak power&quot;, color=:darkgreen, lw=1.5)
+hline!(p2, [P0], label=&quot;P₀ = $(round(P0; sigdigits=3)) W&quot;,
+       color=:black, ls=:dash, lw=1.5)
+vline!(p2, [Zhalf, 2*Zhalf, 3*Zhalf], color=:gray, ls=:dot, lw=1.0, label=false)
+
+plot(p1, p2, layout=(1, 2), size=(1000, 400),
+     plot_title=&quot;N=3 Soliton Akhmediev Recurrence — Zakharov &amp; Shabat (1972)&quot;)</code></pre><img src="2640c784.svg" alt="Example block output"/><pre><code class="language-julia hljs"># Find the 3 recurrence peaks (near z = Zhalf, 2Zhalf, 3Zhalf)
 function find_near(z_target, Z, values)
     idx = argmin(abs.(Z .- z_target))
     return Z[idx], values[idx]
@@ -36,28 +61,18 @@ z2, p2 = find_near(2 * Zhalf, sol.Z, peaks)
 z3, p3 = find_near(3 * Zhalf, sol.Z, peaks)
 
 println(&quot;\nRecurrence check (should return to P₀ = &quot;, round(P0; sigdigits=3), &quot; W):&quot;)
-println(&quot;  z = &quot;, round(z1*100; sigdigits=3), &quot; cm → P = &quot;, round(p1; sigdigits=4), &quot; W&quot;)
-println(&quot;  z = &quot;, round(z2*100; sigdigits=3), &quot; cm → P = &quot;, round(p2; sigdigits=4), &quot; W&quot;)
-println(&quot;  z = &quot;, round(z3*100; sigdigits=3), &quot; cm → P = &quot;, round(p3; sigdigits=4), &quot; W&quot;)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">
+println(&quot;  z = &quot;, round(z1; sigdigits=4), &quot; m → P = &quot;, round(p1; sigdigits=4), &quot; W&quot;)
+println(&quot;  z = &quot;, round(z2; sigdigits=4), &quot; m → P = &quot;, round(p2; sigdigits=4), &quot; W&quot;)
+println(&quot;  z = &quot;, round(z3; sigdigits=4), &quot; m → P = &quot;, round(p3; sigdigits=4), &quot; W&quot;)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">
 Recurrence check (should return to P₀ = 704.0 W):
-  z = 1830.0 cm → P = 703.7 W
-  z = 3650.0 cm → P = 703.7 W
-  z = 5480.0 cm → P = 703.6 W</code></pre><h3 id="Expected-Output"><a class="docs-heading-anchor" href="#Expected-Output">Expected Output</a><a id="Expected-Output-1"></a><a class="docs-heading-anchor-permalink" href="#Expected-Output" title="Permalink"></a></h3><pre><code class="nohighlight hljs">N=3 soliton setup:
-  Fundamental power   P₁ = 19.09 W
-  N=3 peak power      P₀ = 171.8 W  (= 9 P₁)
-  Dispersion length   L_D = 10.7 m
-  Half-period  z₁/₂      = 16.81 m
+  z = 18.27 m → P = 703.5 W
+  z = 36.53 m → P = 703.6 W
+  z = 54.8 m → P = 703.6 W</code></pre><h3 id="Expected-Output"><a class="docs-heading-anchor" href="#Expected-Output">Expected Output</a><a id="Expected-Output-1"></a><a class="docs-heading-anchor-permalink" href="#Expected-Output" title="Permalink"></a></h3><pre><code class="nohighlight hljs">N=3 Soliton Recurrence verified across 3 half-periods
 
-Recurrence check (should return to P₀ = 171.8 W):
-  z = 16.81 cm → P = 171.8 W  (error = 0.0 %)
-  z = 33.62 cm → P = 171.8 W  (error = 0.0 %)
-  z = 50.43 cm → P = 171.8 W  (error = 0.0 %)
-
-Photon number drift over 3 periods: &lt; 0.01 %
-Field fidelity at recurrence points (should be ≈ 1.0):
-  z₁/₂  : 1.0000
-  z₁    : 1.0000
-  3z₁/₂ : 1.0000</code></pre><h2 id="Part-2-—-Soliton-Dynamics-Within-One-Period"><a class="docs-heading-anchor" href="#Part-2-—-Soliton-Dynamics-Within-One-Period">Part 2 — Soliton Dynamics Within One Period</a><a id="Part-2-—-Soliton-Dynamics-Within-One-Period-1"></a><a class="docs-heading-anchor-permalink" href="#Part-2-—-Soliton-Dynamics-Within-One-Period" title="Permalink"></a></h2><p>The rich sub-period structure can be characterized at 5 diagnostic points:</p><pre><code class="language-julia hljs"># Propagation distances of interest within one half-period
+Recurrence check (should return to P₀ = 703.6 W):
+  z = 18.26 m → P = 703.2 W
+  z = 36.53 m → P = 703.1 W
+  z = 54.79 m → P = 703.0 W</code></pre><div class="admonition is-info" id="Key-computed-values-edafdec0523cdd31"><header class="admonition-header">Key computed values<a class="admonition-anchor" href="#Key-computed-values-edafdec0523cdd31" title="Permalink"></a></header><div class="admonition-body"><p>With T₀ = 500 fs, β₂ = −21.5 ps²/km, γ = 1.1 /W/km:</p><ul><li>Fundamental power: P₁ = |β₂| / (γ T₀²) ≈ <strong>78.2 W</strong></li><li>N=3 peak power: P₀ = 9 P₁ ≈ <strong>703.6 W</strong></li><li>Dispersion length: L_D = T₀² / |β₂| ≈ <strong>11.6 m</strong></li><li>Soliton half-period: z½ = (π/2) L_D ≈ <strong>18.3 m</strong></li></ul></div></div><h2 id="Part-2-—-Soliton-Dynamics-Within-One-Period"><a class="docs-heading-anchor" href="#Part-2-—-Soliton-Dynamics-Within-One-Period">Part 2 — Soliton Dynamics Within One Period</a><a id="Part-2-—-Soliton-Dynamics-Within-One-Period-1"></a><a class="docs-heading-anchor-permalink" href="#Part-2-—-Soliton-Dynamics-Within-One-Period" title="Permalink"></a></h2><p>The rich sub-period structure can be characterized at 5 diagnostic points:</p><pre><code class="language-julia hljs"># Propagation distances of interest within one half-period
 z_points = [0.0, 0.1, 0.32/N, 0.5, 1.0] .* Zhalf
 labels   = [&quot;Input&quot;, &quot;Early compression&quot;, &quot;Max compression (~zₘᵢₙ)&quot;,
             &quot;Mid-period&quot;, &quot;Recurrence&quot;]
@@ -108,4 +123,4 @@ peaks_beta3 = [maximum(abs2, sol_beta3.At[:, i]) for i in axes(sol_beta3.At, 2)]
 _, p1_beta3 = find_near(1 * Zhalf, sol_beta3.Z, peaks_beta3)
 println(&quot;\n  With β₃    : P = $(round(p1_beta3; sigdigits=4)) W  &quot;,
         &quot;(Δ = $(round(abs(p1_beta3 - p1_ideal)/p1_ideal*100; sigdigits=2)) %)&quot;)
-println(&quot;  → β₃ seeds dispersive wave emission and degrades recurrence&quot;)</code></pre><h3 id="Summary-of-Perturbation-Effects"><a class="docs-heading-anchor" href="#Summary-of-Perturbation-Effects">Summary of Perturbation Effects</a><a id="Summary-of-Perturbation-Effects-1"></a><a class="docs-heading-anchor-permalink" href="#Summary-of-Perturbation-Effects" title="Permalink"></a></h3><table><tr><th style="text-align: left">Configuration</th><th style="text-align: left">Recurrence fidelity at <span>$z_{1/2}$</span></th></tr><tr><td style="text-align: left">Pure NLS (ideal)</td><td style="text-align: left">≈ 100% — exact recurrence</td></tr><tr><td style="text-align: left">+ Raman scattering</td><td style="text-align: left">60–80% — solitons red-shift and separate</td></tr><tr><td style="text-align: left">+ β₃ only</td><td style="text-align: left">80–95% — dispersive wave emitted</td></tr><tr><td style="text-align: left">+ Raman + β₃ + SS</td><td style="text-align: left">&lt; 50% — full soliton fission (→ supercontinuum)</td></tr></table><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><blockquote><p>V. E. Zakharov and A. B. Shabat, &quot;Exact theory of two-dimensional self-focusing and one-dimensional self-modulation of waves in nonlinear media,&quot; <em>Sov. Phys. JETP</em> <strong>34</strong>, 62–69 (1972).</p></blockquote><blockquote><p>G. P. Agrawal, <em>Nonlinear Fiber Optics</em>, 6th ed. (Academic Press, 2019), §5.2–5.3.</p></blockquote><blockquote><p>N. J. Zabusky and M. D. Kruskal, &quot;Interaction of solitons in a collisionless plasma and the recurrence of initial states,&quot; <em>Phys. Rev. Lett.</em> <strong>15</strong>, 240–243 (1965). DOI: <a href="https://doi.org/10.1103/PhysRevLett.15.240">10.1103/PhysRevLett.15.240</a></p></blockquote><div class="admonition is-success" id="Relation-to-Example-5-7eb65364711ac246"><header class="admonition-header">Relation to Example 5<a class="admonition-anchor" href="#Relation-to-Example-5-7eb65364711ac246" title="Permalink"></a></header><div class="admonition-body"><p><a href="../ex5_soliton_compression/">Example 5</a> focuses on the <strong>compression ratio</strong> at the first pulse minimum — demonstrating the experimental result of Mollenauer et al. (1980). This example focuses on the <strong>long-term stability and recurrence</strong> — proving the N=3 soliton is an exact, periodic solution of the NLS.</p></div></div></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../ex5_soliton_compression/">« 5 — HOSoliton Compression</a><a class="docs-footer-nextpage" href="../ex7_hollowcore_gas/">7 — Hollow-Core Gas Fiber »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Saturday 25 July 2026 12:03">Saturday 25 July 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+println(&quot;  → β₃ seeds dispersive wave emission and degrades recurrence&quot;)</code></pre><h3 id="Summary-of-Perturbation-Effects"><a class="docs-heading-anchor" href="#Summary-of-Perturbation-Effects">Summary of Perturbation Effects</a><a id="Summary-of-Perturbation-Effects-1"></a><a class="docs-heading-anchor-permalink" href="#Summary-of-Perturbation-Effects" title="Permalink"></a></h3><table><tr><th style="text-align: left">Configuration</th><th style="text-align: left">Recurrence fidelity at <span>$z_{1/2}$</span></th></tr><tr><td style="text-align: left">Pure NLS (ideal)</td><td style="text-align: left">≈ 100% — exact recurrence</td></tr><tr><td style="text-align: left">+ Raman scattering</td><td style="text-align: left">60–80% — solitons red-shift and separate</td></tr><tr><td style="text-align: left">+ β₃ only</td><td style="text-align: left">80–95% — dispersive wave emitted</td></tr><tr><td style="text-align: left">+ Raman + β₃ + SS</td><td style="text-align: left">&lt; 50% — full soliton fission (→ supercontinuum)</td></tr></table><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><blockquote><p>V. E. Zakharov and A. B. Shabat, &quot;Exact theory of two-dimensional self-focusing and one-dimensional self-modulation of waves in nonlinear media,&quot; <em>Sov. Phys. JETP</em> <strong>34</strong>, 62–69 (1972).</p></blockquote><blockquote><p>G. P. Agrawal, <em>Nonlinear Fiber Optics</em>, 6th ed. (Academic Press, 2019), §5.2–5.3.</p></blockquote><blockquote><p>N. J. Zabusky and M. D. Kruskal, &quot;Interaction of solitons in a collisionless plasma and the recurrence of initial states,&quot; <em>Phys. Rev. Lett.</em> <strong>15</strong>, 240–243 (1965). DOI: <a href="https://doi.org/10.1103/PhysRevLett.15.240">10.1103/PhysRevLett.15.240</a></p></blockquote><div class="admonition is-success" id="Relation-to-Example-5-7eb65364711ac246"><header class="admonition-header">Relation to Example 5<a class="admonition-anchor" href="#Relation-to-Example-5-7eb65364711ac246" title="Permalink"></a></header><div class="admonition-body"><p><a href="../ex5_soliton_compression/">Example 5</a> focuses on the <strong>compression ratio</strong> at the first pulse minimum — demonstrating the experimental result of Mollenauer et al. (1980). This example focuses on the <strong>long-term stability and recurrence</strong> — proving the N=3 soliton is an exact, periodic solution of the NLS.</p></div></div></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../ex5_soliton_compression/">« 5 — HOSoliton Compression</a><a class="docs-footer-nextpage" href="../ex7_hollowcore_gas/">7 — Hollow-Core Gas Fiber »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Wednesday 29 July 2026 22:41">Wednesday 29 July 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
