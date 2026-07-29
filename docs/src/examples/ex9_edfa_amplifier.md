@@ -34,23 +34,40 @@ edfa = AmplifyingMedium(
     lambda0 = 1550e-9
 )
 
-params = SimParams(; medium=edfa, raman_model=nothing, z_saves=100)
-sol = solve(pulse, params; progress=false)
+sol = solve(pulse, SimParams(; medium=edfa, raman_model=nothing, z_saves=100); progress=false)
 
 E_in = pulse_energy(pulse)
 E_out = pulse_energy(Pulse(sol))
-gain_db = 10 * log10(E_out / E_in)
 println("Input Energy:   ", round(E_in * 1e12, digits=2), " pJ")
 println("Output Energy:  ", round(E_out * 1e9, digits=3), " nJ")
-println("Amplifier Gain: ", round(gain_db, digits=2), " dB")
+println("Amplifier Gain: ", round(10 * log10(E_out / E_in), digits=2), " dB")
 ```
 
-```@example ex9; hide = true
+```@example ex9
 using Plots
-gr()
-
-energies_nJ = [pulse_energy(Pulse(sol.At[:, i], sol.AW[:, i], grid)) * 1e9 for i in 1:length(sol.Z)]
-p1 = plot(sol.Z, energies_nJ, label="Pulse Energy (nJ)", xlabel="Amplifier Length z (m)", ylabel="Energy (nJ)", color=:magenta, lw=2.0)
-p2 = plot(grid.t .* 1e12, abs2.(Pulse(sol).At), label="Output Amplified Pulse", xlabel="Time (ps)", ylabel="Power (W)", color=:darkgreen, lw=1.5)
-plot(p1, p2, layout=(2, 1), size=(800, 500), plot_title="EDFA Femtosecond Pulse Amplification")
+plot(sol) # 4-panel dashboard showing EDFA amplification & dynamic gain saturation
 ```
+---
+
+## 📊 Expected Results
+
+With `g0_db = 12.0 dB/m` (small-signal gain) and `Esat = 2 μJ`:
+
+| Quantity | Expected Value |
+|:---|:---|
+| Input pulse energy | ~5 pJ (50 W peak, 100 fs Gaussian) |
+| Output pulse energy | ~50–200 pJ (gain-saturated) |
+| Realized gain | ~10–12 dB (less than small-signal due to saturation) |
+| ASE-dominated noise floor | −40 to −60 dBm/nm |
+| Pulse temporal broadening | Moderate — anomalous dispersion partially compresses |
+
+!!! tip "Gain vs Saturation"
+    If `E_pulse ≪ E_sat`: amplifier operates in the **small-signal regime**, gain ≈ g₀ × L.
+    If `E_pulse ≥ E_sat`: the gain saturates and output energy is clamped near E_sat.
+    Try increasing the input power 10× to observe the saturation clamp.
+
+## References
+
+> G. P. Agrawal, *Nonlinear Fiber Optics*, 6th ed. (Academic Press, 2019), Chapter 11.
+
+> E. Desurvire, *Erbium-Doped Fiber Amplifiers: Principles and Applications*, Wiley-Interscience (1994).

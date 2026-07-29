@@ -15,7 +15,8 @@ where $u_{01} \approx 2.40483$ is the fundamental $\text{HE}_{11}$ mode Bessel z
 ### Supported Gases
 
 - **Noble Gases**: `:Ar` (Argon), `:Ne` (Neon), `:Kr` (Krypton), `:Xe` (Xenon).
-- **Molecular Gases**: `:H2` (Hydrogen), `:N2` (Nitrogen), `:Air`.
+- **Molecular Gases (Raman)**: `:H2` (Hydrogen), `:N2` (Nitrogen) — support both rotational and vibrational Raman lines.
+- **Dispersion only**: `:Air` — Sellmeier dispersion available but no molecular Raman model.
 
 ---
 

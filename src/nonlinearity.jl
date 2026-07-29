@@ -57,6 +57,47 @@ end
 end
 
 """
+    step_index_aeff(core_radius_m::Real, NA::Real, lambda_m::Real) -> Float64
+
+Calculate the effective mode area A_eff(λ) [m²] for a step-index single-mode fiber
+using the Marcuse empirical Gaussian mode-field radius formula:
+
+    V(λ) = (2π a / λ) · NA
+    w(λ) = a · (0.65 + 1.619 / V^1.5 + 2.879 / V^6)
+    A_eff(λ) = π w(λ)²
+"""
+function step_index_aeff(core_radius_m::Real, NA::Real, lambda_m::Real)
+    core_radius_m > 0 || throw(ArgumentError("Core radius must be positive"))
+    NA > 0 || throw(ArgumentError("Numerical aperture NA must be positive"))
+    lambda_m > 0 || throw(ArgumentError("Wavelength must be positive"))
+
+    V = (2π * core_radius_m / lambda_m) * NA
+    V > 0.8 || throw(ArgumentError("V-number $V too small for single-mode guidance"))
+
+    w = core_radius_m * (0.65 + 1.619 / (V^1.5) + 2.879 / (V^6))
+    return π * w^2
+end
+
+"""
+    MarcuseAeff(core_radius_m::Real, NA::Real)
+
+Callable object representing a wavelength-dependent mode area A_eff(ω) [m²] based on Marcuse's model.
+"""
+struct MarcuseAeff
+    core_radius_m::Float64
+    NA::Float64
+
+    function MarcuseAeff(core_radius_m::Real, NA::Real)
+        new(Float64(core_radius_m), Float64(NA))
+    end
+end
+
+function (m::MarcuseAeff)(omega::Real)
+    lambda_m = 2π * c / abs(omega)
+    return step_index_aeff(m.core_radius_m, m.NA, lambda_m)
+end
+
+"""
     _spm(u, model::PhysicsModel, z::Real)
 
 Kerr (self-phase modulation) nonlinear operator.
@@ -67,6 +108,7 @@ Computes `iγ·gamma_W·to_freq(u|u|²)`. Zero allocations.
 
 [`_spm_raman`](@ref)
 """
+
 function _spm(u, model::PhysicsModel, z::Real)
     # SPM term u·|u|²
     @. model.buf_t1 = u * abs2(u)
@@ -276,6 +318,51 @@ function build_physics_model(grid::Grid, params::SimParams{S, M}, template::Abst
     )
 end
 
+function _amplifying_spm(u, model::PhysicsModel, z::Real)
+    aux = model.aux_data
+    g0_val = aux.g0 isa Real ? Float64(aux.g0) : 0.0
+    Esat = aux.Esat
+    dt = model.dt
+
+    E_pulse = sum(abs2, u) * dt
+    delta_g = -0.5 * g0_val * (E_pulse / (Esat + E_pulse))
+
+    gamma_z = eval_gamma(model.gamma, z, model.omega0)
+
+    @. model.buf_t1 = u * (1.0im * gamma_z * abs2(u) + delta_g)
+
+    mul!(model.buf_f1, model.to_freq, model.buf_t1)
+    @. model.buf_f1 = model.buf_f1 * (model.gamma_W / model.omega0)
+
+    return model.buf_f1
+end
+
+function _amplifying_spm_raman(u, model::PhysicsModel, z::Real)
+    aux = model.aux_data
+    g0_val = aux.g0 isa Real ? Float64(aux.g0) : 0.0
+    Esat = aux.Esat
+    dt = model.dt
+
+    E_pulse = sum(abs2, u) * dt
+    delta_g = -0.5 * g0_val * (E_pulse / (Esat + E_pulse))
+
+    RW = model.RW::Vector{ComplexF64}
+
+    @. model.buf_t1 = abs2(u)
+    mul!(model.buf_f1, model.to_freq, model.buf_t1)
+    @. model.buf_f1 = model.buf_f1 * RW
+    mul!(model.buf_t2, model.to_time, model.buf_f1)
+
+    gamma_z = eval_gamma(model.gamma, z, model.omega0)
+
+    @. model.buf_t1 = u * (1.0im * gamma_z * ((1.0 - model.fr) * abs2(u) + model.fr * dt * model.buf_t2) + delta_g)
+
+    mul!(model.buf_f1, model.to_freq, model.buf_t1)
+    @. model.buf_f1 = model.buf_f1 * (model.gamma_W / model.omega0)
+
+    return model.buf_f1
+end
+
 """
     build_physics_model(grid::Grid, params::SimParams{S, <:AmplifyingMedium}, [template])
 
@@ -310,19 +397,14 @@ function build_physics_model(grid::Grid, params::SimParams{S, M}, template::Abst
         raman_freq_response = _to_device(template, N .* ifft(ifftshift(h_R)))
     end
 
-    D_host = fftshift(dispersion_operator(grid, Medium(medium.length, medium.gamma, medium.loss, medium.dispersion, medium.lambda0)))
-    if medium.g0 isa Number
-        D_host .+= medium.g0 / 2.0
-    else
-        D_host .+= fftshift(medium.g0.(grid.W) ./ 2.0)
-    end
+    D_host = fftshift(dispersion_operator(grid, medium))
     D = _to_device(template, D_host)
 
     tmp = similar(template)
     to_freq = plan_ifft(tmp; flags=FFTW.MEASURE)
     to_time = plan_fft(tmp; flags=FFTW.MEASURE)
 
-    nonlinear_function = choose_nonlinear_term(enable_raman)
+    nonlinear_function = enable_raman ? _amplifying_spm_raman : _amplifying_spm
 
     buf_t1 = similar(D)
     buf_t2 = similar(D)
@@ -368,18 +450,20 @@ function _semiconductor_spm(u, model::PhysicsModel, z)
     sigma_fca = aux.sigma_fca
     k_fcr = aux.k_fcr
     tau_c = aux.tau_c
+    Nc = aux.Nc
     omega0 = model.omega0
     hbar = 1.054571817e-34
 
     A = u # u is ALREADY in time domain!
 
     c_gen = alpha2 / (2.0 * hbar * omega0 * Aeff^2)
-    Nc = zeros(Float64, length(A))
     N_curr = 0.0
-    for i in 1:length(A)
+    decay = exp(-dt / tau_c)
+    gain_factor = tau_c * (1.0 - decay)
+    @inbounds for i in 1:length(A)
         P_t = abs2(A[i])
         rate = c_gen * (P_t^2)
-        N_curr = N_curr * exp(-dt / tau_c) + rate * dt
+        N_curr = N_curr * decay + rate * gain_factor
         Nc[i] = N_curr
     end
 
@@ -416,7 +500,7 @@ function build_physics_model(grid::Grid, params::SimParams{S, M}, template::Abst
     W_host = enable_shock ? ifftshift(grid.W) : fill(grid.omega0, N)
     W = _to_device(template, W_host)
 
-    D_host = fftshift(dispersion_operator(grid, Medium(medium.length, medium.gamma, medium.loss, medium.dispersion, medium.lambda0)))
+    D_host = fftshift(dispersion_operator(grid, medium))
     D = _to_device(template, D_host)
 
     tmp = similar(template)
@@ -433,6 +517,7 @@ function build_physics_model(grid::Grid, params::SimParams{S, M}, template::Abst
         sigma_fca = medium.sigma_fca,
         k_fcr = medium.k_fcr,
         tau_c = medium.tau_c,
+        Nc = zeros(Float64, N),
     )
 
     PhysicsModel(

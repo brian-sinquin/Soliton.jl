@@ -35,35 +35,24 @@ The N=3 soliton was the first experimentally observed higher-order soliton in an
 ```@example ex5
 using JuGNLSE
 
-lambda0 = 1060e-9
-beta2   = -9.0e-27
-gamma   = 0.0019
+# ─── Corning SMF-28 telecom fiber ───────────────────────────────────────────
+medium = commercial_fiber("Corning_SMF28", length=100.0, lambda0=1550e-9)
 
-N  = 3
-T0 = 4e-12
-P0 = N^2 * abs(beta2) / (gamma * T0^2)
-LD = T0^2 / abs(beta2)
-FWHM = 2 * log(1 + sqrt(2)) * T0
-Zhalf = (π/2) * LD
+# ─── N=3 higher-order soliton pulse ─────────────────────────────────────────
+grid  = create_grid(2^12, 40e-12, medium.lambda0)
+pulse = sech_pulse(grid, 500.0, 1e-12) # 500 W peak, 1 ps FWHM
 
-grid   = create_grid(2^12, 60e-12, lambda0)
-medium = Medium(; length=Zhalf, gamma=gamma, loss=0.0, betas=[beta2], lambda0=lambda0)
-pulse  = sech_pulse(grid, P0, FWHM)
-
-params = SimParams(; medium=medium, z_saves=200, raman_model=nothing, self_steepening=false)
+# ─── Solve GNLSE ─────────────────────────────────────────────────────────────
+params = SimParams(; medium=medium, z_saves=300, raman_model=nothing)
 sol = solve(pulse, params; progress=false)
 
-peaks = [maximum(abs2, sol.At[:, i]) for i in axes(sol.At, 2)]
-Pmax  = maximum(peaks)
-compression_ratio = Pmax / P0
-println("N=3 Soliton Max Compression Ratio: ", round(compression_ratio; digits=2), "x")
+z_fiss, peak_power_z, _ = track_solitons(sol)
+println("N=3 Soliton Peak Power Compression: ", round(maximum(peak_power_z)/peak_power(pulse); digits=1), "x")
 ```
 
-```@example ex5; hide = true
+```@example ex5
 using Plots
-gr()
-
-plot(sol.Z .* 100, peaks, label="Peak Power P(z)", xlabel="Distance z (cm)", ylabel="Peak Power (W)", color=:purple, lw=2.0, plot_title="N=3 Soliton Compression & Breathing")
+plot(sol) # 4-panel dashboard showing pulse breathing & compression
 ```
 
 ## Expected Results

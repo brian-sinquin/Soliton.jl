@@ -43,3 +43,28 @@ struct SSFM <: GNLSESolver
         return new(Float64(dz))
     end
 end
+
+"""
+    AdaptiveSSFM(; phi_max=1e-3, dz_init=nothing, dz_min=1e-12, dz_max=1.0)
+
+Phase-controlled adaptive Split-Step Fourier Method (SSFM) solver.
+Controls step size via maximum nonlinear phase shift per step:
+Δz_opt = phi_max / (γ_phys * P_max).
+"""
+struct AdaptiveSSFM <: GNLSESolver
+    phi_max::Float64
+    dz_init::Union{Float64, Nothing}
+    dz_min::Float64
+    dz_max::Float64
+
+    function AdaptiveSSFM(;
+        phi_max::Real=1e-3,
+        dz_init::Union{Real, Nothing}=nothing,
+        dz_min::Real=1e-12,
+        dz_max::Real=1.0
+    )
+        phi_max > 0 || throw(ArgumentError("phi_max must be positive"))
+        dz_val = dz_init === nothing ? nothing : Float64(dz_init)
+        new(Float64(phi_max), dz_val, Float64(dz_min), Float64(dz_max))
+    end
+end

@@ -132,4 +132,52 @@ using JuGNLSE
         rel_diff = sum(abs2, sol_ssfm.At[:, end] .- sol_erk.At[:, end]) / sum(abs2, sol_erk.At[:, end])
         @test rel_diff < 1e-4
     end
+
+    @testset "Phase-Controlled Adaptive SSFM (AdaptiveSSFM)" begin
+        grid = create_grid(2^10, 10e-12, 835e-9)
+        medium = Medium(0.02, 0.11, 0.0, [-1.0e-26], 835e-9)
+        pulse = sech_pulse(grid, 100.0, 100e-15)
+
+        @test_throws ArgumentError AdaptiveSSFM(; phi_max=-1e-3)
+
+        solver_ad = AdaptiveSSFM(; phi_max=1e-3)
+        params_ad = SimParams(; medium=medium, z_saves=5, solver=solver_ad)
+        sol_ad = solve(pulse, params_ad; progress=false)
+
+        @test length(sol_ad.Z) == 5
+        @test all(isfinite, sol_ad.At)
+
+        solver_erk = ERK4IP(; rtol=1e-6, atol=1e-8)
+        params_erk = SimParams(; medium=medium, z_saves=5, solver=solver_erk)
+        sol_erk = solve(pulse, params_erk; progress=false)
+
+        rel_diff = sum(abs2, sol_ad.At[:, end] .- sol_erk.At[:, end]) / sum(abs2, sol_erk.At[:, end])
+        @test rel_diff < 1e-3
+    end
+
+    @testset "Spectrogram & FROG Diagnostics" begin
+        grid = create_grid(2^10, 10e-12, 835e-9)
+        pulse = gaussian_pulse(grid, 100.0, 100e-15)
+
+        t_spec, v_spec, S = spectrogram(pulse; n_delay=50)
+        @test length(t_spec) == 50
+        @test size(S) == (grid.N, 50)
+        @test all(isfinite, S)
+        @test maximum(S) > 0
+
+        t_frog, v_frog, I_frog = shg_frog_trace(pulse; n_delay=50)
+        @test length(t_frog) == 50
+        @test size(I_frog) == (grid.N, 50)
+        @test all(isfinite, I_frog)
+        @test maximum(I_frog) > 0
+    end
+
+    @testset "ERK4IP Operator Caching" begin
+        grid = create_grid(2^10, 10e-12, 1550e-9)
+        medium = Medium(0.05, 0.0011, 0.0, [-21.5e-27], 1550e-9)
+        pulse = sech_pulse(grid, 100.0, 100e-15)
+        
+        sol = solve(pulse, SimParams(; medium=medium, solver=ERK4IP(), raman_model=nothing); progress=false)
+        @test sol.Z[end] == 0.05
+    end
 end

@@ -42,7 +42,7 @@ betas = [
 ]
 lambda0 = 835e-9
 gamma   = 0.11
-grid = create_grid(2^13, 12.5e-12, lambda0)
+grid = create_grid(2^12, 12.5e-12, lambda0)
 
 function run_ensemble(T_FWHM, P0, L, M=5)
     medium = Medium(; length=L, gamma=gamma, loss=0.0, betas=betas, lambda0=lambda0)

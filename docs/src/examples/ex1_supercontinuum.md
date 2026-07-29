@@ -40,68 +40,40 @@ All dispersion coefficients from Dudley et al. (2006) Table 1:
 ```@example ex1
 using JuGNLSE
 
+# ─── PCF fiber (NKT NL-PM-750 commercial fiber preset) ─────────────────────
+medium = commercial_fiber("NKT_NL_PM_750", length=0.15) # 15 cm fiber
+
 # ─── Grid ──────────────────────────────────────────────────────────────────
-# 8192-point grid, 12.5 ps window at 835 nm — matches gnlse-python defaults
-grid = create_grid(2^13, 12.5e-12, 835e-9)
+# 8192-point grid, 12.5 ps window at 835 nm
+grid = create_grid(2^13, 12.5e-12, medium.lambda0)
 
-# ─── PCF fiber (Dudley et al. 2006, Table 1) ────────────────────────────────
-betas = [
-    -11.83e-27,   # β₂ [s²/m]
-     8.1076e-41,  # β₃ [s³/m]
-    -9.5229e-56,  # β₄ [s⁴/m]
-     2.0737e-70,  # β₅
-    -5.3943e-85,  # β₆
-     1.3486e-99,  # β₇
-    -2.5495e-114, # β₈
-     3.0524e-129, # β₉
-    -1.7140e-144, # β₁₀
-]
+# ─── Input pulse ─────────────────────────────────────────────────────────────
+# 10 kW peak power, 50 fs FWHM sech² pulse
+pulse = sech_pulse(grid, 10000.0, 50e-15)
 
-medium = Medium(;
-    length  = 0.15,       # 15 cm
-    gamma   = 0.11,       # [1/(W·m)]
-    loss    = 0.0,
-    betas   = betas,
-    lambda0 = 835e-9,
-)
-
-# ─── Input pulse: 50 fs FWHM sech², 10 kW peak power ───────────────────────
-pulse = sech_pulse(grid, 10_000.0, 50e-15)
-
-# ─── Simulation parameters ──────────────────────────────────────────────────
+# ─── Simulation parameters & propagation ─────────────────────────────────────
 params = SimParams(;
     medium          = medium,
-    z_saves         = 200,
-    raman_model     = Hollenbeck(),   # most accurate silica Raman model
+    z_saves         = 400,            # high resolution along z
+    raman_model     = Hollenbeck(),   # 13-oscillator silica Raman model
     self_steepening = true,
 )
 
-# ─── Solve ──────────────────────────────────────────────────────────────────
 sol = solve(pulse, params; progress=false)
-
-# Soliton number
-N = soliton_number(betas[1], 0.11, 50e-15 / 1.763, 10_000.0)
-println("Soliton number N = ", round(N; digits=2))
 ```
 
-```@example ex1; hide = true
+```@example ex1
 using Plots
-gr()
-
-wl_nm = 2π * 2.99792458e8 ./ grid.W .* 1e9
-psd_db = 10 .* log10.(max.(1e-10, abs2.(Pulse(sol).AW)))
-
-p1 = plot(grid.t .* 1e12, abs2.(Pulse(sol).At), label="Temporal Output", xlabel="Time (ps)", ylabel="Power (W)", color=:crimson, lw=1.5)
-p2 = plot(wl_nm, psd_db, label="Spectrum", xlabel="Wavelength (nm)", ylabel="PSD (dB)", xlims=(400, 1600), ylims=(-40, 10), color=:navy, lw=1.5)
-plot(p1, p2, layout=(2, 1), size=(800, 500), plot_title="Supercontinuum Generation in PCF")
+plot(sol) # Automatic 4-panel dashboard: temporal & spectral heatmaps and slices
 ```
 
 ## Expected Results
 
-- **Soliton fission** occurring near z ≈ 5–7 cm (first fission length L_fiss ≈ L_D/N)
+- **Soliton fission** occurring near $z \approx 0.8\text{--}1.0\text{ cm}$ (fission length $L_{\text{fiss}} \approx L_D / N \approx 6.8\text{ cm} / 8.65 \approx 0.8\text{ cm}$)
 - **Dispersive wave** emitted to the blue side (< 600 nm)
 - **Raman-shifted solitons** separating to the red (> 1000 nm)
 - Output spectrum spanning roughly 400–1600 nm
+- Both heatmaps should show the characteristic fan-out structure starting right after the fission point ($z \approx 1\text{ cm}$)
 
 ## Reference
 

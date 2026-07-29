@@ -119,37 +119,40 @@ Medium(; length, gamma, loss=0.0, betas=…, dispersion=…, lambda0)
 """
 abstract type AbstractMedium <: AbstractComponent end
 
-struct Medium{T <: Real, TG} <: AbstractMedium
+struct Medium{T <: Real, TG, TL, D <: DispersionModel} <: AbstractMedium
     length::T
     gamma::TG
-    loss::T
-    dispersion::DispersionModel
+    loss::TL
+    dispersion::D
     lambda0::T
 
-    function Medium{T, TG}(
-        length::T, gamma::TG, loss::T, dispersion::DispersionModel, lambda0::T
-    ) where {T <: Real, TG}
+    function Medium{T, TG, TL, D}(
+        length::T, gamma::TG, loss::TL, dispersion::D, lambda0::T
+    ) where {T <: Real, TG, TL, D <: DispersionModel}
         length > 0 || throw(ArgumentError("Fiber length must be positive"))
         if TG <: Real
             gamma >= 0 || throw(ArgumentError("Nonlinear coefficient must be non-negative"))
         end
-        loss >= 0 || throw(ArgumentError("Loss must be non-negative"))
+        if TL <: Real
+            loss >= 0 || throw(ArgumentError("Loss must be non-negative"))
+        end
         lambda0 > 0 || throw(ArgumentError("Center wavelength must be positive"))
 
-        new{T, TG}(length, gamma, loss, dispersion, lambda0)
+        new{T, TG, TL, D}(length, gamma, loss, dispersion, lambda0)
     end
 end
 
 # Outer constructors
 function Medium(
-    length::Real, gamma::Any, loss::Real, dispersion::DispersionModel, lambda0::Real
+    length::Real, gamma::Any, loss::Any, dispersion::DispersionModel, lambda0::Real
 )
-    T = promote_type(typeof(length), typeof(loss), typeof(lambda0), Float64)
-    return Medium{T, typeof(gamma)}(T(length), gamma, T(loss), dispersion, T(lambda0))
+    T = promote_type(typeof(length), typeof(lambda0), Float64)
+    loss_val = loss isa Real ? T(loss) : loss
+    return Medium{T, typeof(gamma), typeof(loss_val), typeof(dispersion)}(T(length), gamma, loss_val, dispersion, T(lambda0))
 end
 
 function Medium(
-    length::Real, gamma::Any, loss::Real, betas::AbstractVector{<:Real}, lambda0::Real
+    length::Real, gamma::Any, loss::Any, betas::AbstractVector{<:Real}, lambda0::Real
 )
     return Medium(length, gamma, loss, TaylorDispersion(betas), lambda0)
 end
@@ -164,7 +167,7 @@ one of the two).
 function Medium(;
     length::Real,
     gamma::Any,
-    loss::Real=0.0,
+    loss::Any=0.0,
     betas::Union{AbstractVector{<:Real}, Nothing}=nothing,
     dispersion::Union{DispersionModel, Nothing}=nothing,
     lambda0::Real,
@@ -173,9 +176,10 @@ function Medium(;
         throw(ArgumentError("provide exactly one of `betas` or `dispersion`"))
     disp = dispersion === nothing ? TaylorDispersion(betas) : dispersion
     T = promote_type(
-        typeof(length), typeof(loss), typeof(lambda0), Float64
+        typeof(length), typeof(lambda0), Float64
     )
-    Medium{T, typeof(gamma)}(T(length), gamma, T(loss), disp, T(lambda0))
+    loss_val = loss isa Real ? T(loss) : loss
+    Medium{T, typeof(gamma), typeof(loss_val), typeof(disp)}(T(length), gamma, loss_val, disp, T(lambda0))
 end
 
 """
@@ -186,32 +190,34 @@ Active rare-earth-doped amplifying fiber medium (EDFA, YDFA, TDFA) with gain sat
 # Fields
 - `length::T`: Fiber length [m]
 - `gamma::TG`: Nonlinear coefficient [1/(W·m)]
-- `g0::GD`: Small-signal gain [1/m] (dB/m converted to Np/m: `g_Np = ln(10^(g_dB/10))`)
+- `g0::GD`: Small-signal gain [1/m] (dB/m converted to Np/m: `g_Np = ln(10^(g_dB/10))`, or vector/function)
 - `Esat::T`: Saturation energy [J]
 - `noise_figure_db::T`: Amplifier Noise Figure [dB] (default: 4.0 dB)
-- `loss::T`: Background loss factor [dB/m]
+- `loss::TL`: Background loss factor [dB/m] (scalar, vector, or function)
 - `dispersion::DispersionModel`: Chromatic dispersion model
 - `lambda0::T`: Center wavelength [m]
 """
-struct AmplifyingMedium{T <: Real, TG, GD} <: AbstractMedium
+struct AmplifyingMedium{T <: Real, TG, GD, TL} <: AbstractMedium
     length::T
     gamma::TG
     g0::GD
     Esat::T
     noise_figure_db::T
-    loss::T
+    loss::TL
     dispersion::DispersionModel
     lambda0::T
 
     function AmplifyingMedium(
-        length::T, gamma::TG, g0::GD, Esat::T, noise_figure_db::T, loss::T, dispersion::DispersionModel, lambda0::T
-    ) where {T <: Real, TG, GD}
+        length::T, gamma::TG, g0::GD, Esat::T, noise_figure_db::T, loss::TL, dispersion::DispersionModel, lambda0::T
+    ) where {T <: Real, TG, GD, TL}
         length > 0 || throw(ArgumentError("Fiber length must be positive"))
         Esat > 0 || throw(ArgumentError("Saturation energy Esat must be positive"))
         noise_figure_db >= 0 || throw(ArgumentError("Noise Figure must be non-negative"))
-        loss >= 0 || throw(ArgumentError("Loss must be non-negative"))
+        if TL <: Real
+            loss >= 0 || throw(ArgumentError("Loss must be non-negative"))
+        end
         lambda0 > 0 || throw(ArgumentError("Center wavelength must be positive"))
-        new{T, TG, GD}(length, gamma, g0, Esat, noise_figure_db, loss, dispersion, lambda0)
+        new{T, TG, GD, TL}(length, gamma, g0, Esat, noise_figure_db, loss, dispersion, lambda0)
     end
 end
 
@@ -219,10 +225,10 @@ function AmplifyingMedium(;
     length::Real,
     gamma::Any,
     g0::Any=nothing,
-    g0_db::Union{Real, Nothing}=nothing,
+    g0_db::Union{Real, AbstractVector{<:Real}, Nothing}=nothing,
     Esat::Real,
     noise_figure_db::Real=4.0,
-    loss::Real=0.0,
+    loss::Any=0.0,
     betas::Union{AbstractVector{<:Real}, Nothing}=nothing,
     dispersion::Union{DispersionModel, Nothing}=nothing,
     lambda0::Real,
@@ -232,9 +238,10 @@ function AmplifyingMedium(;
     (g0 === nothing) ⊻ (g0_db === nothing) ||
         throw(ArgumentError("provide concentration/gain via exactly one of `g0` or `g0_db`"))
     disp = dispersion === nothing ? TaylorDispersion(betas) : dispersion
-    gain_val = g0_db !== nothing ? log(10.0^(g0_db / 10.0)) : g0 # Convert dB/m to Np/m if g0_db given
-    T = promote_type(typeof(length), typeof(Esat), typeof(noise_figure_db), typeof(loss), typeof(lambda0), Float64)
-    return AmplifyingMedium(T(length), gamma, gain_val, T(Esat), T(noise_figure_db), T(loss), disp, T(lambda0))
+    gain_val = g0_db !== nothing ? (g0_db isa Real ? Float64(g0_db) * (log(10.0) / 10.0) : Float64.(g0_db) .* (log(10.0) / 10.0)) : g0
+    T = promote_type(typeof(length), typeof(Esat), typeof(noise_figure_db), typeof(lambda0), Float64)
+    loss_val = loss isa Real ? T(loss) : loss
+    return AmplifyingMedium(T(length), gamma, gain_val, T(Esat), T(noise_figure_db), loss_val, disp, T(lambda0))
 end
 
 """
@@ -591,9 +598,9 @@ Solution to GNLSE propagation.
 
 # Fields
 
-  - `t::Vector{Float64}`: Time domain grid [ps]
-  - `W::Vector{Float64}`: Absolute angular frequency grid [rad/ps = THz]
-  - `omega0::Float64`: Central angular frequency [rad/ps = THz]
+  - `t::Vector{Float64}`: Time domain grid [s]
+  - `W::Vector{Float64}`: Absolute angular frequency grid [rad/s]
+  - `omega0::Float64`: Central angular frequency [rad/s]
   - `Z::Vector{Float64}`: Propagation distances [m]
   - `At::Matrix{T}`: Time domain solution (N × z_saves)
   - `AW::Matrix{T}`: Frequency domain solution (N × z_saves)

@@ -35,7 +35,8 @@ pulse = gaussian_pulse(grid, 10.0, 100e-15) # 10 W peak power input
 edfa = AmplifyingMedium(
     length = 1.5,           # 1.5 m active fiber
     gamma = 0.0012,         # 1.2 /W/km
-    g0_db = 15.0,           # +15 dB/m small-signal gain
+    g0_db = 3.0,            # 3 dB/m small-signal gain (typ. 1–5 dB/m for EDF)
+                            # Note: 15 dB/m would imply 22.5 dB total gain — unrealistic
     Esat = 1.0e-6,          # 1 μJ saturation energy
     noise_figure_db = 4.5,  # 4.5 dB noise figure
     betas = [-22.0e-27],    # anomalous dispersion

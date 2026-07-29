@@ -151,13 +151,18 @@ function _propagate_erk4ip!(
     mul!(u_temp, model.to_time, U)  # frequency → time
     copyto!(Nu, model.nonlinear_function(u_temp, model, 0.0))
 
+    cached_dz = -1.0
+
     while z < z_end && save_idx <= n_saves
         # Target for next save
         z_target = z_saves[save_idx]
         dz = min(dz, z_target - z)
 
-        # Dispersion half-step operator for this step size
-        @. exp_half_dz_D = exp(0.5 * dz * model.D)
+        # Dispersion half-step operator for this step size (cached when dz is unchanged)
+        if dz != cached_dz
+            @. exp_half_dz_D = exp(0.5 * dz * model.D)
+            cached_dz = dz
+        end
 
         # ============================================================
         # ERK4(3) in Interaction Picture - Following SPIP C code exactly

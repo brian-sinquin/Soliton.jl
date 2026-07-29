@@ -44,5 +44,22 @@ using JuGNLSE
 
         # Expected power gain: +5 dB/m over 1 m = 10^(5/10) = 3.162x energy
         @test E_out / pulse_energy(low_pulse) ≈ 10.0^(5.0/10.0) rtol=0.05
+
+        # Saturated gain regime
+        high_pulse = gaussian_pulse(grid, 1e5, 100e-15) # ~10.6 nJ pulse
+        med_sat = AmplifyingMedium(
+            length = 1.0,
+            gamma = 0.0012,
+            g0_db = 10.0, # +10 dB/m (linear boost would be 10x)
+            Esat = 1e-9,  # 1 nJ Esat -> heavily saturated
+            noise_figure_db = 0.0,
+            betas = [-22.0e-27],
+            lambda0 = 1550e-9
+        )
+        params_sat = SimParams(; medium=med_sat, z_saves=5, raman_model=nothing)
+        sol_sat = solve(high_pulse, params_sat; progress=false)
+        E_out_sat = pulse_energy(Pulse(sol_sat))
+        # Net gain ratio E_out / E_in should be significantly smaller than linear 10x gain
+        @test E_out_sat / pulse_energy(high_pulse) < 5.0
     end
 end

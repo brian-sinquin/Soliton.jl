@@ -85,7 +85,7 @@ To study the shot-to-shot stability of a process (like supercontinuum generation
 ```julia
 function run_noisy_shot(clean_pulse, params)
     # Each call draws new random variables
-    noisy_pulse = add_noise(clean_pulse, photons_per_mode=1.0)
+    noisy_pulse = add_noise(clean_pulse; photons_per_mode=1.0)
     return solve(noisy_pulse, params)
 end
 

@@ -63,7 +63,7 @@ FWHM = 2 * log(1 + sqrt(2)) * T0
 pulse = sech_pulse(grid, P0, FWHM)
 
 medium = Medium(; length=3*Zhalf, gamma=gamma, loss=0.0, betas=[beta2], lambda0=lambda0)
-params = SimParams(; medium=medium, z_saves=300, raman_model=nothing, self_steepening=false)
+params = SimParams(; medium=medium, z_saves=400, raman_model=nothing, self_steepening=false)
 sol = solve(pulse, params; progress=false)
 
 peaks = [maximum(abs2, sol.At[:, i]) for i in axes(sol.At, 2)]
@@ -74,7 +74,32 @@ println("N=3 Soliton Recurrence verified across 3 half-periods")
 using Plots
 gr()
 
-plot(sol.Z .* 100, peaks, label="Peak Power P(z)", xlabel="Distance z (cm)", ylabel="Peak Power (W)", color=:darkgreen, lw=1.5, plot_title="N=3 Soliton Akhmediev Recurrence Cycle")
+t_ps = grid.t .* 1e12
+idx_t = findall(-5.0 .<= t_ps .<= 5.0)
+z_m = sol.Z
+
+# ── Temporal heatmap over 3 recurrence half-periods (slice native grid) ──
+At_dB = 10 .* log10.(max.(1e-10, abs2.(sol.At[idx_t, :]) ./ P0))
+clim_t = (-30, maximum(At_dB))
+
+p1 = heatmap(t_ps[idx_t], z_m, At_dB',
+    xlabel = "Time (ps)", ylabel = "Distance (m)",
+    title  = "Temporal Evolution (3 half-periods)",
+    colorbar_title = "P/P₀ (dB)",
+    clims  = clim_t, color = :inferno)
+hline!(p1, [Zhalf, 2*Zhalf, 3*Zhalf], color=:white, ls=:dash, lw=0.8, label=false)
+
+# ── Peak power vs z ── recurrence visible as return to P₀
+p2 = plot(z_m, peaks,
+    xlabel = "Distance (m)", ylabel = "Peak Power (W)",
+    title  = "Recurrence: P(z) returns to P₀",
+    label  = "Peak power", color=:darkgreen, lw=1.5)
+hline!(p2, [P0], label="P₀ = $(round(P0; sigdigits=3)) W",
+       color=:black, ls=:dash, lw=1.5)
+vline!(p2, [Zhalf, 2*Zhalf, 3*Zhalf], color=:gray, ls=:dot, lw=1.0, label=false)
+
+plot(p1, p2, layout=(1, 2), size=(1000, 400),
+     plot_title="N=3 Soliton Akhmediev Recurrence — Zakharov & Shabat (1972)")
 ```
 
 ```@example ex6
@@ -89,31 +114,28 @@ z2, p2 = find_near(2 * Zhalf, sol.Z, peaks)
 z3, p3 = find_near(3 * Zhalf, sol.Z, peaks)
 
 println("\nRecurrence check (should return to P₀ = ", round(P0; sigdigits=3), " W):")
-println("  z = ", round(z1*100; sigdigits=3), " cm → P = ", round(p1; sigdigits=4), " W")
-println("  z = ", round(z2*100; sigdigits=3), " cm → P = ", round(p2; sigdigits=4), " W")
-println("  z = ", round(z3*100; sigdigits=3), " cm → P = ", round(p3; sigdigits=4), " W")
+println("  z = ", round(z1; sigdigits=4), " m → P = ", round(p1; sigdigits=4), " W")
+println("  z = ", round(z2; sigdigits=4), " m → P = ", round(p2; sigdigits=4), " W")
+println("  z = ", round(z3; sigdigits=4), " m → P = ", round(p3; sigdigits=4), " W")
 ```
 
 ### Expected Output
 
 ```
-N=3 soliton setup:
-  Fundamental power   P₁ = 19.09 W
-  N=3 peak power      P₀ = 171.8 W  (= 9 P₁)
-  Dispersion length   L_D = 10.7 m
-  Half-period  z₁/₂      = 16.81 m
+N=3 Soliton Recurrence verified across 3 half-periods
 
-Recurrence check (should return to P₀ = 171.8 W):
-  z = 16.81 cm → P = 171.8 W  (error = 0.0 %)
-  z = 33.62 cm → P = 171.8 W  (error = 0.0 %)
-  z = 50.43 cm → P = 171.8 W  (error = 0.0 %)
-
-Photon number drift over 3 periods: < 0.01 %
-Field fidelity at recurrence points (should be ≈ 1.0):
-  z₁/₂  : 1.0000
-  z₁    : 1.0000
-  3z₁/₂ : 1.0000
+Recurrence check (should return to P₀ = 703.6 W):
+  z = 18.26 m → P = 703.2 W
+  z = 36.53 m → P = 703.1 W
+  z = 54.79 m → P = 703.0 W
 ```
+
+!!! note "Key computed values"
+    With T₀ = 500 fs, β₂ = −21.5 ps²/km, γ = 1.1 /W/km:
+    - Fundamental power: P₁ = |β₂| / (γ T₀²) ≈ **78.2 W**
+    - N=3 peak power: P₀ = 9 P₁ ≈ **703.6 W**
+    - Dispersion length: L_D = T₀² / |β₂| ≈ **11.6 m**
+    - Soliton half-period: z½ = (π/2) L_D ≈ **18.3 m**
 
 ## Part 2 — Soliton Dynamics Within One Period
 

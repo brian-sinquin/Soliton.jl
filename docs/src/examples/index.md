@@ -22,15 +22,15 @@ Each example in **JuGNLSE.jl** reproduces a key result from the nonlinear optics
 
 ## 🛠️ Common Workflow Patterns
 
-### 1. Standard Scalar GNLSE (Silica Fiber)
+### 1. Standard Scalar GNLSE (Photonic Crystal Fiber)
 ```julia
-using JuGNLSE
+using JuGNLSE, Plots
 
-grid   = create_grid(2^13, 12.5e-12, 835e-9)
-medium = Medium(; length=0.15, gamma=0.11, loss=0.0, betas=[-11.83e-27, 8.1e-41], lambda0=835e-9)
+medium = commercial_fiber("NKT_NL_PM_750", length=0.15) # 15 cm fiber
+grid   = create_grid(2^13, 12.5e-12, medium.lambda0)
 pulse  = sech_pulse(grid, 10_000.0, 50e-15)
-params = SimParams(; medium=medium, raman_model=Hollenbeck(), self_steepening=true)
-sol    = solve(pulse, params)
+sol    = solve(pulse, SimParams(; medium=medium, raman_model=Hollenbeck(), self_steepening=true))
+plot(sol) # Dashboard visualization
 ```
 
 ### 2. Birefringent Coupled Vectorial GNLSE

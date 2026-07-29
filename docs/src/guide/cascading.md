@@ -19,9 +19,9 @@ Point-like optical components between fiber segments are represented by [`Lumped
 ```julia
 using JuGNLSE
 
-amp     = Amplifier(20.0)         # +20 dB gain
-att     = Attenuator(3.0)         # −3 dB
-bandpass = Filter(ω -> abs(ω - 2π*c/1550e-9) < 1e12 ? 1.0 : 0.0)
+amp      = Amplifier(20.0)         # +20 dB gain
+att      = Attenuator(3.0)         # −3 dB
+bandpass = Filter(ω -> abs(ω - 2π*2.99792458e8/1550e-9) < 1e12 ? 1.0 : 0.0)
 ```
 
 Elements can be applied directly to a pulse:
@@ -49,8 +49,8 @@ amp    = Amplifier(13.0)    # +13 dB EDFA
 fiber2 = SimParams(; medium=Medium(10.0, 0.0011, 0.2e-3, [-21.5e-27], 1550e-9))
 filter = Filter(ω -> exp(-((ω - 2π*c/1550e-9)^2) / (2 * (1e12)^2)))
 
-# Pipe: pulse → fiber1 → amplifier → fiber2 → filter → final solution
-sol = pulse |> fiber1 |> amp |> fiber2 |> filter |> fiber2
+# Pipe: pulse → fiber1 → amplifier → filter → fiber2 → final solution
+sol = pulse |> fiber1 |> amp |> filter |> fiber2
 ```
 
 !!! note "Solution-to-Pulse conversion"
@@ -93,12 +93,12 @@ main_fiber = SimParams(;
 
 # Band-pass filter to clean up ASE
 bpf = Filter(ω -> begin
-    Δω = ω - 2π * c / 1550e-9
+    Δω = ω - 2π * 2.99792458e8 / 1550e-9
     exp(-Δω^2 / (2 * (2π * 1e12)^2))  # 1 THz Gaussian filter
 end)
 
 # Run the full chain
-sol = pulse |> pre_amp_fiber |> edfa |> main_fiber |> bpf |> main_fiber
+sol = pulse |> pre_amp_fiber |> edfa |> main_fiber |> bpf
 
 println("Output peak power: ", maximum(abs2, sol.At[:, end]), " W")
 ```

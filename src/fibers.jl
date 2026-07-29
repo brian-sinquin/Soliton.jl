@@ -244,7 +244,7 @@ function gas_n2(gas::Symbol, pressure_bar::Real)
 end
 
 """
-    HollowCoreFiber(; radius, gas, pressure, length, lambda0, loss=0.0, temperature=293.15) -> Medium
+    HollowCoreFiber(; radius, gas, pressure, length, lambda0, loss=0.0, temperature=293.15, grid=nothing) -> Medium
 
 Construct a [`Medium`](@ref) for a gas-filled Hollow-Core Photonic Crystal Fiber (HC-PCF).
 
@@ -263,6 +263,7 @@ where u₀₁ ≈ 2.40483 is the fundamental HE₁₁ mode Bessel root, and R_co
 - `lambda0::Real`: Central wavelength [m]
 - `loss::Real`: Fiber attenuation [dB/m] (default 0.0)
 - `temperature::Real`: Temperature T [K] (default 293.15 K)
+- `grid::Union{Grid, Nothing}`: Optional simulation grid. If provided, constructs exact [`TabulatedDispersion`](@ref) over the full frequency span.
 
 # Example
 ```julia
@@ -277,7 +278,8 @@ function HollowCoreFiber(;
     length::Real,
     lambda0::Real,
     loss::Real=0.0,
-    temperature::Real=293.15
+    temperature::Real=293.15,
+    grid::Union{Grid, Nothing}=nothing
 )
     radius > 0 || throw(ArgumentError("Core radius must be positive"))
     pressure >= 0 || throw(ArgumentError("Pressure must be non-negative"))
@@ -297,11 +299,24 @@ function HollowCoreFiber(;
 
     b0 = beta_at_w(w0)
     bp = (beta_at_w(w0 + dw) - beta_at_w(w0 - dw)) / (2dw)
-    b2 = (beta_at_w(w0 + dw) - 2b0 + beta_at_w(w0 - dw)) / (dw^2)
-    b3 = (beta_at_w(w0 + 2dw) - 2beta_at_w(w0 + dw) + 2beta_at_w(w0 - dw) - beta_at_w(w0 - 2dw)) / (2dw^3)
-    b4 = (beta_at_w(w0 + 2dw) - 4beta_at_w(w0 + dw) + 6b0 - 4beta_at_w(w0 - dw) + beta_at_w(w0 - 2dw)) / (dw^4)
 
-    disp = TaylorDispersion([b2, b3, b4])
+    disp = if grid !== nothing
+        # Exact continuous tabulated dispersion over the simulation grid
+        V_detuning = grid.V
+        B_vals = zeros(Float64, length(V_detuning))
+        for k in eachindex(V_detuning)
+            wk = w0 + V_detuning[k]
+            if wk > 0
+                B_vals[k] = beta_at_w(wk) - b0 - bp * V_detuning[k]
+            end
+        end
+        TabulatedDispersion(V_detuning, B_vals)
+    else
+        b2 = (beta_at_w(w0 + dw) - 2b0 + beta_at_w(w0 - dw)) / (dw^2)
+        b3 = (beta_at_w(w0 + 2dw) - 2beta_at_w(w0 + dw) + 2beta_at_w(w0 - dw) - beta_at_w(w0 - 2dw)) / (2dw^3)
+        b4 = (beta_at_w(w0 + 2dw) - 4beta_at_w(w0 + dw) + 6b0 - 4beta_at_w(w0 - dw) + beta_at_w(w0 - 2dw)) / (dw^4)
+        TaylorDispersion([b2, b3, b4])
+    end
 
     Aeff = 0.84 * π * radius^2
     n2_val = gas_n2(gas, pressure)

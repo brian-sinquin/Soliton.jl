@@ -96,8 +96,9 @@ medium = Medium(;
     lambda0  = 1550e-9,
 )
 
-# Fundamental soliton input
-T0 = 200e-15  # 200 fs
+# Fundamental soliton input (T₀=50 fs → ~12 nm SSFS visible over 10 soliton periods)
+# Note: SSFS ∝ T₀⁻⁴; using T₀=200 fs gives only ~0.05 nm (invisible!)
+T0 = 50e-15  # 50 fs soliton half-width
 P0 = abs(medium.dispersion.betas[1]) / (medium.gamma * T0^2)
 pulse = sech_pulse(grid, P0, T0 * 2 * log(1 + sqrt(2)))
 

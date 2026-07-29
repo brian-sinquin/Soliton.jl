@@ -23,28 +23,19 @@ pulse = sech_pulse(grid, 50.0e3, 30e-15)
 hcf = HollowCoreFiber(
     radius = 15e-6,      # 15 μm core radius (30 μm core diameter)
     gas = :Ar,           # Argon gas
-    pressure = 3.0,      # 3 bar
+    pressure = 3.0,      # 3 bar pressure tuning
     length = 0.5,        # 0.5 m length
-    lambda0 = 800e-9
+    lambda0 = 800e-9,
+    grid = grid          # continuous capillary dispersion grid
 )
 
-params = SimParams(; medium=hcf, raman_model=nothing, z_saves=100)
-sol = solve(pulse, params; progress=false)
+sol = solve(pulse, SimParams(; medium=hcf, raman_model=nothing, z_saves=100); progress=false)
 
-E_in = pulse_energy(pulse)
-E_out = pulse_energy(Pulse(sol))
-println("Input Energy:  ", round(E_in * 1e9, digits=3), " nJ")
-println("Output Energy: ", round(E_out * 1e9, digits=3), " nJ")
+println("Input Energy:  ", round(pulse_energy(pulse) * 1e9, digits=3), " nJ")
+println("Output Energy: ", round(pulse_energy(Pulse(sol)) * 1e9, digits=3), " nJ")
 ```
 
-```@example ex7; hide = true
+```@example ex7
 using Plots
-gr()
-
-wl_nm = 2π * 2.99792458e8 ./ grid.W .* 1e9
-psd_db = 10 .* log10.(max.(1e-10, abs2.(Pulse(sol).AW)))
-
-p1 = plot(grid.t .* 1e12, abs2.(Pulse(sol).At), label="Output Pulse (Argon 3 bar)", xlabel="Time (ps)", ylabel="Power (W)", color=:dodgerblue, lw=1.5)
-p2 = plot(wl_nm, psd_db, label="Output Spectrum", xlabel="Wavelength (nm)", ylabel="PSD (dB)", xlims=(500, 1100), color=:teal, lw=1.5)
-plot(p1, p2, layout=(2, 1), size=(800, 500), plot_title="Hollow-Core PCF Soliton Dynamics")
+plot(sol) # 4-panel dashboard showing gas-filled HC-PCF dynamics
 ```

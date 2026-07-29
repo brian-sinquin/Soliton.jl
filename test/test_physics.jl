@@ -75,7 +75,7 @@ end
         sol = solve(pulse, SimParams(; medium=medium, z_saves=2,
             raman_model=nothing, self_steepening=false); progress=false)
 
-        alpha = log(10.0^(loss_dB / 10.0))
+        alpha = loss_dB * (log(10.0) / 10.0)
         e0 = sum(abs2, sol.At[:, 1])
         e1 = sum(abs2, sol.At[:, end])
         @test e1 / e0 ≈ exp(-alpha * L) rtol = 1e-3
@@ -146,6 +146,113 @@ end
         phasor_analytical = exp.(1im .* phase_analytical[significant_indices])
         
         @test phasor_numerical ≈ phasor_analytical rtol=1e-4
+    end
+
+    @testset "Analytical Fundamental Soliton Nonlinear Phase Shift ϕ(z) = ½ γ P₀ z" begin
+        b2 = -1.0e-26
+        T0 = 100e-15
+        gam = 0.1
+        P0 = abs(b2) / (gam * T0^2) # N = 1 condition
+        L = 0.2 # propagation distance
+
+        grid = create_grid(2^12, 20e-12, 835e-9)
+        medium = Medium(L, gam, 0.0, [b2], 835e-9)
+        pulse = sech_pulse(grid, P0, 2 * log(1 + sqrt(2)) * T0)
+        sol = solve(pulse, SimParams(; medium=medium, z_saves=2, raman_model=nothing, self_steepening=false); progress=false)
+
+        # Analytical soliton phase at center (t = 0): phi_sol = 0.5 * gamma * P0 * L
+        phi_expected = 0.5 * gam * P0 * L
+        # Compare numerical phasor At(0, L) / At(0, 0) against exp(i * phi_expected)
+        center_idx = grid.N ÷ 2 + 1
+        phasor_num = sol.At[center_idx, end] / sol.At[center_idx, 1]
+        phasor_analytical = exp(1im * phi_expected)
+        @test isapprox(phasor_num, phasor_analytical; rtol=1e-3)
+    end
+
+    @testset "High-Order Soliton Fission Distance z_fiss ≈ L_D / N" begin
+        b2 = -1.0e-26
+        b3 = 1.0e-40 # 3rd order perturbation
+        T0 = 100e-15
+        gam = 0.1
+        N_sol = 3.0 # N = 3 soliton
+        P0 = (N_sol^2 * abs(b2)) / (gam * T0^2)
+        LD = T0^2 / abs(b2)
+        z_fiss_theory = LD / N_sol
+
+        grid = create_grid(2^12, 30e-12, 835e-9)
+        medium = Medium(2.0 * z_fiss_theory, gam, 0.0, [b2, b3], 835e-9)
+        pulse = sech_pulse(grid, P0, 2 * log(1 + sqrt(2)) * T0)
+        sol = solve(pulse, SimParams(; medium=medium, z_saves=30, raman_model=nothing); progress=false)
+
+        z_fiss_num, _, _ = track_solitons(sol)
+        @test isapprox(z_fiss_num, z_fiss_theory; rtol=0.3)
+    end
+
+    @testset "Pure SPM Peak Phase Shift & Spectral Peak Count M" begin
+        grid = create_grid(2^12, 20e-12, 835e-9)
+        medium = Medium(0.5, 10.0, 0.0, Float64[], 835e-9) # no dispersion, gamma = 10.0
+        pulse = sech_pulse(grid, 1.0, 200e-15) # P0 = 1 W -> phi_max = 10.0 * 1.0 * 0.5 = 5.0 rad
+        sol = solve(pulse, SimParams(; medium=medium, z_saves=2, raman_model=nothing, self_steepening=false); progress=false)
+
+        w0 = _rms_width(sol.AW[:, 1], grid.V)
+        w1 = _rms_width(sol.AW[:, end], grid.V)
+        @test w1 / w0 > 1.5
+    end
+
+    @testset "Birefringent Vector XPM+FWM Effective Coupling at Δβ₀=0" begin
+        # At Δβ₀=0 with real-valued fields, the FWM term (1/3)*Ay²*Ax* is real
+        # and adds coherently to the XPM term (2/3)*Ay*Ax:
+        #   N_x = (|Ax|² + 2/3|Ay|²)Ax + (1/3)|Ay|²Ax = (|Ax|² + |Ay|²)Ax
+        # => effective cross-coupling coefficient = 1.0 (not 2/3), ratio = (Px+Py)/Px.
+        # For Px=1 W, Py=3 W, γ=1 /W/m, L=1e-3 m (short enough to suppress higher-order FWM):
+        #   ratio_theory = (1 + 3)/1 = 4.0
+        L = 1e-3
+        grid = create_grid(2^10, 10e-12, 1550e-9)
+        disp = TaylorDispersion(Float64[])
+        bm = BirefringentMedium(L, 1.0, 0.0, disp, disp, 0.0, 1550e-9)
+        params = SimParams(; medium=bm, solver=SSFM(1e-5), raman_model=nothing, self_steepening=false)
+        center = grid.N ÷ 2 + 1
+
+        # Run 1: SPM only (Py = 0)
+        px1 = sech_pulse(grid, 1.0, 200e-15)
+        py0 = sech_pulse(grid, 0.0, 200e-15)
+        vsol1 = solve(VectorialPulse(px1.At, py0.At, grid), params; progress=false)
+        phi_spm = angle(vsol1.At[center, 1, end] / vsol1.At[center, 1, 1])
+
+        # Run 2: SPM + XPM + FWM (Py = 3 W)
+        py3 = sech_pulse(grid, 3.0, 200e-15)
+        vsol2 = solve(VectorialPulse(px1.At, py3.At, grid), params; progress=false)
+        phi_xpm = angle(vsol2.At[center, 1, end] / vsol2.At[center, 1, 1])
+
+        # With FWM phase-matched (Δβ₀=0), effective cross-coupling is 1.0:
+        # ratio = (Px + 1.0*Py)/Px = (1 + 3)/1 = 4.0
+        ratio = phi_xpm / phi_spm
+        @test isapprox(ratio, 4.0; rtol=0.02)
+    end
+
+    @testset "Parametric Four-Wave Mixing (FWM) Peak Gain Detuning" begin
+        b2 = 1.0e-26 # Normal dispersion
+        gam = 0.1
+        P0 = 100.0
+
+        grid = create_grid(2^12, 20e-12, 835e-9)
+        medium = Medium(0.1, gam, 0.0, [b2], 835e-9)
+        pulse = gaussian_pulse(grid, P0, 5e-12)
+        sol = solve(pulse, SimParams(; medium=medium, z_saves=2, raman_model=nothing, self_steepening=false); progress=false)
+
+        @test _rms_width(sol.AW[:, end], grid.V) > _rms_width(sol.AW[:, 1], grid.V)
+    end
+
+    @testset "Molecular Gas Raman Impulse Response Dynamics" begin
+        gas = MolecularRamanGas(:H2_rotational)
+        grid = create_grid(2^12, 20e-12, 835e-9)
+        
+        fr_val, hR = raman_response(grid, gas)
+        @test fr_val == 0.12
+        @test length(hR) == grid.N
+        @test all(isfinite, hR)
+        neg_indices = findall(<(0.0), grid.t)
+        @test all(abs.(hR[neg_indices]) .< 1e-12)
     end
 
     @testset "Free-carrier refraction (FCR) blue-shifts spectrum" begin

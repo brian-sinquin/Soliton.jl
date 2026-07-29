@@ -88,16 +88,19 @@ include("nonlinearity.jl")
 include("solvers/erk4ip.jl")
 include("solvers/ssfm.jl")
 include("solvers/ssfm_vectorial.jl")
+include("solvers/adaptive_ssfm.jl")
 
 include("solver.jl")
 include("analysis.jl")
 include("fibers.jl")
+include("conversions.jl")
+include("recipes.jl")
 
 # Export types
 export Medium, SimParams, Grid, Pulse, Solution
 export RamanModel, BlowWood, LinAgrawal, Hollenbeck
 export DispersionModel, TaylorDispersion, TabulatedDispersion, SellmeierDispersion
-export GNLSESolver, ERK4IP, SSFM
+export GNLSESolver, ERK4IP, SSFM, AdaptiveSSFM
 export VectorialPulse, BirefringentMedium, VectorialSolution, AmplifyingMedium, SemiconductorMedium
 export LumpedElement, Amplifier, Attenuator, Filter, PMDElement, apply
 export NonlinearityModel, ConstantNonlinearity, FrequencyDependentNonlinearity, NonlinearityFromEffectiveArea
@@ -106,7 +109,14 @@ export NonlinearityModel, ConstantNonlinearity, FrequencyDependentNonlinearity, 
 export FiberSpec, FiberLibrary, commercial_fiber, HollowCoreFiber, gas_refractive_index
 export FusedSilica, SF6, SF57, GeO2DopedSilica
 export MolecularRamanGas
+export SilicaLossSpectrum
 
+# Mode overlap & Waveguide Effective Area
+export step_index_aeff, MarcuseAeff
+
+# Optics Units Conversions
+export dispersion_D_to_beta2, beta2_to_dispersion_D, dispersion_S_to_beta3
+export wavelength_to_frequency, frequency_to_wavelength
 
 # Export grid functions
 export create_grid, wavelength_grid
@@ -131,6 +141,7 @@ export pulse_energy, peak_power, fwhm, spectral_bandwidth, time_bandwidth_produc
 export photon_number, spectral_centroid
 export dispersion_length, nonlinear_length, soliton_number
 export add_noise, rin_rms, spectral_coherence
+export spectrogram, shg_frog_trace, track_solitons, dispersive_wave_wavelength
 
 # Physical constant
 export c

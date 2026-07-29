@@ -397,3 +397,154 @@ then computes coherence across the ensemble.
 """
 spectral_coherence(solutions::AbstractVector{<:Solution}) =
     spectral_coherence([@view(sol.AW[:, end]) for sol in solutions])
+
+"""
+    spectrogram(pulse::Pulse; n_delay=200, gate_fwhm=nothing) -> (t_delays, V_grid, S_matrix)
+
+Compute Short-Time Fourier Transform (STFT) spectrogram of pulse:
+    S(t, ω) = |∫ A(t') exp(-(t' - t)² / (2 τ_g²)) exp(-i ω t') dt'|²
+"""
+function spectrogram(pulse::Pulse; n_delay::Int=200, gate_fwhm::Union{Real, Nothing}=nothing)
+    t = pulse.grid.t
+    At = pulse.At
+    dt = pulse.grid.dt
+    N = pulse.grid.N
+    V = pulse.grid.V
+
+    tau_g = gate_fwhm === nothing ? fwhm(pulse; domain=:time) : Float64(gate_fwhm)
+    tau_g = max(tau_g, 10 * dt)
+    sigma_g = tau_g / (2.0 * sqrt(2.0 * log(2.0)))
+
+    t_delays = collect(range(t[1], t[end]; length=n_delay))
+    S_matrix = zeros(Float64, N, n_delay)
+
+    gate_buf = zeros(ComplexF64, N)
+    freq_buf = zeros(ComplexF64, N)
+
+    for (j, tau) in enumerate(t_delays)
+        @. gate_buf = At * exp(-((t - tau)^2) / (2.0 * sigma_g^2))
+        freq_buf .= fftshift(ifft(gate_buf))
+        @. S_matrix[:, j] = abs2(freq_buf)
+    end
+
+    return t_delays, V, S_matrix
+end
+
+"""
+    shg_frog_trace(pulse::Pulse; n_delay=200) -> (delays, V_shg, I_frog)
+
+Compute Second-Harmonic Generation (SHG) FROG trace:
+    I_FROG(ω, τ) = |∫ A(t) A(t - τ) exp(-i ω t) dt|²
+"""
+function shg_frog_trace(pulse::Pulse; n_delay::Int=200)
+    t = pulse.grid.t
+    At = pulse.At
+    N = pulse.grid.N
+    dt = pulse.grid.dt
+
+    t_delays = collect(range(t[1] / 2, t[end] / 2; length=n_delay))
+    I_frog = zeros(Float64, N, n_delay)
+    signal = zeros(ComplexF64, N)
+
+    for (j, tau) in enumerate(t_delays)
+        for i in 1:N
+            t_shifted = t[i] - tau
+            if t[1] <= t_shifted <= t[end]
+                idx = round(Int, (t_shifted - t[1]) / dt) + 1
+                idx_clamped = clamp(idx, 1, N)
+                signal[i] = At[i] * At[idx_clamped]
+            else
+                signal[i] = 0.0 + 0.0im
+            end
+        end
+        I_frog[:, j] .= abs2.(fftshift(ifft(signal)))
+    end
+
+    V_shg = 2.0 .* pulse.grid.V
+    return t_delays, V_shg, I_frog
+end
+
+"""
+    track_solitons(sol::Solution) -> (z_fiss, peak_power_z, centroid_w_z)
+
+Automated tracking of soliton fission and Soliton Self-Frequency Shift (SSFS) red-shift trajectory
+across propagation distances `sol.Z`.
+
+# Returns
+- `z_fiss`: Estimated distance of peak compression / soliton fission [m]
+- `peak_power_z`: Peak power P_max(z) [W] along propagation
+- `centroid_w_z`: Spectral centroid ⟨ω - ω₀⟩(z) [rad/s] along propagation
+"""
+function track_solitons(sol::Solution)
+    n_saves = length(sol.Z)
+    peak_power_z = zeros(Float64, n_saves)
+    centroid_w_z = zeros(Float64, n_saves)
+
+    V = sol.W .- sol.omega0
+
+    for j in 1:n_saves
+        intensity_t = abs2.(@view(sol.At[:, j]))
+        peak_power_z[j] = maximum(intensity_t)
+
+        spectrum_w = abs2.(@view(sol.AW[:, j]))
+        sum_spec = sum(spectrum_w)
+        centroid_w_z[j] = sum_spec > 0 ? sum(V .* spectrum_w) / sum_spec : 0.0
+    end
+
+    idx_fiss = argmax(peak_power_z)
+    z_fiss = sol.Z[idx_fiss]
+
+    return z_fiss, peak_power_z, centroid_w_z
+end
+
+"""
+    dispersive_wave_wavelength(medium::Medium, pulse::Pulse; P0::Real=peak_power(pulse)) -> Float64
+
+Calculate the predicted resonant Cherenkov dispersive wave emission wavelength λ_DW [m]
+emitted during soliton fission in `medium`.
+
+Solves the phase-matching condition:
+    Δβ(Δω) = β(ω₀ + Δω) - β(ω₀) - β₁(ω₀)·Δω - ½·γ·P₀ = 0
+for Δω ≠ 0.
+"""
+function dispersive_wave_wavelength(medium::Medium, pulse::Pulse; P0::Real=peak_power(pulse))
+    lambda0 = medium.lambda0
+    omega0 = 2π * c / lambda0
+    gamma_val = medium.gamma isa Real ? Float64(medium.gamma) : 0.0
+
+    V = pulse.grid.V
+    D_op = dispersion_operator(pulse.grid, medium)
+
+    beta_detuning = imag.(D_op)
+    phase_mismatch = @. beta_detuning - 0.5 * gamma_val * P0
+
+    N = length(V)
+    zero_crossings = Float64[]
+
+    for i in 1:(N - 1)
+        if abs(V[i]) > 1e12 # Skip trivial root at pump frequency V ≈ 0
+            if phase_mismatch[i] * phase_mismatch[i + 1] <= 0
+                dw_zero = V[i] - phase_mismatch[i] * (V[i + 1] - V[i]) / (phase_mismatch[i + 1] - phase_mismatch[i])
+                push!(zero_crossings, dw_zero)
+            end
+        end
+    end
+
+    if isempty(zero_crossings)
+        if medium.dispersion isa TaylorDispersion && length(medium.dispersion.betas) >= 2
+            b2 = medium.dispersion.betas[1]
+            b3 = medium.dispersion.betas[2]
+            if b3 != 0
+                dw_anal = -3.0 * b2 / b3
+                omega_dw = omega0 + dw_anal
+                return 2π * c / omega_dw
+            end
+        end
+        return lambda0
+    end
+
+    pos_crossings = filter(dw -> dw > 1e12, zero_crossings)
+    dw_primary = !isempty(pos_crossings) ? pos_crossings[argmax(pos_crossings)] : (!isempty(zero_crossings) ? zero_crossings[argmax(abs.(zero_crossings))] : 0.0)
+    omega_dw = omega0 + dw_primary
+    return 2π * c / omega_dw
+end

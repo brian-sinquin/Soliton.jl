@@ -11,4 +11,6 @@ using JuGNLSE
     include("test_edfa.jl")
     include("test_hollowcore.jl")
     include("test_semiconductor.jl")
+    include("test_loss_gain.jl")
+    include("test_conversions.jl")
 end

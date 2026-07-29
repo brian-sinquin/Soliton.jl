@@ -258,5 +258,19 @@ using JuGNLSE
         sol_expected = solve(pulse, params_expected; progress=false)
 
         @test sol_area.At[:, end] ≈ sol_expected.At[:, end]
+
+        # 4. Waveguide Mode Overlap & Marcuse Aeff
+        a = 4.1e-6 # SMF-28 core radius 4.1 um
+        NA = 0.14  # NA
+        lam = 1550e-9
+        
+        aeff_val = step_index_aeff(a, NA, lam)
+        @test isapprox(aeff_val, 6.675e-11; rtol=0.05)
+
+        marcuse = MarcuseAeff(a, NA)
+        nl_marcuse = NonlinearityFromEffectiveArea(2.6e-20, marcuse)
+        m_marcuse = Medium(0.1, nl_marcuse, 0.0, [-21.5e-27], 1550e-9)
+        sol_marcuse = solve(pulse, SimParams(; medium=m_marcuse, raman_model=nothing); progress=false)
+        @test sol_marcuse.Z[end] == 0.1
     end
 end

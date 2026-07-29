@@ -57,7 +57,7 @@ Ax = sech_pulse(grid, P0, FWHM).At
 Ay = copy(Ax)
 vpulse = VectorialPulse(Ax, Ay, grid)
 
-params = SimParams(; medium=med_A, z_saves=200, solver=SSFM(1e-3), raman_model=nothing)
+params = SimParams(; medium=med_A, z_saves=300, solver=SSFM(1e-3), raman_model=nothing)
 vsol_trap = solve(vpulse, params; progress=false)
 ```
 
@@ -66,11 +66,39 @@ using Plots
 gr()
 
 t_ps = vsol_trap.t .* 1e12
+idx_t = findall(-20.0 .<= t_ps .<= 20.0)
+z_m = vsol_trap.Z
+
+# ── Temporal heatmap: x polarization (slice native grid) ──
+At_x_dB = 10 .* log10.(max.(1e-10, abs2.(vsol_trap.At[idx_t, 1, :])))
+clim_x = (maximum(At_x_dB) - 30, maximum(At_x_dB))
+
+p1 = heatmap(t_ps[idx_t], z_m, At_x_dB',
+    xlabel = "Time (ps)", ylabel = "Distance (m)",
+    title  = "x-axis (fast)", colorbar_title = "Power (dB)",
+    clims  = clim_x, color = :inferno)
+
+# ── Temporal heatmap: y polarization (slice native grid) ──
+At_y_dB = 10 .* log10.(max.(1e-10, abs2.(vsol_trap.At[idx_t, 2, :])))
+clim_y = (maximum(At_y_dB) - 30, maximum(At_y_dB))
+
+p2 = heatmap(t_ps[idx_t], z_m, At_y_dB',
+    xlabel = "Time (ps)", ylabel = "Distance (m)",
+    title  = "y-axis (slow)", colorbar_title = "Power (dB)",
+    clims  = clim_y, color = :inferno)
+
+# ── Final output time trace ──
 px = abs2.(vsol_trap.At[:, 1, end])
 py = abs2.(vsol_trap.At[:, 2, end])
 
-plot(t_ps, px, label="x-polarization (trapped)", xlabel="Time (ps)", ylabel="Power (W)", color=:blue, lw=1.5)
-plot!(t_ps, py, label="y-polarization (trapped)", color=:red, ls=:dash, lw=1.5, plot_title="Soliton Trapping in Birefringent Fiber")
+p3 = plot(t_ps, px, label="x-pol (fast)",
+    xlabel="Time (ps)", ylabel="Power (W)",
+    title="Final Output", color=:dodgerblue, lw=1.5)
+plot!(p3, t_ps, py, label="y-pol (slow)",
+    color=:crimson, ls=:dash, lw=1.5)
+
+plot(p1, p2, p3, layout=(1, 3), size=(1200, 380),
+     plot_title="Soliton Trapping in Birefringent Fiber — Menyuk (1988)")
 ```
 
 ## Expected Results
@@ -79,6 +107,8 @@ plot!(t_ps, py, label="y-polarization (trapped)", color=:red, ls=:dash, lw=1.5, 
 |:---|:---|:---|
 | Trapped | 1 ps/m (< threshold) | < 1 ps — solitons co-propagate |
 | Separated | 5 ps/m (> threshold) | ≈ 25 ps — linear walk-off |
+
+Both heatmaps should show the polarization components traveling **together** (trapped): a straight vertical stripe, not diverging tracks.
 
 ## Effect of Δβ₀ (Phase Mismatch)
 
