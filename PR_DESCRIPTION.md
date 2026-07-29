@@ -2,7 +2,7 @@
 
 ## 🚀 Summary of Changes
 
-This PR introduces **JuGNLSE v0.2.0**, bringing comprehensive physical models for telecom/specialty fibers, active amplifiers, gas-filled hollow-core PCFs, silicon photonics, coupled vectorial propagation, solver abstractions, cascaded multi-stage propagation, automated per-commit benchmarking, executable documentation with inline figures, and tag-triggered precompiled binary releases.
+This PR introduces **JuGNLSE v0.2.0**, bringing comprehensive physical models for telecom/specialty fibers, active amplifiers, gas-filled hollow-core PCFs, silicon photonics, coupled vectorial propagation, solver abstractions, cascaded multi-stage propagation, automated per-commit benchmarking, executable documentation with inline figures, tag-triggered precompiled binary releases, and generalized z/frequency-dependent loss-gain models with an adaptive SSFM solver and mode-overlap/unit/plotting utilities.
 
 ---
 
@@ -69,12 +69,24 @@ This PR introduces **JuGNLSE v0.2.0**, bringing comprehensive physical models fo
 - **PR Documentation Artifacts**: Uploads `docs/build` as a GitHub Action artifact (`documentation-preview`) on PR builds.
 - **Precompiled Release Pipeline**: Added `.github/workflows/compile-release.yml` for tag-triggered (`v*`) or manual (`workflow_dispatch`) precompiled JLL sysimage compilation via `PackageCompiler.jl`.
 
+### 10. 🌐 Generalized Loss/Gain Models, Adaptive SSFM, Mode-Overlap Aeff & Utilities ([`src/dispersion.jl`](file:///c:/Users/brian/Documents/GitHub/JuGNLSE/src/dispersion.jl), [`src/solvers/adaptive_ssfm.jl`](file:///c:/Users/brian/Documents/GitHub/JuGNLSE/src/solvers/adaptive_ssfm.jl), [`src/nonlinearity.jl`](file:///c:/Users/brian/Documents/GitHub/JuGNLSE/src/nonlinearity.jl), [`src/conversions.jl`](file:///c:/Users/brian/Documents/GitHub/JuGNLSE/src/conversions.jl), [`src/recipes.jl`](file:///c:/Users/brian/Documents/GitHub/JuGNLSE/src/recipes.jl))
+- **Unified `loss_vector`/`gain_vector`**: `dispersion_operator` generalized to `AbstractMedium`, evaluating scalar, spectrum-vector, or `z`/`ω`-dependent callable loss and gain uniformly.
+- **`SilicaLossSpectrum`**: Ready-made fused-silica attenuation model (Rayleigh scattering + 1383 nm OH peak + IR multiphonon edge).
+- **Exact `HollowCoreFiber` dispersion**: Optional `grid` argument builds a full `TabulatedDispersion` instead of a truncated 4th-order Taylor expansion.
+- **`AdaptiveSSFM`**: Phase-controlled adaptive Split-Step Fourier solver, step size set by max nonlinear phase shift per step ($\Delta z_{\text{opt}} = \phi_{\max} / (\gamma P_{\max})$).
+- **`step_index_aeff` / `MarcuseAeff`**: Waveguide mode-overlap effective-area models for step-index fibers.
+- **Unit conversions**: `dispersion_D_to_beta2`, `beta2_to_dispersion_D`, `dispersion_S_to_beta3`, `wavelength_to_frequency`, `frequency_to_wavelength`.
+- **`RecipesBase` plotting recipes** for `Solution`/`Pulse` types.
+- **Analysis diagnostics**: `spectrogram`, `shg_frog_trace`, `track_solitons`, `dispersive_wave_wavelength`.
+
 ---
 
-## 📑 Exhaustive Commit Log (All 19 Commits)
+## 📑 Exhaustive Commit Log (All 21 Commits)
 
 | Commit | Description |
 | :--- | :--- |
+| `b85e01f` | `feat: z/frequency-dependent loss-gain models, adaptive SSFM, mode-overlap Aeff, and unit/plotting utilities` |
+| `0d43bae` | `fix(citation): correct author metadata in CITATION.cff` |
 | `a9d7e5a` | `docs: update PR_DESCRIPTION.md` |
 | `6458810` | `docs: critical documentation review, expanded examples index, and math equations` |
 | `4532f4d` | `docs: add PR_DESCRIPTION.md tracking all changelogs` |
@@ -99,30 +111,32 @@ This PR introduces **JuGNLSE v0.2.0**, bringing comprehensive physical models fo
 
 ## 🧪 Test Verification Results
 
-All **253/253 unit and physical tests pass 100%**:
+All **299/299 unit and physical tests pass 100%**:
 
 ```
 Test Summary:                                                | Pass  Total   Time
-JuGNLSE.jl                                                   |  253    253  32.4s
-  Unit                                                       |   56     56   3.3s
-  API                                                        |   74     74  12.6s
+JuGNLSE.jl                                                   |  299    299  39.4s
+  Unit                                                       |   56     56   3.1s
+  API                                                        |   76     76  13.4s
     Medium                                                   |   10     10   0.0s
     Medium keyword constructor                               |    6      6   0.0s
-    Dispersion models                                        |    4      4   0.0s
-    Sellmeier dispersion                                     |    7      7   0.1s
+    Dispersion models                                        |    4      4   0.1s
+    Sellmeier dispersion                                     |    7      7   0.2s
     Raman models                                             |    6      6   0.0s
     SimParams                                                |    7      7   0.0s
     Pulses                                                   |    9      9   0.3s
     build_physics_model                                      |    6      6   0.2s
-    Z-dependent gamma                                        |    5      5   2.1s
-    Cascaded propagation & Lumped Elements                   |   11     11   3.4s
-    Frequency-dependent and Effective-area Nonlinearity      |    3      3   6.3s
-  Solvers                                                    |   42     42   0.9s
-  Physics                                                    |   11     11  10.6s
-  Vectorial/Birefringent Coupled Solver                      |   18     18   3.3s
-  Commercial Fiber Library and Glass Presets                 |   23     23   0.4s
-  Active Amplifying Fiber Dynamics (EDFA/YDFA/TDFA)          |    6      6   0.0s
-  Hollow-Core PCF (HC-PCF) & Molecular Gas Raman             |   15     15   0.2s
-  Semiconductor Waveguides (SOI, TPA, Free-Carrier Dynamics) |    8      8   0.2s
+    Z-dependent gamma                                        |    5      5   2.0s
+    Cascaded propagation & Lumped Elements                   |   11     11   2.9s
+    Frequency-dependent and Effective-area Nonlinearity      |    5      5   7.6s
+  Solvers                                                    |   55     55   3.6s
+  Physics                                                    |   20     20  10.7s
+  Vectorial/Birefringent Coupled Solver                      |   18     18   1.1s
+  Commercial Fiber Library and Glass Presets                 |   23     23   0.3s
+  Active Amplifying Fiber Dynamics (EDFA/YDFA/TDFA)          |    7      7   0.0s
+  Hollow-Core PCF (HC-PCF) & Molecular Gas Raman             |   15     15   0.0s
+  Semiconductor Waveguides (SOI, TPA, Free-Carrier Dynamics) |    8      8   0.1s
+  Wavelength & z-Dependent Loss and Gain Models              |   10     10   5.7s
+  Optics Units Conversions & Soliton Tracker                 |   11     11   0.2s
 Testing JuGNLSE tests passed
 ```
