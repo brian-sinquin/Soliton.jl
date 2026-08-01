@@ -32,6 +32,24 @@ using JuGNLSE
         @test sol.Z[end] == 0.5
     end
 
+    @testset "HollowCoreFiber with grid (TabulatedDispersion branch)" begin
+        # Regression test: passing `grid` selects the exact TabulatedDispersion
+        # branch, which previously errored because the `length` keyword argument
+        # shadowed Base.length inside the constructor.
+        grid = create_grid(2^10, 10e-12, 800e-9)
+        hcf = HollowCoreFiber(radius=15e-6, gas=:Ar, pressure=3.0, length=0.5, lambda0=800e-9, grid=grid)
+
+        @test hcf isa Medium
+        @test hcf.dispersion isa TabulatedDispersion
+
+        pulse = sech_pulse(grid, 5000.0, 50e-15)
+        params = SimParams(; medium=hcf, z_saves=3, raman_model=nothing)
+
+        sol = solve(pulse, params; progress=false)
+        @test sol isa Solution
+        @test sol.Z[end] == 0.5
+    end
+
     @testset "Molecular Gas Raman Models" begin
         rot = MolecularRamanGas(:H2_rotational)
         vib = MolecularRamanGas(:H2_vibrational)

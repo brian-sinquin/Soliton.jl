@@ -76,7 +76,7 @@ clim_x = (maximum(At_x_dB) - 30, maximum(At_x_dB))
 p1 = heatmap(t_ps[idx_t], z_m, At_x_dB',
     xlabel = "Time (ps)", ylabel = "Distance (m)",
     title  = "x-axis (fast)", colorbar_title = "Power (dB)",
-    clims  = clim_x, color = :inferno)
+    clims  = clim_x, color = :inferno, right_margin = 6Plots.mm)
 
 # ── Temporal heatmap: y polarization (slice native grid) ──
 At_y_dB = 10 .* log10.(max.(1e-10, abs2.(vsol_trap.At[idx_t, 2, :])))
@@ -85,7 +85,7 @@ clim_y = (maximum(At_y_dB) - 30, maximum(At_y_dB))
 p2 = heatmap(t_ps[idx_t], z_m, At_y_dB',
     xlabel = "Time (ps)", ylabel = "Distance (m)",
     title  = "y-axis (slow)", colorbar_title = "Power (dB)",
-    clims  = clim_y, color = :inferno)
+    clims  = clim_y, color = :inferno, right_margin = 6Plots.mm)
 
 # ── Final output time trace ──
 px = abs2.(vsol_trap.At[:, 1, end])
@@ -97,8 +97,9 @@ p3 = plot(t_ps, px, label="x-pol (fast)",
 plot!(p3, t_ps, py, label="y-pol (slow)",
     color=:crimson, ls=:dash, lw=1.5)
 
-plot(p1, p2, p3, layout=(1, 3), size=(1200, 380),
-     plot_title="Soliton Trapping in Birefringent Fiber — Menyuk (1988)")
+plot(p1, p2, p3, layout=(1, 3), size=(1300, 450),
+     plot_title="Soliton Trapping in Birefringent Fiber — Menyuk (1988)",
+     plot_titlevspan=0.08, bottom_margin=6Plots.mm, left_margin=4Plots.mm)
 ```
 
 ## Expected Results

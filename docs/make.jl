@@ -41,6 +41,7 @@ makedocs(;
             "7 — Hollow-Core Gas Fiber"   => "examples/ex7_hollowcore_gas.md",
             "8 — Silicon Photonics (TPA)" => "examples/ex8_silicon_tpa.md",
             "9 — EDFA Pulse Amplifier"   => "examples/ex9_edfa_amplifier.md",
+            "10 — Multithreaded Sweep"   => "examples/ex10_parallel_sweep.md",
         ],
         "API Reference" => [
             "Medium"           => "api/medium.md",
@@ -54,7 +55,13 @@ makedocs(;
             "Analysis"         => "api/analysis.md",
         ],
     ],
-    warnonly=true,
+    # Keep style/completeness issues non-fatal, but let `@example`/`@eval`/`@setup`
+    # block execution failures fail the build — a silently-broken example (missing
+    # output, no plot) is worse than a red CI check.
+    warnonly=[
+        :autodocs_block, :cross_references, :docs_block, :footnote,
+        :linkcheck_remotes, :linkcheck, :meta_block, :missing_docs,
+    ],
 )
 
 deploydocs(; repo="github.com/brian-sinquin/JuGNLSE.jl", devbranch="master", push_preview=true)

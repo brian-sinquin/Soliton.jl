@@ -16,10 +16,9 @@ Here, we sweep input peak power $P_0$ from **$100\text{ W}$ to $5\text{ kW}$** a
 
 ## 💻 Julia Implementation
 
-```julia
+```@example ex10
 using JuGNLSE
 using FFTW
-using Plots
 using Base.Threads
 
 println("Julia worker threads available: ", Threads.nthreads())
@@ -32,9 +31,8 @@ grid   = create_grid(2^13, 12e-12, medium.lambda0)       # 835 nm center wavelen
 N_trials = 100
 powers = range(100.0, 5000.0; length=N_trials)
 
-# 3. Parallel Parameter Sweep via solve_sweep (Concurrent across 8 worker threads!)
-println("Launching ", N_trials, " parallel simulations across ", Threads.nthreads(), " worker threads...")
-sols = solve_sweep(powers; progress=true) do P0
+# 3. Parallel Parameter Sweep via solve_sweep (Concurrent across available worker threads)
+sols = solve_sweep(powers; progress=false) do P0
     return (sech_pulse(grid, P0, 50e-15), SimParams(; medium=medium, z_saves=2))
 end
 
@@ -53,8 +51,14 @@ for (i, sol) in enumerate(sols)
     P_db = 10 .* log10.(abs2.(AW_out[sort_idx[mask]]) .+ 1e-6)
     spec_matrix[i, :] .= P_db .- maximum(P_db)
 end
+nothing # hide
+```
 
-# 5. Render High-Resolution 2D Spectral Broadening Heatmap
+## 📊 Results & High-Resolution Visualization
+
+```@example ex10
+using Plots
+
 p = heatmap(
     wl_plot,
     collect(powers),
@@ -70,11 +74,4 @@ p = heatmap(
 )
 
 vline!(p, [835.0], label="Pump (835 nm)", color=:white, linestyle=:dash, linewidth=1.5)
-savefig(p, "examples_ex10_parallel_sweep.png")
 ```
-
----
-
-## 📊 Results & High-Resolution Visualization
-
-![High-Resolution Multithreaded Parameter Sweep Plot](file:///C:/Users/brian/.gemini/antigravity-ide/brain/2f670524-235f-4ef8-b82a-1c832e56040f/examples_ex10_parallel_sweep.png)

@@ -86,7 +86,7 @@ p1 = heatmap(t_ps[idx_t], z_m, At_dB',
     xlabel = "Time (ps)", ylabel = "Distance (m)",
     title  = "Temporal Evolution (3 half-periods)",
     colorbar_title = "P/P₀ (dB)",
-    clims  = clim_t, color = :inferno)
+    clims  = clim_t, color = :inferno, right_margin = 6Plots.mm)
 hline!(p1, [Zhalf, 2*Zhalf, 3*Zhalf], color=:white, ls=:dash, lw=0.8, label=false)
 
 # ── Peak power vs z ── recurrence visible as return to P₀
@@ -98,8 +98,9 @@ hline!(p2, [P0], label="P₀ = $(round(P0; sigdigits=3)) W",
        color=:black, ls=:dash, lw=1.5)
 vline!(p2, [Zhalf, 2*Zhalf, 3*Zhalf], color=:gray, ls=:dot, lw=1.0, label=false)
 
-plot(p1, p2, layout=(1, 2), size=(1000, 400),
-     plot_title="N=3 Soliton Akhmediev Recurrence — Zakharov & Shabat (1972)")
+plot(p1, p2, layout=(1, 2), size=(1100, 470),
+     plot_title="N=3 Soliton Akhmediev Recurrence — Zakharov & Shabat (1972)",
+     plot_titlevspan=0.08, bottom_margin=6Plots.mm, left_margin=4Plots.mm)
 ```
 
 ```@example ex6

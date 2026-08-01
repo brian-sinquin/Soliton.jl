@@ -104,7 +104,7 @@ p1 = heatmap(wl_sub, z_m, AW_sub',
     xlabel = "Wavelength (nm)", ylabel = "Distance (m)",
     title  = "Spectral Evolution (with Raman)",
     colorbar_title = "PSD (dB)", clims = clim_s,
-    color  = :inferno)
+    color  = :inferno, right_margin = 6Plots.mm)
 
 # ── Temporal evolution heatmap (slice native grid) ──
 t_ps = grid.t .* 1e12
@@ -116,7 +116,7 @@ p2 = heatmap(t_ps[idx_t], z_m, At_dB',
     xlabel = "Time (ps)", ylabel = "Distance (m)",
     title  = "Temporal Evolution (with Raman)",
     colorbar_title = "Power (dB)", clims = clim_t,
-    color  = :inferno)
+    color  = :inferno, right_margin = 6Plots.mm)
 
 # ── Spectral centroid shift vs. z using track_solitons ──
 _, _, centroid_w_raman = track_solitons(sol_raman)
@@ -142,8 +142,9 @@ plot!(p3, z_m, Δλ_kerr,
 plot!(p3, z_m, Δλ_th,
     label="Gordon formula", color=:green, ls=:dot, lw=1.5)
 
-plot(p1, p2, p3, layout=(1, 3), size=(1200, 380),
-     plot_title="Soliton Self-Frequency Shift — Mitschke & Mollenauer (1986)")
+plot(p1, p2, p3, layout=(1, 3), size=(1300, 450),
+     plot_title="Soliton Self-Frequency Shift — Mitschke & Mollenauer (1986)",
+     plot_titlevspan=0.08, bottom_margin=6Plots.mm, left_margin=4Plots.mm)
 ```
 
 ## Expected Results

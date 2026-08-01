@@ -309,7 +309,7 @@ function HollowCoreFiber(;
     disp = if grid !== nothing
         # Exact continuous tabulated dispersion over the simulation grid
         V_detuning = grid.V
-        B_vals = zeros(Float64, length(V_detuning))
+        B_vals = zeros(Float64, Base.length(V_detuning))
         for k in eachindex(V_detuning)
             wk = w0 + V_detuning[k]
             if wk > 0
