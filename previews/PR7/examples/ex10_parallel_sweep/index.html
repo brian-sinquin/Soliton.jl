@@ -3,8 +3,6 @@
 using FFTW
 using Base.Threads
 
-println(&quot;Julia worker threads available: &quot;, Threads.nthreads())
-
 # 1. Setup Fiber and Grid (Standard NKT NL-PM-750 Photonic Crystal Fiber)
 medium = commercial_fiber(&quot;NKT_NL_PM_750&quot;; length=0.15)  # 15 cm fiber
 grid   = create_grid(2^13, 12e-12, medium.lambda0)       # 835 nm center wavelength, 8192 points
@@ -32,20 +30,4 @@ for (i, sol) in enumerate(sols)
     AW_out = fftshift(sol.AW[:, end])
     P_db = 10 .* log10.(abs2.(AW_out[sort_idx[mask]]) .+ 1e-6)
     spec_matrix[i, :] .= P_db .- maximum(P_db)
-end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Julia worker threads available: 1</code></pre><h2 id="Results-and-High-Resolution-Visualization"><a class="docs-heading-anchor" href="#Results-and-High-Resolution-Visualization">📊 Results &amp; High-Resolution Visualization</a><a id="Results-and-High-Resolution-Visualization-1"></a><a class="docs-heading-anchor-permalink" href="#Results-and-High-Resolution-Visualization" title="Permalink"></a></h2><pre><code class="language-julia hljs">using Plots
-
-p = heatmap(
-    wl_plot,
-    collect(powers),
-    spec_matrix,
-    xlabel = &quot;Wavelength λ [nm]&quot;,
-    ylabel = &quot;Input Peak Power P₀ [W]&quot;,
-    title = &quot;High-Resolution Multithreaded Sweep (100 Trials, 8 Threads)&quot;,
-    color = :turbo,
-    clims = (-35, 0),
-    colorbar_title = &quot;Spectral Power [dB]&quot;,
-    size = (900, 550),
-    dpi = 300
-)
-
-vline!(p, [835.0], label=&quot;Pump (835 nm)&quot;, color=:white, linestyle=:dash, linewidth=1.5)</code></pre><img src="0bbde095.svg" alt="Example block output"/></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../ex9_edfa_amplifier/">« 9 — EDFA Pulse Amplifier</a><a class="docs-footer-nextpage" href="../../api/medium/">Medium »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Saturday 1 August 2026 13:32">Saturday 1 August 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+end</code></pre><h2 id="Results-and-High-Resolution-Visualization"><a class="docs-heading-anchor" href="#Results-and-High-Resolution-Visualization">📊 Results &amp; High-Resolution Visualization</a><a id="Results-and-High-Resolution-Visualization-1"></a><a class="docs-heading-anchor-permalink" href="#Results-and-High-Resolution-Visualization" title="Permalink"></a></h2><img src="2150437d.svg" alt="Example block output"/></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../ex9_edfa_amplifier/">« 9 — EDFA Pulse Amplifier</a><a class="docs-footer-nextpage" href="../../api/medium/">Medium »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Saturday 1 August 2026 16:53">Saturday 1 August 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
