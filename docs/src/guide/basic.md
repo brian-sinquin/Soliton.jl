@@ -107,8 +107,9 @@ medium = Medium(;
 )
 
 # Fundamental soliton: N = √(γ P₀ T₀² / |β₂|) = 1
-T0 = 1e-12  # soliton half-width [s]
+T0 = 1e-12  # soliton 1/e half-width [s]
 P0 = abs(medium.dispersion.betas[1]) / (medium.gamma * T0^2)  # [W]
+# sech_pulse takes the intensity FWHM; m = 2·arcsinh(1) ≈ 1.763 converts T₀ → FWHM
 pulse = sech_pulse(grid, P0, 2 * log(1 + sqrt(2)) * T0)
 
 # Solve without Raman for clean soliton

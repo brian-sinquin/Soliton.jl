@@ -13,4 +13,5 @@ using JuGNLSE
     include("test_semiconductor.jl")
     include("test_loss_gain.jl")
     include("test_conversions.jl")
+    include("test_adversarial.jl")
 end

@@ -498,7 +498,7 @@ Optical pulse envelope in time and frequency domains.
 # Fields
 
   - `At::Vector{T}`: Time domain envelope A(t) [√W]
-  - `AW::Vector{T}`: Frequency domain envelope A(ω) [√W·ps]
+  - `AW::Vector{T}`: Frequency domain envelope A(ω) [√W·s]
   - `grid::Grid`: Associated time-frequency grid
 
 # Notes
@@ -527,8 +527,8 @@ Simulation parameters for GNLSE propagation.
   - `z_saves::Int`: Number of snapshots to save along fiber
   - `raman_model::Union{RamanModel,Nothing}`: Raman scattering model (Nothing to disable)
   - `self_steepening::Bool`: Enable self-steepening/shock effect
-  - `rtol::Float64`: Relative tolerance for adaptive ODE solver
-  - `atol::Float64`: Absolute tolerance for adaptive ODE solver
+  - `solver::GNLSESolver`: Numerical solver (default: `ERK4IP()`). Tolerances are
+    set on the solver, e.g. `ERK4IP(; rtol=1e-6, atol=1e-8)`.
 
 # Notes
 
@@ -694,13 +694,17 @@ Display simulation parameters compactly in the REPL. Shows:
   - z_saves: number of snapshots along fiber
   - raman: Raman model type or "off"
   - self_steepening: whether shock term is active
-  - rtol, atol: ODE solver tolerances
+  - solver: solver type with tolerances (if ERK4IP)
 """
 function Base.show(io::IO, s::SimParams)
+    solver_str = if s.solver isa ERK4IP
+        "ERK4IP(rtol=$(s.solver.rtol), atol=$(s.solver.atol))"
+    else
+        string(nameof(typeof(s.solver)))
+    end
     print(io, "SimParams(z_saves=", s.z_saves, ", raman=",
           s.raman_model === nothing ? "off" : nameof(typeof(s.raman_model)),
-          ", self_steepening=", s.self_steepening, ", rtol=", s.rtol,
-          ", atol=", s.atol, ")")
+          ", self_steepening=", s.self_steepening, ", solver=", solver_str, ")")
 end
 
 """

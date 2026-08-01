@@ -397,6 +397,9 @@ function build_physics_model(grid::Grid, params::SimParams{S, M}, template::Abst
         raman_freq_response = _to_device(template, N .* ifft(ifftshift(h_R)))
     end
 
+    # D operator carries the unsaturated (small-signal) gain g₀/2; the saturation
+    # correction −g₀/2 · E/(Esat+E) is applied dynamically in `_amplifying_spm`.
+    # Together they implement: g_net = g₀ · Esat/(Esat+E).
     D_host = fftshift(dispersion_operator(grid, medium))
     D = _to_device(template, D_host)
 

@@ -98,6 +98,12 @@ Available keys:
 - `"Thorlabs_PM780"`
 - `"Thorlabs_PM1550"`
 - `"NKT_LMA10"`
+
+`FiberLibrary` is a plain `Dict{String, FiberSpec}` and can be extended at runtime:
+```julia
+JuGNLSE.FiberLibrary["MyCustomFiber"] = FiberSpec("My Fiber", "Lab", "Custom PCF", 800e-9, 0.05, 0.001, TaylorDispersion([-5e-27]))
+medium = commercial_fiber("MyCustomFiber"; length=0.1)
+```
 """
 const FiberLibrary = Dict{String, FiberSpec}(
     "Corning_SMF28" => FiberSpec(

@@ -95,15 +95,16 @@ function _eval_loss_or_gain(V::AbstractVector{Float64}, medium::AbstractMedium, 
         omega0 = 2π * c / medium.lambda0
         omegas = V .+ omega0
         res = zeros(Float64, N)
+        # Determine calling convention once outside the loop to avoid per-iteration dispatch
+        use_two_args = applicable(val, omegas[1], z)
+        use_one_arg  = !use_two_args && applicable(val, omegas[1])
         for i in 1:N
-            out = try
+            out = if use_two_args
                 val(omegas[i], z)
-            catch
-                try
-                    val(omegas[i])
-                catch
-                    val(z)
-                end
+            elseif use_one_arg
+                val(omegas[i])
+            else
+                val(z)
             end
             res[i] = is_loss ? Float64(out) * factor : Float64(out)
         end

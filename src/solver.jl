@@ -52,6 +52,15 @@ natural SI units; the envelope spectrum follows the standard optics convention
 `AW = ifft(At)`.
 """
 function propagate(pulse::AbstractPulse, params::SimParams, solver::GNLSESolver; progress::Bool=true)
+    # Warn if grid and medium center wavelengths are significantly mismatched
+    if hasproperty(params.medium, :lambda0)
+        rel_diff = abs(pulse.grid.lambda0 - params.medium.lambda0) / params.medium.lambda0
+        if rel_diff > 0.01
+            @warn "Grid center wavelength ($(round(pulse.grid.lambda0 * 1e9; digits=1)) nm) " *
+                  "differs from medium lambda0 ($(round(params.medium.lambda0 * 1e9; digits=1)) nm) " *
+                  "by $(round(100 * rel_diff; digits=1))%. Ensure these are consistent."
+        end
+    end
     model = build_physics_model(pulse.grid, params, pulse.At)
     return propagate(model, pulse, params, solver, progress)
 end
@@ -70,9 +79,10 @@ function solve(pulse::AbstractPulse, params::SimParams; progress::Bool=true)
         AW,              # Frequency domain fields (N × z_saves)
     )
 
-    # Photon number is conserved by the GNLSE for a lossless fiber; a drift
-    # indicates the step-size tolerance is too loose.
-    if params.medium.loss == 0
+    # Photon number is conserved by the GNLSE for a passive lossless fiber; a drift
+    # indicates the step-size tolerance is too loose. Skip this check for active
+    # (AmplifyingMedium) media where energy is intentionally not conserved.
+    if params.medium.loss == 0 && !(params.medium isa AmplifyingMedium)
         n = photon_number(solution)
         drift = abs(n[end] - n[1]) / n[1]
         drift > 1e-2 && @warn "Photon number drifted by " *

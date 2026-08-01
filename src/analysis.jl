@@ -92,7 +92,8 @@ end
 """
     spectral_bandwidth(pulse::Pulse; level::Float64=0.5)
 
-Spectral width at the given intensity `level` (0.5 = FWHM), returned in Hz.
+Spectral width at the given intensity `level` (0.5 = FWHM), returned as ordinary
+frequency ν [Hz] (i.e. divided by 2π; not angular frequency ω [rad/s]).
 """
 function spectral_bandwidth(pulse::Pulse; level::Float64=0.5)
     spectrum = abs2.(fftshift(pulse.AW))
@@ -133,16 +134,12 @@ end
     photon_number(pulse::Pulse)
     photon_number(solution::Solution)
 
-Dimensionless photon count ∝ ∫|A(ω)|²/ω dω — the quantity conserved by the
-GNLSE (including self-steepening) in the absence of loss. The energy per photon
-scales as ħω, making this count independent of the optical carrier frequency.
-This metric is useful for verifying energy conservation and for understanding the
-role of ħω in the [`add_noise`](@ref) quantum-noise seeding. For a `Solution`,
-returns one value per saved distance.
-
-# Returns
-
-  - Float64 (for Pulse) or Vector (for Solution): photon count
+Conserved quantity ∝ ∫|A(ω)|²/ω dω used to monitor numerical accuracy of the
+GNLSE integration. For a lossless fiber this quantity is conserved by the GNLSE
+(including self-steepening); a drift indicates the step-size tolerance is too
+loose. Note: the returned value is *not* an absolute photon count — it lacks the
+ℏ and dω normalization factors and should only be compared *relative* to itself
+along the propagation axis. For a `Solution`, returns one value per saved distance.
 """
 function photon_number(pulse::Pulse)
     # pulse.AW = ifft(At) is in FFT order; align the absolute-frequency grid.
@@ -515,8 +512,11 @@ function dispersive_wave_wavelength(medium::Medium, pulse::Pulse; P0::Real=peak_
     V = pulse.grid.V
     D_op = dispersion_operator(pulse.grid, medium)
 
-    beta_detuning = imag.(D_op)
-    phase_mismatch = @. beta_detuning - 0.5 * gamma_val * P0
+    # B_comoving: propagation-constant deviation in the co-moving frame,
+    # i.e. imag(D_op) = β(ω) - β₀ - β₁·(ω-ω₀). This already has β₁·V removed,
+    # which is exactly the form needed for the Cherenkov phase-matching condition.
+    B_comoving = imag.(D_op)
+    phase_mismatch = @. B_comoving - 0.5 * gamma_val * P0
 
     N = length(V)
     zero_crossings = Float64[]
@@ -544,7 +544,8 @@ function dispersive_wave_wavelength(medium::Medium, pulse::Pulse; P0::Real=peak_
     end
 
     pos_crossings = filter(dw -> dw > 1e12, zero_crossings)
-    dw_primary = !isempty(pos_crossings) ? pos_crossings[argmax(pos_crossings)] : (!isempty(zero_crossings) ? zero_crossings[argmax(abs.(zero_crossings))] : 0.0)
+    # Select the nearest positive-detuning crossing (physically closest to the pump)
+    dw_primary = !isempty(pos_crossings) ? pos_crossings[argmin(pos_crossings)] : (!isempty(zero_crossings) ? zero_crossings[argmax(abs.(zero_crossings))] : 0.0)
     omega_dw = omega0 + dw_primary
     return 2π * c / omega_dw
 end

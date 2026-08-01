@@ -11,7 +11,7 @@ Units: Time in [s] (natural SI units)
 Compute Raman response following gnlse-python raman_blowwood.
 
 # Arguments
-- `T::Vector{Float64}`: Time vector [ps]
+- `T::Vector{Float64}`: Time vector [s]
 - `model::BlowWood`: Raman model with parameters
 
 # Returns
@@ -50,7 +50,7 @@ end
 Compute Raman response following gnlse-python raman_linagrawal.
 
 # Arguments
-- `T::Vector{Float64}`: Time vector [ps]
+- `T::Vector{Float64}`: Time vector [s]
 - `model::LinAgrawal`: Raman model with parameters
 
 # Returns
@@ -166,10 +166,9 @@ function raman_response(T::Vector{Float64}, model::Hollenbeck)
     # gnlse-python: RT[T < 0] = 0
     RT[T .< 0] .= 0
 
-    # Normalize
-    # gnlse-python: dt = T[1] - T[0]; RT = RT / (sum(RT) * dt)
-    dt = T[2] - T[1]
-    RT = RT ./ (sum(RT) * dt)
+    # Note: Hollenbeck response is NOT normalized here — normalization is handled
+    # implicitly by the `model.dt` factor in the Raman convolution (`_spm_raman`),
+    # consistent with the BlowWood and LinAgrawal responses.
 
     return model.fr, RT
 end
