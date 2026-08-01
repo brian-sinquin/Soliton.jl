@@ -11,9 +11,13 @@ Manifest.toml
 /docs/build/
 /docs/site/
 
-# Benchmark environment
+# Benchmark environment & Python
 /benchmark/venv/
 /benchmark/Manifest.toml
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
 
 # IDE and editor files
 .vscode/
@@ -23,14 +27,17 @@ Manifest.toml
 *~
 .DS_Store
 Thumbs.db
+.gemini/
 
 # Temporary and backup files
 *.bak
 *.tmp
 *.log
 /temp/
+/scratch/
 /scratch_*.jl
 /debug_*.jl
+/add.jl
 
 # Build artifacts
 *.so
@@ -47,15 +54,9 @@ Thumbs.db
 *.svg
 *.gif
 
-# Reference implementations (external repos - not tracked)
+# Reference implementations & research folders (keep local only)
 /research/reference_implementations/*/
-
-# Exclude examples and research folders (keep local only)
 /examples/
 /research/
 
-# Data files (optional)
-# *.h5
-# *.jld2
-# *.mat
-# *.csv
+# Note: test/reference_data/*.csv golden reference datasets ARE tracked in git
