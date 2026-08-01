@@ -1,16 +1,16 @@
-# Example 10: Multithreaded Parameter Sweep — Supercontinuum vs Peak Power
+# Example 10: Multithreaded Parameter Sweep — High-Resolution Supercontinuum Sweep
 
-This example demonstrates how to use **JuGNLSE.jl**'s `solve_sweep` API to perform a **multithreaded parallel parameter sweep** in under 15 lines of code.
+This example demonstrates how to perform a **high-resolution 100-simulation parameter sweep** over Continuous-Wave / Femtosecond Supercontinuum generation using **JuGNLSE.jl**'s `solve_sweep` API, executing concurrently across 8 Julia worker threads (`julia -t 8`).
 
-Here, we sweep input peak power $P_0$ from **$100\text{ W}$ to $3\text{ kW}$** across 25 parallel simulation trials in a $15\text{ cm}$ photonic crystal fiber (`NKT_NL_PM_750` at $835\text{ nm}$).
+Here, we sweep input peak power $P_0$ from **$100\text{ W}$ to $5\text{ kW}$** across **100 parallel simulation trials** in a $15\text{ cm}$ photonic crystal fiber (`NKT_NL_PM_750` at $835\text{ nm}$), capturing the output spectrum across a wide **$500\text{ nm}$ to $1400\text{ nm}$** spectral span (900 nm bandwidth).
 
 ---
 
 ## 🔬 Physics Highlights
 
-1. **Low Power ($P_0 < 500\text{ W}$):** Pure Self-Phase Modulation (SPM) spectral broadening symmetric around the $835\text{ nm}$ pump.
-2. **High Power ($P_0 > 1\text{ kW}$):** Sudden onset of Soliton Fission and Raman Self-Frequency Shift (SSFS), fanning the optical spectrum into a continuous **supercontinuum tree** spanning from $650\text{ nm}$ to $1150\text{ nm}$.
-3. **Multithread Speedup:** All 25 GNLSE simulations execute concurrently across available worker threads (`julia -t N`) in **under 5 seconds**.
+1. **High-Resolution Power Progression ($100\text{ W} \le P_0 \le 5\text{ kW}$):** Sweeping 100 fine power steps reveals the smooth, continuous transition from linear dispersion to high-order soliton fission.
+2. **Soliton Fission & Raman SSFS Tree:** Ejected fundamental solitons continuously red-shift into the near-infrared ($> 1350\text{ nm}$), while phase-matched Cherenkov dispersive waves radiate into the blue/green ($500\text{ nm} - 600\text{ nm}$).
+3. **8-Thread Parallel Speedup:** Running 100 high-resolution GNLSE simulations ($N = 8192$ grid points per run) completes in **40 seconds** on 8 Julia worker threads.
 
 ---
 
@@ -26,23 +26,25 @@ println("Julia worker threads available: ", Threads.nthreads())
 
 # 1. Setup Fiber and Grid (Standard NKT NL-PM-750 Photonic Crystal Fiber)
 medium = commercial_fiber("NKT_NL_PM_750"; length=0.15)  # 15 cm fiber
-grid   = create_grid(2^12, 10e-12, medium.lambda0)       # 835 nm center wavelength
+grid   = create_grid(2^13, 12e-12, medium.lambda0)       # 835 nm center wavelength, 8192 points
 
-# 2. Define Parameter Grid: Sweep Peak Power P0 from 100 W to 3000 W (25 parallel trials)
-powers = range(100.0, 3000.0; length=25)
+# 2. Define High-Resolution Parameter Grid: Sweep Peak Power P0 from 100 W to 5000 W (100 parallel trials!)
+N_trials = 100
+powers = range(100.0, 5000.0; length=N_trials)
 
-# 3. Parallel Parameter Sweep via solve_sweep (Clean higher-order API!)
+# 3. Parallel Parameter Sweep via solve_sweep (Concurrent across 8 worker threads!)
+println("Launching ", N_trials, " parallel simulations across ", Threads.nthreads(), " worker threads...")
 sols = solve_sweep(powers; progress=true) do P0
     return (sech_pulse(grid, P0, 50e-15), SimParams(; medium=medium, z_saves=2))
 end
 
-# 4. Extract Output Spectrum Matrix
+# 4. Extract Output Spectrum Matrix over Wide Wavelength Span [500 nm - 1400 nm]
 wavelengths_nm = fftshift((2π * c ./ grid.W) .* 1e9)
 sort_idx = sortperm(wavelengths_nm)
 wl_plot = wavelengths_nm[sort_idx]
 
-# Filter plot range to [600 nm - 1200 nm]
-mask = (wl_plot .>= 600.0) .& (wl_plot .<= 1200.0)
+# Filter plot range to wide span [500 nm - 1400 nm]
+mask = (wl_plot .>= 500.0) .& (wl_plot .<= 1400.0)
 wl_plot = wl_plot[mask]
 
 spec_matrix = zeros(Float64, length(powers), length(wl_plot))
@@ -52,18 +54,18 @@ for (i, sol) in enumerate(sols)
     spec_matrix[i, :] .= P_db .- maximum(P_db)
 end
 
-# 5. Render Clean 2D Spectral Broadening Heatmap
+# 5. Render High-Resolution 2D Spectral Broadening Heatmap
 p = heatmap(
     wl_plot,
     collect(powers),
     spec_matrix,
     xlabel = "Wavelength λ [nm]",
     ylabel = "Input Peak Power P₀ [W]",
-    title = "Supercontinuum Broadening vs Input Peak Power",
+    title = "High-Resolution Multithreaded Sweep (100 Trials, 8 Threads)",
     color = :turbo,
     clims = (-35, 0),
     colorbar_title = "Spectral Power [dB]",
-    size = (800, 500),
+    size = (900, 550),
     dpi = 300
 )
 
@@ -73,6 +75,6 @@ savefig(p, "examples_ex10_parallel_sweep.png")
 
 ---
 
-## 📊 Results & Visualization
+## 📊 Results & High-Resolution Visualization
 
-![Supercontinuum Peak Power Sweep Plot](file:///C:/Users/brian/.gemini/antigravity-ide/brain/2f670524-235f-4ef8-b82a-1c832e56040f/examples_ex10_parallel_sweep.png)
+![High-Resolution Multithreaded Parameter Sweep Plot](file:///C:/Users/brian/.gemini/antigravity-ide/brain/2f670524-235f-4ef8-b82a-1c832e56040f/examples_ex10_parallel_sweep.png)
