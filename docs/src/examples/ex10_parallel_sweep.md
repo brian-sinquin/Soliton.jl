@@ -41,7 +41,7 @@ wavelengths_nm = (2π * c ./ grid.W) .* 1e9
 spec_matrix = zeros(Float64, N_trials, grid.N)
 for i in 1:N_trials
     AW_out = sols[i].AW[:, end]
-    P_lambda = abs2.(fftshift(AW_out))
+    P_lambda = abs2.(AW_out)  # sol.AW is already in monotonic order
     P_db = 10 .* log10.(P_lambda ./ maximum(P_lambda) .+ 1e-6)
     spec_matrix[i, :] .= P_db
 end
