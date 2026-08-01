@@ -70,6 +70,7 @@ module JuGNLSE
 
 using FFTW
 using LinearAlgebra
+using ProgressMeter
 
 # Physical constants - natural SI units
 const c = 299792458.0  # Speed of light [m/s]
