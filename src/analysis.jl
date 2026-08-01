@@ -147,6 +147,13 @@ function photon_number(pulse::Pulse)
 end
 
 function photon_number(solution::Solution)
+    if isempty(solution.AW)
+        # When save_freq=false, AW is empty (0x0). Fallback to time-domain At computation.
+        # By Parseval's theorem, Σ |AW|² = (1/N) Σ |At|².
+        N = size(solution.At, 1)
+        return [sum(abs2, view(solution.At, :, j)) / (N * solution.omega0)
+                for j in axes(solution.At, 2)]
+    end
     # solution.AW columns and solution.W are both in monotonic order
     return [sum(abs2.(view(solution.AW, :, j)) ./ solution.W)
             for j in axes(solution.AW, 2)]

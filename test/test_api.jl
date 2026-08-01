@@ -99,6 +99,22 @@ using JuGNLSE
 
         nr = SimParams(; medium=medium, raman_model=nothing)
         @test nr.raman_model === nothing
+
+        # Test save_freq=false memory optimization
+        sf_false = SimParams(; medium=medium, z_saves=10, save_freq=false)
+        @test sf_false.save_freq == false
+        grid_sf = create_grid(2^9, 10e-12, 835e-9)
+        pulse_sf = sech_pulse(grid_sf, 10.0, 100e-15)
+        sol_sf = solve(pulse_sf, sf_false; progress=false)
+        @test size(sol_sf.AW) == (0, 0)
+        @test size(sol_sf.At) == (grid_sf.N, 10)
+
+        # Test in-place loss_vector! and gain_vector!
+        buf_loss = zeros(Float64, grid_sf.N)
+        loss_vector!(buf_loss, grid_sf, medium)
+        @test all(buf_loss .== 0.0)
+        gain_vector!(buf_loss, grid_sf, medium)
+        @test all(buf_loss .== 0.0)
     end
 
     @testset "Pulses" begin

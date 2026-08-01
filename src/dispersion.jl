@@ -59,43 +59,60 @@ end
 Compute linear attenuation vector α [Np/m] across relative angular frequencies V at position z.
 Supports scalar loss [dB/m], vector spectrum loss [dB/m], and function loss(z), loss(ω), or loss(ω, z).
 """
-function loss_vector(V::AbstractVector{Float64}, medium::AbstractMedium, z::Float64=0.0)
+function loss_vector!(res::AbstractVector{Float64}, V::AbstractVector{Float64}, medium::AbstractMedium, z::Float64=0.0)
     loss_val = hasproperty(medium, :loss) ? medium.loss : 0.0
-    return _eval_loss_or_gain(V, medium, loss_val, z, true)
+    return _eval_loss_or_gain!(res, V, medium, loss_val, z, true)
 end
 
+loss_vector(V::AbstractVector{Float64}, medium::AbstractMedium, z::Float64=0.0) =
+    loss_vector!(zeros(Float64, length(V)), V, medium, z)
+
 loss_vector(grid::Grid, medium::AbstractMedium, z::Float64=0.0) = loss_vector(grid.V, medium, z)
+loss_vector!(res::AbstractVector{Float64}, grid::Grid, medium::AbstractMedium, z::Float64=0.0) =
+    loss_vector!(res, grid.V, medium, z)
 
 """
     gain_vector(V, medium, z=0.0) -> Vector{Float64}
+    gain_vector!(res, V, medium, z=0.0) -> Vector{Float64}
 
 Compute small-signal gain vector g₀ [Np/m] across relative angular frequencies V at position z.
 Supports scalar gain [Np/m], vector gain spectrum g₀(ω), and function g₀(z), g₀(ω), or g₀(ω, z).
 """
-function gain_vector(V::AbstractVector{Float64}, medium::AbstractMedium, z::Float64=0.0)
+function gain_vector!(res::AbstractVector{Float64}, V::AbstractVector{Float64}, medium::AbstractMedium, z::Float64=0.0)
     if hasproperty(medium, :g0)
-        return _eval_loss_or_gain(V, medium, medium.g0, z, false)
+        return _eval_loss_or_gain!(res, V, medium, medium.g0, z, false)
     else
-        return zeros(Float64, length(V))
+        fill!(res, 0.0)
+        return res
     end
 end
 
-gain_vector(grid::Grid, medium::AbstractMedium, z::Float64=0.0) = gain_vector(grid.V, medium, z)
+gain_vector(V::AbstractVector{Float64}, medium::AbstractMedium, z::Float64=0.0) =
+    gain_vector!(zeros(Float64, length(V)), V, medium, z)
 
-function _eval_loss_or_gain(V::AbstractVector{Float64}, medium::AbstractMedium, val::Any, z::Float64, is_loss::Bool)
+gain_vector(grid::Grid, medium::AbstractMedium, z::Float64=0.0) = gain_vector(grid.V, medium, z)
+gain_vector!(res::AbstractVector{Float64}, grid::Grid, medium::AbstractMedium, z::Float64=0.0) =
+    gain_vector!(res, grid.V, medium, z)
+
+function _eval_loss_or_gain!(res::AbstractVector{Float64}, V::AbstractVector{Float64}, medium::AbstractMedium, val::Any, z::Float64, is_loss::Bool)
     N = length(V)
+    length(res) == N || throw(ArgumentError("Buffer length $(length(res)) does not match grid size $N"))
     factor = log(10.0) / 10.0
     if val isa Real
         alpha_Np = is_loss ? Float64(val) * factor : Float64(val)
-        return fill(alpha_Np, N)
+        fill!(res, alpha_Np)
+        return res
     elseif val isa AbstractVector
         length(val) == N || throw(ArgumentError("Spectrum length $(length(val)) does not match grid size $N"))
-        return is_loss ? Float64.(val) .* factor : collect(Float64, val)
+        if is_loss
+            @. res = Float64(val) * factor
+        else
+            copyto!(res, val)
+        end
+        return res
     elseif val isa Function || applicable(val, 1.0) || applicable(val, 1.0, 0.0)
         omega0 = 2π * c / medium.lambda0
         omegas = V .+ omega0
-        res = zeros(Float64, N)
-        # Determine calling convention once outside the loop to avoid per-iteration dispatch
         use_two_args = applicable(val, omegas[1], z)
         use_one_arg  = !use_two_args && applicable(val, omegas[1])
         for i in 1:N
@@ -110,7 +127,8 @@ function _eval_loss_or_gain(V::AbstractVector{Float64}, medium::AbstractMedium, 
         end
         return res
     else
-        return zeros(Float64, N)
+        fill!(res, 0.0)
+        return res
     end
 end
 

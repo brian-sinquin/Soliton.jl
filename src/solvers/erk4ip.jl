@@ -108,11 +108,13 @@ function _propagate_erk4ip!(
     # contiguous column, so per-save writes are contiguous.
     z_out = zeros(n_saves)
     At_out = zeros(ComplexF64, N, n_saves)
-    Aw_out = zeros(ComplexF64, N, n_saves)
+    Aw_out = params.save_freq ? zeros(ComplexF64, N, n_saves) : zeros(ComplexF64, 0, 0)
 
     z_out[1] = 0.0
     At_out[:, 1] .= pulse.At
-    Aw_out[:, 1] .= fftshift(U)
+    if params.save_freq
+        Aw_out[:, 1] .= fftshift(U)
+    end
 
     # Adaptive stepping setup. `dz` is declared Float64 so the boxed
     # Union{Float64,Nothing} argument cannot leak into the hot loop.
@@ -246,8 +248,10 @@ function _propagate_erk4ip!(
                 # interaction picture each step), so no exp(D·z) is applied.
                 copyto!(model.buf_f1, U)
 
-                # Apply fftshift for monotonic frequency ordering in output
-                fftshift!(@view(Aw_out[:, save_idx]), model.buf_f1)
+                # Apply fftshift for monotonic frequency ordering in output if requested
+                if params.save_freq
+                    fftshift!(@view(Aw_out[:, save_idx]), model.buf_f1)
+                end
 
                 # Transform to time domain (lab frame)
                 mul!(u_temp, model.to_time, model.buf_f1)

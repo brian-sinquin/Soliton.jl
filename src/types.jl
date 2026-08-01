@@ -544,6 +544,7 @@ struct SimParams{S <: GNLSESolver, M <: AbstractMedium}
     raman_model::Union{RamanModel, Nothing}
     self_steepening::Bool
     solver::S
+    save_freq::Bool
 
     function SimParams(
         medium::M,
@@ -551,9 +552,10 @@ struct SimParams{S <: GNLSESolver, M <: AbstractMedium}
         raman_model::Union{RamanModel, Nothing},
         self_steepening::Bool,
         solver::S,
+        save_freq::Bool=true,
     ) where {S <: GNLSESolver, M <: AbstractMedium}
         z_saves > 0 || throw(ArgumentError("z_saves must be positive"))
-        new{S, M}(medium, z_saves, raman_model, self_steepening, solver)
+        new{S, M}(medium, z_saves, raman_model, self_steepening, solver, save_freq)
     end
 end
 
@@ -566,7 +568,7 @@ function SimParams(
     rtol::Float64,
     atol::Float64,
 )
-    return SimParams(medium, z_saves, raman_model, self_steepening, ERK4IP(; rtol=rtol, atol=atol))
+    return SimParams(medium, z_saves, raman_model, self_steepening, ERK4IP(; rtol=rtol, atol=atol), true)
 end
 
 # Keyword constructor supporting both generic solver and backward-compatible rtol/atol
@@ -578,6 +580,7 @@ function SimParams(;
     rtol::Union{Float64, Nothing}=nothing,
     atol::Union{Float64, Nothing}=nothing,
     solver::Union{GNLSESolver, Nothing}=nothing,
+    save_freq::Bool=true,
 )
     if solver === nothing
         rtol_val = rtol === nothing ? 1e-6 : rtol
@@ -588,7 +591,7 @@ function SimParams(;
             throw(ArgumentError("Cannot specify both `solver` and `rtol`/`atol` compatibility options"))
         solv = solver
     end
-    return SimParams(medium, z_saves, raman_model, self_steepening, solv)
+    return SimParams(medium, z_saves, raman_model, self_steepening, solv, save_freq)
 end
 
 """

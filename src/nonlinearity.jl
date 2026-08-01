@@ -118,9 +118,10 @@ function _spm(u, model::PhysicsModel, z::Real)
 
     # Get gamma at z
     gamma_z = eval_gamma(model.gamma, z, model.omega0)
+    factor = 1.0im * gamma_z
 
     # Multiply by iγ_z * gamma_W
-    @. model.buf_f1 = 1.0im * gamma_z * model.gamma_W * model.buf_f1
+    @. model.buf_f1 = factor * model.gamma_W * model.buf_f1
 
     return model.buf_f1
 end
@@ -172,8 +173,9 @@ function _spm_raman(u, model::PhysicsModel, z::Real)
     
     # Get gamma at z
     gamma_z = eval_gamma(model.gamma, z, model.omega0)
-    
-    @. model.buf_f1 = 1.0im * gamma_z * model.gamma_W * model.buf_f1
+    factor = 1.0im * gamma_z
+
+    @. model.buf_f1 = factor * model.gamma_W * model.buf_f1
 
     return model.buf_f1
 end
@@ -328,11 +330,13 @@ function _amplifying_spm(u, model::PhysicsModel, z::Real)
     delta_g = -0.5 * g0_val * (E_pulse / (Esat + E_pulse))
 
     gamma_z = eval_gamma(model.gamma, z, model.omega0)
+    ig = 1.0im * gamma_z
 
-    @. model.buf_t1 = u * (1.0im * gamma_z * abs2(u) + delta_g)
+    @. model.buf_t1 = u * (ig * abs2(u) + delta_g)
 
     mul!(model.buf_f1, model.to_freq, model.buf_t1)
-    @. model.buf_f1 = model.buf_f1 * (model.gamma_W / model.omega0)
+    inv_w0 = 1.0 / model.omega0
+    @. model.buf_f1 = model.buf_f1 * model.gamma_W * inv_w0
 
     return model.buf_f1
 end
@@ -354,11 +358,13 @@ function _amplifying_spm_raman(u, model::PhysicsModel, z::Real)
     mul!(model.buf_t2, model.to_time, model.buf_f1)
 
     gamma_z = eval_gamma(model.gamma, z, model.omega0)
+    ig = 1.0im * gamma_z
 
-    @. model.buf_t1 = u * (1.0im * gamma_z * ((1.0 - model.fr) * abs2(u) + model.fr * dt * model.buf_t2) + delta_g)
+    @. model.buf_t1 = u * (ig * ((1.0 - model.fr) * abs2(u) + model.fr * dt * model.buf_t2) + delta_g)
 
     mul!(model.buf_f1, model.to_freq, model.buf_t1)
-    @. model.buf_f1 = model.buf_f1 * (model.gamma_W / model.omega0)
+    inv_w0 = 1.0 / model.omega0
+    @. model.buf_f1 = model.buf_f1 * model.gamma_W * inv_w0
 
     return model.buf_f1
 end

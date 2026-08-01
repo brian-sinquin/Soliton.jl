@@ -125,7 +125,7 @@ export create_grid, wavelength_grid
 export sech_pulse, gaussian_pulse, lorentzian_pulse, cw_pulse
 
 # Export dispersion functions
-export dispersion_operator, propagation_constant
+export dispersion_operator, propagation_constant, loss_vector, loss_vector!, gain_vector, gain_vector!
 
 # Export Raman functions
 export raman_response

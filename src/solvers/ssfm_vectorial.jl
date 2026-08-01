@@ -29,12 +29,14 @@ function propagate(
     # Storage for output
     z_out = zeros(n_saves)
     At_out = zeros(ComplexF64, N, 2, n_saves)
-    Aw_out = zeros(ComplexF64, N, 2, n_saves)
+    Aw_out = params.save_freq ? zeros(ComplexF64, N, 2, n_saves) : zeros(ComplexF64, 0, 0, 0)
 
     z_out[1] = 0.0
     At_out[:, :, 1] .= pulse.At
-    Aw_out[:, 1, 1] .= fftshift(U[:, 1])
-    Aw_out[:, 2, 1] .= fftshift(U[:, 2])
+    if params.save_freq
+        Aw_out[:, 1, 1] .= fftshift(U[:, 1])
+        Aw_out[:, 2, 1] .= fftshift(U[:, 2])
+    end
 
     # Progress bar setup
     prog = progress ? Progress(n_saves - 1; desc="Vectorial SSFM... ", color=:blue) : nothing
@@ -92,8 +94,10 @@ function propagate(
         
         # Save U components
         copyto!(model.buf_f1, U)
-        fftshift!(@view(Aw_out[:, 1, save_idx]), @view(model.buf_f1[:, 1]))
-        fftshift!(@view(Aw_out[:, 2, save_idx]), @view(model.buf_f1[:, 2]))
+        if params.save_freq
+            fftshift!(@view(Aw_out[:, 1, save_idx]), @view(model.buf_f1[:, 1]))
+            fftshift!(@view(Aw_out[:, 2, save_idx]), @view(model.buf_f1[:, 2]))
+        end
 
         # Transform back to time domain
         mul!(u_temp, model.to_time, model.buf_f1)
