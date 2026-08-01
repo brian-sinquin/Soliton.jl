@@ -115,6 +115,23 @@ using JuGNLSE
         @test all(buf_loss .== 0.0)
         gain_vector!(buf_loss, grid_sf, medium)
         @test all(buf_loss .== 0.0)
+
+        # Test multithreaded solve_sweep parameter sweep API
+        powers_sweep = [50.0, 100.0, 200.0]
+        sols_sweep = solve_sweep(powers_sweep; progress=false) do P0
+            p = sech_pulse(grid_sf, P0, 100e-15)
+            params = SimParams(; medium=medium, z_saves=5, raman_model=nothing)
+            return (p, params)
+        end
+        @test length(sols_sweep) == 3
+        @test sols_sweep[1] isa Solution
+        @test peak_power(Pulse(sols_sweep[3])) > peak_power(Pulse(sols_sweep[1]))
+
+        # Test solve_sweep with Vector of pulses and params
+        pulses_v = [sech_pulse(grid_sf, P0, 100e-15) for P0 in powers_sweep]
+        params_v = [SimParams(; medium=medium, z_saves=5, raman_model=nothing) for _ in 1:3]
+        sols_v = solve_sweep(pulses_v, params_v; progress=false)
+        @test length(sols_v) == 3
     end
 
     @testset "Pulses" begin

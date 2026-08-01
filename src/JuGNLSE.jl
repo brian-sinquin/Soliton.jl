@@ -131,7 +131,7 @@ export dispersion_operator, propagation_constant, loss_vector, loss_vector!, gai
 export raman_response
 
 # Export solver interface
-export solve
+export solve, solve_sweep
 
 # Export physics model builder
 export build_physics_model

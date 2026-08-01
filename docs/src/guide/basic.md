@@ -140,3 +140,20 @@ params = SimParams(;
     atol   = 1e-10,            # absolute tolerance
 )
 ```
+
+## Parallel Parameter Sweeps (`solve_sweep`)
+
+To sweep parameters (e.g. peak power $P_0$, fiber length $L$, or noise seeds) concurrently across all available Julia worker threads (`julia -t N`), use `solve_sweep`:
+
+```julia
+# Sweep peak power P0 from 1 kW to 10 kW in parallel
+powers = range(1e3, 10e3; length=10)
+
+solutions = solve_sweep(powers) do P0
+    pulse  = sech_pulse(grid, P0, 100e-15)
+    params = SimParams(; medium=medium, z_saves=20)
+    return (pulse, params)
+end
+```
+
+`solve_sweep` guarantees thread-safe, isolated memory allocations for each simulation trial.

@@ -185,3 +185,59 @@ end
 # Make SimParams callable for vectorial piping support
 (params::SimParams)(pulse::VectorialPulse) = solve(pulse, params; progress=false)
 (params::SimParams)(sol::VectorialSolution) = solve(VectorialPulse(sol), params; progress=false)
+
+"""
+    solve_sweep(setup_fn::Function, param_space::AbstractArray; progress::Bool=true)
+    solve_sweep(pulses, params_list; progress::Bool=true)
+
+Perform a multi-threaded parallel parameter sweep over GNLSE simulations.
+
+Concurrently executes simulations across available Julia worker threads
+(`Threads.nthreads()`), ensuring thread-safe, isolated workspace memory per trial.
+
+# Arguments
+
+- `setup_fn::Function`: Callable `param -> (pulse, params)` that maps a parameter combination to its pulse and simulation parameters.
+- `param_space::AbstractArray`: Collection or grid of parameters.
+- `progress::Bool`: Display a progress bar tracking trial completions (default: true).
+
+# Returns
+
+- Array of `Solution` (or `VectorialSolution`) objects matching the shape of `param_space`.
+
+# Example
+
+```julia
+# Sweep peak power P0 from 1 kW to 10 kW across 10 trials
+powers = range(1e3, 10e3; length=10)
+sols = solve_sweep(powers) do P0
+    p = sech_pulse(grid, P0, 100e-15)
+    params = SimParams(; medium=medium, z_saves=20)
+    return (p, params)
+end
+```
+"""
+function solve_sweep(setup_fn::Function, param_space::AbstractArray; progress::Bool=true)
+    N_trials = length(param_space)
+    solutions = Vector{Any}(undef, N_trials)
+    
+    prog = progress ? Progress(N_trials; desc="Parallel Sweep (threads=$(Threads.nthreads()))... ", color=:cyan) : nothing
+    
+    Threads.@threads :static for i in 1:N_trials
+        param = param_space[i]
+        pulse, params = setup_fn(param)
+        solutions[i] = solve(pulse, params; progress=false)
+        if !isnothing(prog)
+            next!(prog)
+        end
+    end
+    
+    return reshape(solutions, size(param_space))
+end
+
+function solve_sweep(pulses::AbstractVector{<:AbstractPulse}, params_list::AbstractVector{<:SimParams}; progress::Bool=true)
+    length(pulses) == length(params_list) || throw(ArgumentError("pulses and params_list must have identical length"))
+    return solve_sweep(1:length(pulses); progress=progress) do i
+        return (pulses[i], params_list[i])
+    end
+end
