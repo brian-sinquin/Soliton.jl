@@ -19,6 +19,7 @@ Each example in **JuGNLSE.jl** reproduces a key result from the nonlinear optics
 | **9** | [Femtosecond EDFA Amplifier](ex9_edfa_amplifier.md) | Agrawal, *Nonlinear Fiber Optics*, Ch. 11 | Gain saturation & quantum ASE noise | `AmplifyingMedium` |
 | **10** | [Multithreaded 2D Parameter Sweep](ex10_parallel_sweep.md) | ZDW Boundary & Dispersive Wave Trapping | 2D Spectral Heatmaps across ZDW | `solve_sweep`, `Threads` |
 | **11** | [1D Metric Sweep: Soliton Compression](ex11_soliton_compression.md) | Mollenauer (1980); Agrawal Ch. 5 | 1D minimum pulse width vs power sweep | `solve_sweep`, `fwhm` |
+| **12** | [Hollow-Core PCF Gas Pressure Sweep](ex12_hollowcore_pressure_sweep.md) | Russell et al., *Nat. Photonics* **8**, 278 (2014) | Pressure-tuned ZDW & UV/blue dispersive wave emission | `HollowCoreFiber`, `solve_sweep` |
 
 ---
 
