@@ -66,8 +66,8 @@ sol = solve(pulse, params; progress=false)
 ```
 
 ```@example ex1
-using Plots
-plot(sol) # Automatic 4-panel dashboard: temporal & spectral heatmaps and slices
+using Plots # hide
+plot(sol) # Automatic 4-panel dashboard: temporal & spectral heatmaps and slices # hide
 ```
 
 ## Expected Results

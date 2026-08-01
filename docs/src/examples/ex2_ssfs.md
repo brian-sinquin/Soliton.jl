@@ -82,69 +82,69 @@ params_kerr = SimParams(;
 sol_kerr = solve(pulse, params_kerr; progress=false)
 ```
 
-```@example ex2; hide = true
-using Plots
-gr()
+```@example ex2
+using Plots # hide
+gr() # hide
 
-c = 2.99792458e8
-z_m = sol_raman.Z
+c = 2.99792458e8 # hide
+z_m = sol_raman.Z # hide
 
-# ── Spectral evolution heatmap (slice native grid) ──
-wl_nm_orig = 2π * c ./ grid.W .* 1e9
-wl_sort_idx = sortperm(wl_nm_orig)
-wl_sorted = wl_nm_orig[wl_sort_idx]
-AW_dB_sorted = 10 .* log10.(max.(1e-10, abs2.(sol_raman.AW[wl_sort_idx, :])))
+# ── Spectral evolution heatmap (slice native grid) ── # hide
+wl_nm_orig = 2π * c ./ grid.W .* 1e9 # hide
+wl_sort_idx = sortperm(wl_nm_orig) # hide
+wl_sorted = wl_nm_orig[wl_sort_idx] # hide
+AW_dB_sorted = 10 .* log10.(max.(1e-10, abs2.(sol_raman.AW[wl_sort_idx, :]))) # hide
 
-idx_w = findall(1400.0 .<= wl_sorted .<= 1800.0)
-AW_sub = AW_dB_sorted[idx_w, :]
-wl_sub = wl_sorted[idx_w]
-clim_s = (maximum(AW_sub) - 30, maximum(AW_sub))
+idx_w = findall(1400.0 .<= wl_sorted .<= 1800.0) # hide
+AW_sub = AW_dB_sorted[idx_w, :] # hide
+wl_sub = wl_sorted[idx_w] # hide
+clim_s = (maximum(AW_sub) - 30, maximum(AW_sub)) # hide
 
-p1 = heatmap(wl_sub, z_m, AW_sub',
-    xlabel = "Wavelength (nm)", ylabel = "Distance (m)",
-    title  = "Spectral Evolution (with Raman)",
-    colorbar_title = "PSD (dB)", clims = clim_s,
-    color  = :inferno, right_margin = 6Plots.mm)
+p1 = heatmap(wl_sub, z_m, AW_sub', # hide
+    xlabel = "Wavelength (nm)", ylabel = "Distance (m)", # hide
+    title  = "Spectral Evolution (with Raman)", # hide
+    colorbar_title = "PSD (dB)", clims = clim_s, # hide
+    color  = :inferno, right_margin = 6Plots.mm) # hide
 
-# ── Temporal evolution heatmap (slice native grid) ──
-t_ps = grid.t .* 1e12
-idx_t = findall(-3.0 .<= t_ps .<= 15.0)
-At_dB = 10 .* log10.(max.(1e-10, abs2.(sol_raman.At[idx_t, :])))
-clim_t = (maximum(At_dB) - 30, maximum(At_dB))
+# ── Temporal evolution heatmap (slice native grid) ── # hide
+t_ps = grid.t .* 1e12 # hide
+idx_t = findall(-3.0 .<= t_ps .<= 15.0) # hide
+At_dB = 10 .* log10.(max.(1e-10, abs2.(sol_raman.At[idx_t, :]))) # hide
+clim_t = (maximum(At_dB) - 30, maximum(At_dB)) # hide
 
-p2 = heatmap(t_ps[idx_t], z_m, At_dB',
-    xlabel = "Time (ps)", ylabel = "Distance (m)",
-    title  = "Temporal Evolution (with Raman)",
-    colorbar_title = "Power (dB)", clims = clim_t,
-    color  = :inferno, right_margin = 6Plots.mm)
+p2 = heatmap(t_ps[idx_t], z_m, At_dB', # hide
+    xlabel = "Time (ps)", ylabel = "Distance (m)", # hide
+    title  = "Temporal Evolution (with Raman)", # hide
+    colorbar_title = "Power (dB)", clims = clim_t, # hide
+    color  = :inferno, right_margin = 6Plots.mm) # hide
 
-# ── Spectral centroid shift vs. z using track_solitons ──
-_, _, centroid_w_raman = track_solitons(sol_raman)
-_, _, centroid_w_kerr  = track_solitons(sol_kerr)
+# ── Spectral centroid shift vs. z using track_solitons ── # hide
+_, _, centroid_w_raman = track_solitons(sol_raman) # hide
+_, _, centroid_w_kerr  = track_solitons(sol_kerr) # hide
 
-# Convert frequency shift ⟨ω - ω₀⟩ (rad/s) to wavelength shift Δλ (nm)
-Δλ_raman = (lambda0^2 / (2π * c)) .* abs.(centroid_w_raman) .* 1e9
-Δλ_kerr  = (lambda0^2 / (2π * c)) .* abs.(centroid_w_kerr) .* 1e9
+# Convert frequency shift ⟨ω - ω₀⟩ (rad/s) to wavelength shift Δλ (nm) # hide
+Δλ_raman = (lambda0^2 / (2π * c)) .* abs.(centroid_w_raman) .* 1e9 # hide
+Δλ_kerr  = (lambda0^2 / (2π * c)) .* abs.(centroid_w_kerr) .* 1e9 # hide
 
-# Gordon analytical prediction: dΩ/dz = -8·T_R·|β₂|/(15·T₀⁴)
-# T_R ≈ 3 fs (Raman slope), Δλ ≈ λ₀²·|ΔΩ|/(2πc)
-T_R    = 3e-15
-dΩdz   = -8 * T_R * abs(beta2) / (15 * T0^4)
-Δλ_th  = [lambda0^2 / (2π * 2.99792458e8) * abs(dΩdz * z) * 1e9 for z in z_m]
+# Gordon analytical prediction: dΩ/dz = -8·T_R·|β₂|/(15·T₀⁴) # hide
+# T_R ≈ 3 fs (Raman slope), Δλ ≈ λ₀²·|ΔΩ|/(2πc) # hide
+T_R    = 3e-15 # hide
+dΩdz   = -8 * T_R * abs(beta2) / (15 * T0^4) # hide
+Δλ_th  = [lambda0^2 / (2π * 2.99792458e8) * abs(dΩdz * z) * 1e9 for z in z_m] # hide
 
-p3 = plot(z_m, Δλ_raman,
-    label="Simulation (SSFS)",
-    xlabel="Distance (m)", ylabel="Δλ (nm)",
-    title="Centroid Shift",
-    color=:crimson, lw=2.0)
-plot!(p3, z_m, Δλ_kerr,
-    label="No Raman (Kerr only)", color=:black, ls=:dash, lw=1.5)
-plot!(p3, z_m, Δλ_th,
-    label="Gordon formula", color=:green, ls=:dot, lw=1.5)
+p3 = plot(z_m, Δλ_raman, # hide
+    label="Simulation (SSFS)", # hide
+    xlabel="Distance (m)", ylabel="Δλ (nm)", # hide
+    title="Centroid Shift", # hide
+    color=:crimson, lw=2.0) # hide
+plot!(p3, z_m, Δλ_kerr, # hide
+    label="No Raman (Kerr only)", color=:black, ls=:dash, lw=1.5) # hide
+plot!(p3, z_m, Δλ_th, # hide
+    label="Gordon formula", color=:green, ls=:dot, lw=1.5) # hide
 
-plot(p1, p2, p3, layout=(1, 3), size=(1300, 450),
-     plot_title="Soliton Self-Frequency Shift — Mitschke & Mollenauer (1986)",
-     plot_titlevspan=0.08, bottom_margin=6Plots.mm, left_margin=4Plots.mm)
+plot(p1, p2, p3, layout=(1, 3), size=(1300, 450), # hide
+     plot_title="Soliton Self-Frequency Shift — Mitschke & Mollenauer (1986)", # hide
+     plot_titlevspan=0.08, bottom_margin=6Plots.mm, left_margin=9Plots.mm) # hide
 ```
 
 ## Expected Results

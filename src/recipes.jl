@@ -1,4 +1,5 @@
 using RecipesBase
+using Measures: mm
 
 """
     @recipe function f(sol::Solution)
@@ -14,6 +15,8 @@ Plot recipe for `Solution` creating a 4-panel dashboard:
     legend := false
     size --> (1000, 700)
     titlefontsize --> 11
+    left_margin --> 8mm
+    bottom_margin --> 6mm
 
     t_ps = sol.t .* 1e12
     Z_m = sol.Z

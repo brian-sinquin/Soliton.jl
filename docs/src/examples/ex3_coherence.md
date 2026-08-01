@@ -69,16 +69,16 @@ significant = findall(>=(-30.0), P_db)
 println("Mean coherence |g₁₂⁽¹⁾| over the significant band: ", round(mean(g12_A[significant]); digits=3))
 ```
 
-```@example ex3; hide = true
-using Plots
-gr()
+```@example ex3
+using Plots # hide
+gr() # hide
 
-wl_nm = 2π * 2.99792458e8 ./ grid.W .* 1e9
-wl_sig = wl_nm[significant]
-g12_sig = g12_A[significant]
-ord = sortperm(wl_sig)
+wl_nm = 2π * 2.99792458e8 ./ grid.W .* 1e9 # hide
+wl_sig = wl_nm[significant] # hide
+g12_sig = g12_A[significant] # hide
+ord = sortperm(wl_sig) # hide
 
-plot(wl_sig[ord], g12_sig[ord], label="50 fs Pump Coherence |g₁₂⁽¹⁾|", xlabel="Wavelength (nm)", ylabel="Degree of Coherence", ylims=(0, 1.05), color=:navy, lw=1.5, plot_title="Supercontinuum Coherence Spectrum")
+plot(wl_sig[ord], g12_sig[ord], label="50 fs Pump Coherence |g₁₂⁽¹⁾|", xlabel="Wavelength (nm)", ylabel="Degree of Coherence", ylims=(0, 1.05), color=:navy, lw=1.5, plot_title="Supercontinuum Coherence Spectrum") # hide
 ```
 
 ## Expected Results

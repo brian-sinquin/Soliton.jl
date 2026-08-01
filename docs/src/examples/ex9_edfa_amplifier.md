@@ -44,8 +44,8 @@ println("Amplifier Gain: ", round(10 * log10(E_out / E_in), digits=2), " dB")
 ```
 
 ```@example ex9
-using Plots
-plot(sol) # 4-panel dashboard showing EDFA amplification & dynamic gain saturation
+using Plots # hide
+plot(sol) # 4-panel dashboard showing EDFA amplification & dynamic gain saturation # hide
 ```
 ---
 

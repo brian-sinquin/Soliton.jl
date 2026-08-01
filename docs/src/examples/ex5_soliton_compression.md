@@ -51,8 +51,8 @@ println("N=3 Soliton Peak Power Compression: ", round(maximum(peak_power_z)/peak
 ```
 
 ```@example ex5
-using Plots
-plot(sol) # 4-panel dashboard showing pulse breathing & compression
+using Plots # hide
+plot(sol) # 4-panel dashboard showing pulse breathing & compression # hide
 ```
 
 ## Expected Results

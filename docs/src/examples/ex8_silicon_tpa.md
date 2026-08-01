@@ -37,8 +37,8 @@ println("TPA Non-linear Transmission: ", round(pulse_energy(Pulse(sol)) / pulse_
 ```
 
 ```@example ex8
-using Plots
-plot(sol) # 4-panel dashboard showing TPA & free-carrier blue-shift
+using Plots # hide
+plot(sol) # 4-panel dashboard showing TPA & free-carrier blue-shift # hide
 ```
 ---
 

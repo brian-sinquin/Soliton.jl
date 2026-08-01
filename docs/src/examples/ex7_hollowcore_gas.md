@@ -47,6 +47,6 @@ println("Peak compression: ", round(peak_out / peak_in, digits=1), "x")
 ```
 
 ```@example ex7
-using Plots
-plot(sol) # 4-panel dashboard: soliton compression & spectral broadening in gas-filled HC-PCF
+using Plots # hide
+plot(sol) # 4-panel dashboard: soliton compression & spectral broadening in gas-filled HC-PCF # hide
 ```

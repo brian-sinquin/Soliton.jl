@@ -70,37 +70,37 @@ peaks = [maximum(abs2, sol.At[:, i]) for i in axes(sol.At, 2)]
 println("N=3 Soliton Recurrence verified across 3 half-periods")
 ```
 
-```@example ex6; hide = true
-using Plots
-gr()
+```@example ex6
+using Plots # hide
+gr() # hide
 
-t_ps = grid.t .* 1e12
-idx_t = findall(-5.0 .<= t_ps .<= 5.0)
-z_m = sol.Z
+t_ps = grid.t .* 1e12 # hide
+idx_t = findall(-5.0 .<= t_ps .<= 5.0) # hide
+z_m = sol.Z # hide
 
-# ── Temporal heatmap over 3 recurrence half-periods (slice native grid) ──
-At_dB = 10 .* log10.(max.(1e-10, abs2.(sol.At[idx_t, :]) ./ P0))
-clim_t = (-30, maximum(At_dB))
+# ── Temporal heatmap over 3 recurrence half-periods (slice native grid) ── # hide
+At_dB = 10 .* log10.(max.(1e-10, abs2.(sol.At[idx_t, :]) ./ P0)) # hide
+clim_t = (-30, maximum(At_dB)) # hide
 
-p1 = heatmap(t_ps[idx_t], z_m, At_dB',
-    xlabel = "Time (ps)", ylabel = "Distance (m)",
-    title  = "Temporal Evolution (3 half-periods)",
-    colorbar_title = "P/P₀ (dB)",
-    clims  = clim_t, color = :inferno, right_margin = 6Plots.mm)
-hline!(p1, [Zhalf, 2*Zhalf, 3*Zhalf], color=:white, ls=:dash, lw=0.8, label=false)
+p1 = heatmap(t_ps[idx_t], z_m, At_dB', # hide
+    xlabel = "Time (ps)", ylabel = "Distance (m)", # hide
+    title  = "Temporal Evolution (3 half-periods)", # hide
+    colorbar_title = "P/P₀ (dB)", # hide
+    clims  = clim_t, color = :inferno, right_margin = 6Plots.mm) # hide
+hline!(p1, [Zhalf, 2*Zhalf, 3*Zhalf], color=:white, ls=:dash, lw=0.8, label=false) # hide
 
-# ── Peak power vs z ── recurrence visible as return to P₀
-p2 = plot(z_m, peaks,
-    xlabel = "Distance (m)", ylabel = "Peak Power (W)",
-    title  = "Recurrence: P(z) returns to P₀",
-    label  = "Peak power", color=:darkgreen, lw=1.5)
-hline!(p2, [P0], label="P₀ = $(round(P0; sigdigits=3)) W",
-       color=:black, ls=:dash, lw=1.5)
-vline!(p2, [Zhalf, 2*Zhalf, 3*Zhalf], color=:gray, ls=:dot, lw=1.0, label=false)
+# ── Peak power vs z ── recurrence visible as return to P₀ # hide
+p2 = plot(z_m, peaks, # hide
+    xlabel = "Distance (m)", ylabel = "Peak Power (W)", # hide
+    title  = "Recurrence: P(z) returns to P₀", # hide
+    label  = "Peak power", color=:darkgreen, lw=1.5) # hide
+hline!(p2, [P0], label="P₀ = $(round(P0; sigdigits=3)) W", # hide
+       color=:black, ls=:dash, lw=1.5) # hide
+vline!(p2, [Zhalf, 2*Zhalf, 3*Zhalf], color=:gray, ls=:dot, lw=1.0, label=false) # hide
 
-plot(p1, p2, layout=(1, 2), size=(1100, 470),
-     plot_title="N=3 Soliton Akhmediev Recurrence — Zakharov & Shabat (1972)",
-     plot_titlevspan=0.08, bottom_margin=6Plots.mm, left_margin=4Plots.mm)
+plot(p1, p2, layout=(1, 2), size=(1100, 470), # hide
+     plot_title="N=3 Soliton Akhmediev Recurrence — Zakharov & Shabat (1972)", # hide
+     plot_titlevspan=0.08, bottom_margin=6Plots.mm, left_margin=9Plots.mm) # hide
 ```
 
 ```@example ex6

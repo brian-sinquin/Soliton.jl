@@ -57,21 +57,23 @@ nothing # hide
 ## 📊 Results & High-Resolution Visualization
 
 ```@example ex10
-using Plots
+using Plots # hide
 
-p = heatmap(
-    wl_plot,
-    collect(powers),
-    spec_matrix,
-    xlabel = "Wavelength λ [nm]",
-    ylabel = "Input Peak Power P₀ [W]",
-    title = "High-Resolution Multithreaded Sweep (100 Trials, 8 Threads)",
-    color = :turbo,
-    clims = (-35, 0),
-    colorbar_title = "Spectral Power [dB]",
-    size = (900, 550),
-    dpi = 300
-)
+p = heatmap( # hide
+    wl_plot, # hide
+    collect(powers), # hide
+    spec_matrix, # hide
+    xlabel = "Wavelength λ [nm]", # hide
+    ylabel = "Input Peak Power P₀ [W]", # hide
+    title = "High-Resolution Multithreaded Sweep (100 Trials, 8 Threads)", # hide
+    color = :turbo, # hide
+    clims = (-35, 0), # hide
+    colorbar_title = "Spectral Power [dB]", # hide
+    size = (900, 550), # hide
+    left_margin = 8Plots.mm, # hide
+    bottom_margin = 6Plots.mm, # hide
+    dpi = 300 # hide
+) # hide
 
-vline!(p, [835.0], label="Pump (835 nm)", color=:white, linestyle=:dash, linewidth=1.5)
+vline!(p, [835.0], label="Pump (835 nm)", color=:white, linestyle=:dash, linewidth=1.5) # hide
 ```

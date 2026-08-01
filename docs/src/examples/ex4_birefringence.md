@@ -71,41 +71,41 @@ vsol_sep  = run_case(1.0e-12)   # 1.0 ps/m: well above threshold -> separated
 println("Trapping threshold: |δ| < ", round(threshold_ps_m, digits=3), " ps/m")
 ```
 
-```@example ex4; hide = true
-using Plots
-gr()
+```@example ex4
+using Plots # hide
+gr() # hide
 
-function trace_peaks(vsol)
-    t_ps = vsol.t .* 1e12
-    px = [t_ps[argmax(abs2.(vsol.At[:, 1, i]))] for i in axes(vsol.At, 3)]
-    py = [t_ps[argmax(abs2.(vsol.At[:, 2, i]))] for i in axes(vsol.At, 3)]
-    return px, py
-end
+function trace_peaks(vsol) # hide
+    t_ps = vsol.t .* 1e12 # hide
+    px = [t_ps[argmax(abs2.(vsol.At[:, 1, i]))] for i in axes(vsol.At, 3)] # hide
+    py = [t_ps[argmax(abs2.(vsol.At[:, 2, i]))] for i in axes(vsol.At, 3)] # hide
+    return px, py # hide
+end # hide
 
-z_m = vsol_trap.Z
-px_trap, py_trap = trace_peaks(vsol_trap)
-px_sep, py_sep = trace_peaks(vsol_sep)
+z_m = vsol_trap.Z # hide
+px_trap, py_trap = trace_peaks(vsol_trap) # hide
+px_sep, py_sep = trace_peaks(vsol_sep) # hide
 
-p1 = plot(z_m, px_trap, label="x-pol (fast)", xlabel="Distance (m)", ylabel="Peak time (ps)",
-    title="Trapped (δ = 0.1 ps/m)", color=:dodgerblue, lw=2.0)
-plot!(p1, z_m, py_trap, label="y-pol (slow)", color=:crimson, ls=:dash, lw=2.0)
+p1 = plot(z_m, px_trap, label="x-pol (fast)", xlabel="Distance (m)", ylabel="Peak time (ps)", # hide
+    title="Trapped (δ = 0.1 ps/m)", color=:dodgerblue, lw=2.0) # hide
+plot!(p1, z_m, py_trap, label="y-pol (slow)", color=:crimson, ls=:dash, lw=2.0) # hide
 
-p2 = plot(z_m, px_sep, label="x-pol (fast)", xlabel="Distance (m)", ylabel="Peak time (ps)",
-    title="Separated (δ = 1.0 ps/m)", color=:dodgerblue, lw=2.0)
-plot!(p2, z_m, py_sep, label="y-pol (slow)", color=:crimson, ls=:dash, lw=2.0)
+p2 = plot(z_m, px_sep, label="x-pol (fast)", xlabel="Distance (m)", ylabel="Peak time (ps)", # hide
+    title="Separated (δ = 1.0 ps/m)", color=:dodgerblue, lw=2.0) # hide
+plot!(p2, z_m, py_sep, label="y-pol (slow)", color=:crimson, ls=:dash, lw=2.0) # hide
 
-t_ps = vsol_trap.t .* 1e12
-p3 = plot(t_ps, abs2.(vsol_trap.At[:, 1, end]), label="x-pol", xlabel="Time (ps)", ylabel="Power (W)",
-    title="Trapped: Final Output", color=:dodgerblue, lw=1.5, xlims=(-5, 15))
-plot!(p3, t_ps, abs2.(vsol_trap.At[:, 2, end]), label="y-pol", color=:crimson, ls=:dash, lw=1.5)
+t_ps = vsol_trap.t .* 1e12 # hide
+p3 = plot(t_ps, abs2.(vsol_trap.At[:, 1, end]), label="x-pol", xlabel="Time (ps)", ylabel="Power (W)", # hide
+    title="Trapped: Final Output", color=:dodgerblue, lw=1.5, xlims=(-5, 15)) # hide
+plot!(p3, t_ps, abs2.(vsol_trap.At[:, 2, end]), label="y-pol", color=:crimson, ls=:dash, lw=1.5) # hide
 
-p4 = plot(t_ps, abs2.(vsol_sep.At[:, 1, end]), label="x-pol", xlabel="Time (ps)", ylabel="Power (W)",
-    title="Separated: Final Output", color=:dodgerblue, lw=1.5, xlims=(-5, 15))
-plot!(p4, t_ps, abs2.(vsol_sep.At[:, 2, end]), label="y-pol", color=:crimson, ls=:dash, lw=1.5)
+p4 = plot(t_ps, abs2.(vsol_sep.At[:, 1, end]), label="x-pol", xlabel="Time (ps)", ylabel="Power (W)", # hide
+    title="Separated: Final Output", color=:dodgerblue, lw=1.5, xlims=(-5, 15)) # hide
+plot!(p4, t_ps, abs2.(vsol_sep.At[:, 2, end]), label="y-pol", color=:crimson, ls=:dash, lw=1.5) # hide
 
-plot(p1, p2, p3, p4, layout=(2, 2), size=(1100, 750),
-     plot_title="Soliton Trapping vs. Walk-off Separation — Menyuk (1988)",
-     plot_titlevspan=0.06, bottom_margin=5Plots.mm, left_margin=5Plots.mm)
+plot(p1, p2, p3, p4, layout=(2, 2), size=(1100, 750), # hide
+     plot_title="Soliton Trapping vs. Walk-off Separation — Menyuk (1988)", # hide
+     plot_titlevspan=0.06, bottom_margin=6Plots.mm, left_margin=9Plots.mm) # hide
 ```
 
 ## Expected Results
