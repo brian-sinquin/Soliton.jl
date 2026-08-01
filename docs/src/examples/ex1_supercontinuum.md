@@ -41,11 +41,14 @@ All dispersion coefficients from Dudley et al. (2006) Table 1:
 using JuGNLSE
 
 # ─── PCF fiber (NKT NL-PM-750 commercial fiber preset) ─────────────────────
+# Matches the exact 9-term Taylor dispersion coefficients and gamma from
+# Dudley, Genty & Coen (2006) / the reference test_Dudley.py in gnlse-python.
 medium = commercial_fiber("NKT_NL_PM_750", length=0.15) # 15 cm fiber
 
 # ─── Grid ──────────────────────────────────────────────────────────────────
-# 8192-point grid, 12.5 ps window at 835 nm
-grid = create_grid(2^13, 12.5e-12, medium.lambda0)
+# 16384-point grid, 12.5 ps window at 835 nm (matches gnlse-python's reference
+# resolution=2^14 exactly, for a direct apples-to-apples reproduction)
+grid = create_grid(2^14, 12.5e-12, medium.lambda0)
 
 # ─── Input pulse ─────────────────────────────────────────────────────────────
 # 10 kW peak power, 50 fs FWHM sech² pulse
@@ -54,8 +57,8 @@ pulse = sech_pulse(grid, 10000.0, 50e-15)
 # ─── Simulation parameters & propagation ─────────────────────────────────────
 params = SimParams(;
     medium          = medium,
-    z_saves         = 400,            # high resolution along z
-    raman_model     = Hollenbeck(),   # 13-oscillator silica Raman model
+    z_saves         = 200,            # matches gnlse-python's reference z_saves
+    raman_model     = BlowWood(),     # matches gnlse.raman_blowwood used in the reference
     self_steepening = true,
 )
 

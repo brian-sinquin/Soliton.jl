@@ -30,8 +30,14 @@ The trapping condition is approximately:
 
 ## Simulation Setup
 
-We reproduce the trapping effect using `BirefringentMedium` with equal energy on both axes
-and a group-velocity mismatch that is just inside/outside the trapping threshold.
+We reproduce the trapping effect using `BirefringentMedium` with equal energy on both axes,
+comparing a walk-off **below** the trapping threshold against one **above** it. The threshold
+scales as ``T_0/L_D``, i.e. with the *soliton power*: a weak, long (low-power, large-``L_D``)
+soliton is trapped only by walk-off values many orders of magnitude smaller than any real
+fiber's birefringence, so a fundamental soliton must be short/strong enough that realistic
+``\delta`` values (sub-ps/m to a few ps/m) actually straddle the threshold. We use a 100 fs
+fundamental soliton (``P_0 \approx 6.1\text{ kW}``, ``L_D \approx 0.15``m), giving a threshold
+``|\delta| \approx 0.33`` ps/m:
 
 ```@example ex4
 using JuGNLSE
@@ -40,76 +46,78 @@ lambda0 = 1550e-9
 beta2   = -21.5e-27
 gamma   = 0.0011
 
-T0   = 1e-12
+T0FWHM = 100e-15
+T0   = T0FWHM / (2 * log(1 + sqrt(2)))
 P0   = abs(beta2) / (gamma * T0^2)
 LD   = T0^2 / abs(beta2)
-FWHM = 2 * log(1 + sqrt(2)) * T0
+threshold_ps_m = sqrt(3)/2 * (T0 / LD) * 1e12   # [ps/m]
 
-grid = create_grid(2^12, 80e-12, lambda0)
-delta_beta1 = 1e-12
+grid = create_grid(2^13, 40e-12, lambda0)
 
-disp_x = TaylorDispersion([beta2],  0.0)
-disp_y = TaylorDispersion([beta2], +delta_beta1)
+function run_case(delta_beta1)
+    disp_x = TaylorDispersion([beta2],  0.0)
+    disp_y = TaylorDispersion([beta2], +delta_beta1)
+    med = BirefringentMedium(5.0, gamma, 0.0, disp_x, disp_y, 0.0, lambda0)
+    Ax = sech_pulse(grid, P0, T0FWHM).At
+    Ay = copy(Ax)
+    vpulse = VectorialPulse(Ax, Ay, grid)
+    params = SimParams(; medium=med, z_saves=300, solver=SSFM(1e-4), raman_model=nothing)
+    return solve(vpulse, params; progress=false)
+end
 
-med_A = BirefringentMedium(5.0, gamma, 0.0, disp_x, disp_y, 0.0, lambda0)
+vsol_trap = run_case(0.1e-12)   # 0.1 ps/m: well below threshold -> trapped
+vsol_sep  = run_case(1.0e-12)   # 1.0 ps/m: well above threshold -> separated
 
-Ax = sech_pulse(grid, P0, FWHM).At
-Ay = copy(Ax)
-vpulse = VectorialPulse(Ax, Ay, grid)
-
-params = SimParams(; medium=med_A, z_saves=300, solver=SSFM(1e-3), raman_model=nothing)
-vsol_trap = solve(vpulse, params; progress=false)
+println("Trapping threshold: |δ| < ", round(threshold_ps_m, digits=3), " ps/m")
 ```
 
 ```@example ex4; hide = true
 using Plots
 gr()
 
-t_ps = vsol_trap.t .* 1e12
-idx_t = findall(-20.0 .<= t_ps .<= 20.0)
+function trace_peaks(vsol)
+    t_ps = vsol.t .* 1e12
+    px = [t_ps[argmax(abs2.(vsol.At[:, 1, i]))] for i in axes(vsol.At, 3)]
+    py = [t_ps[argmax(abs2.(vsol.At[:, 2, i]))] for i in axes(vsol.At, 3)]
+    return px, py
+end
+
 z_m = vsol_trap.Z
+px_trap, py_trap = trace_peaks(vsol_trap)
+px_sep, py_sep = trace_peaks(vsol_sep)
 
-# ── Temporal heatmap: x polarization (slice native grid) ──
-At_x_dB = 10 .* log10.(max.(1e-10, abs2.(vsol_trap.At[idx_t, 1, :])))
-clim_x = (maximum(At_x_dB) - 30, maximum(At_x_dB))
+p1 = plot(z_m, px_trap, label="x-pol (fast)", xlabel="Distance (m)", ylabel="Peak time (ps)",
+    title="Trapped (δ = 0.1 ps/m)", color=:dodgerblue, lw=2.0)
+plot!(p1, z_m, py_trap, label="y-pol (slow)", color=:crimson, ls=:dash, lw=2.0)
 
-p1 = heatmap(t_ps[idx_t], z_m, At_x_dB',
-    xlabel = "Time (ps)", ylabel = "Distance (m)",
-    title  = "x-axis (fast)", colorbar_title = "Power (dB)",
-    clims  = clim_x, color = :inferno, right_margin = 6Plots.mm)
+p2 = plot(z_m, px_sep, label="x-pol (fast)", xlabel="Distance (m)", ylabel="Peak time (ps)",
+    title="Separated (δ = 1.0 ps/m)", color=:dodgerblue, lw=2.0)
+plot!(p2, z_m, py_sep, label="y-pol (slow)", color=:crimson, ls=:dash, lw=2.0)
 
-# ── Temporal heatmap: y polarization (slice native grid) ──
-At_y_dB = 10 .* log10.(max.(1e-10, abs2.(vsol_trap.At[idx_t, 2, :])))
-clim_y = (maximum(At_y_dB) - 30, maximum(At_y_dB))
+t_ps = vsol_trap.t .* 1e12
+p3 = plot(t_ps, abs2.(vsol_trap.At[:, 1, end]), label="x-pol", xlabel="Time (ps)", ylabel="Power (W)",
+    title="Trapped: Final Output", color=:dodgerblue, lw=1.5, xlims=(-5, 15))
+plot!(p3, t_ps, abs2.(vsol_trap.At[:, 2, end]), label="y-pol", color=:crimson, ls=:dash, lw=1.5)
 
-p2 = heatmap(t_ps[idx_t], z_m, At_y_dB',
-    xlabel = "Time (ps)", ylabel = "Distance (m)",
-    title  = "y-axis (slow)", colorbar_title = "Power (dB)",
-    clims  = clim_y, color = :inferno, right_margin = 6Plots.mm)
+p4 = plot(t_ps, abs2.(vsol_sep.At[:, 1, end]), label="x-pol", xlabel="Time (ps)", ylabel="Power (W)",
+    title="Separated: Final Output", color=:dodgerblue, lw=1.5, xlims=(-5, 15))
+plot!(p4, t_ps, abs2.(vsol_sep.At[:, 2, end]), label="y-pol", color=:crimson, ls=:dash, lw=1.5)
 
-# ── Final output time trace ──
-px = abs2.(vsol_trap.At[:, 1, end])
-py = abs2.(vsol_trap.At[:, 2, end])
-
-p3 = plot(t_ps, px, label="x-pol (fast)",
-    xlabel="Time (ps)", ylabel="Power (W)",
-    title="Final Output", color=:dodgerblue, lw=1.5)
-plot!(p3, t_ps, py, label="y-pol (slow)",
-    color=:crimson, ls=:dash, lw=1.5)
-
-plot(p1, p2, p3, layout=(1, 3), size=(1300, 450),
-     plot_title="Soliton Trapping in Birefringent Fiber — Menyuk (1988)",
-     plot_titlevspan=0.08, bottom_margin=6Plots.mm, left_margin=4Plots.mm)
+plot(p1, p2, p3, p4, layout=(2, 2), size=(1100, 750),
+     plot_title="Soliton Trapping vs. Walk-off Separation — Menyuk (1988)",
+     plot_titlevspan=0.06, bottom_margin=5Plots.mm, left_margin=5Plots.mm)
 ```
 
 ## Expected Results
 
-| Case | Walk-off ``\delta`` | Temporal separation at ``z = 5`` m |
+| Case | Walk-off ``\delta`` | Behavior at ``z = 5`` m |
 |:---|:---|:---|
-| Trapped | 1 ps/m (< threshold) | < 1 ps — solitons co-propagate |
-| Separated | 5 ps/m (> threshold) | ≈ 25 ps — linear walk-off |
+| Trapped | 0.1 ps/m (< 0.33 ps/m threshold) | Peaks co-propagate — near-zero separation throughout |
+| Separated | 1.0 ps/m (> 0.33 ps/m threshold) | Peaks diverge linearly, ≈ 3–4 ps apart |
 
-Both heatmaps should show the polarization components traveling **together** (trapped): a straight vertical stripe, not diverging tracks.
+The top row tracks each polarization's peak arrival time vs. distance directly: trapped shows
+two overlapping flat/co-moving lines, separated shows two diverging lines (linear walk-off).
+The bottom row confirms this in the final-output time-domain trace.
 
 ## Effect of Δβ₀ (Phase Mismatch)
 
@@ -118,13 +126,17 @@ For ``\Delta\beta_0 \gg 1/L`` the FWM term averages out and only SPM/XPM survive
 
 ```julia
 # High phase mismatch: FWM averages out
+disp_x = TaylorDispersion([beta2], 0.0)
+disp_y = TaylorDispersion([beta2], 0.1e-12)
 med_highbire = BirefringentMedium(
     5.0, gamma, 0.0, disp_x, disp_y,
     1e6,       # Δβ₀ = 10⁶ 1/m  (beat length ~ 6 µm — very high birefringence)
     lambda0,
 )
+Ax = sech_pulse(grid, P0, T0FWHM).At
+vpulse = VectorialPulse(Ax, copy(Ax), grid)
 vsol_hb = solve(vpulse, SimParams(; medium=med_highbire, z_saves=200,
-                                    solver=SSFM(1e-3), raman_model=nothing))
+                                    solver=SSFM(1e-4), raman_model=nothing))
 ```
 
 ## References

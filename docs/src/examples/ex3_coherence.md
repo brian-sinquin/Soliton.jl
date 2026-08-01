@@ -28,8 +28,8 @@ Dudley & Coen showed that for **short femtosecond pulses** (high N), coherence
 
 ## Simulation: Ensemble of Noisy Shots
 
-We run an ensemble of M = 20 independent shots, each seeded with a different quantum noise
-realization, then compute the pairwise coherence estimator.
+We run an ensemble of M = 20 independent shots, each seeded with a different one-photon-per-mode
+quantum noise realization (`add_noise`), then compute the pairwise coherence estimator.
 
 ```@example ex3
 using JuGNLSE
@@ -44,9 +44,9 @@ lambda0 = 835e-9
 gamma   = 0.11
 grid = create_grid(2^12, 12.5e-12, lambda0)
 
-function run_ensemble(T_FWHM, P0, L, M=5)
+function run_ensemble(T_FWHM, P0, L, M=20)
     medium = Medium(; length=L, gamma=gamma, loss=0.0, betas=betas, lambda0=lambda0)
-    params = SimParams(; medium=medium, z_saves=2, raman_model=Hollenbeck(), self_steepening=true)
+    params = SimParams(; medium=medium, z_saves=2, raman_model=BlowWood(), self_steepening=true)
     clean_pulse = sech_pulse(grid, P0, T_FWHM)
     solutions = Vector{Solution}(undef, M)
     for i in 1:M
@@ -58,7 +58,15 @@ end
 
 sols_A = run_ensemble(50e-15, 10_000.0, 0.15)
 g12_A = spectral_coherence(sols_A)
-println("Mean coherence |g₁₂⁽¹⁾| (50 fs pump): ", round(mean(g12_A); digits=3))
+
+# Restrict to the band with genuine spectral content (>= -30 dB from peak): outside
+# this band the ensemble-mean power is near zero, so |g12| is dominated by noise-floor
+# division artifacts rather than physical coherence.
+P_mean = mean(abs2.(s.AW[:, end]) for s in sols_A)
+P_db = 10 .* log10.(P_mean ./ maximum(P_mean) .+ 1e-12)
+significant = findall(>=(-30.0), P_db)
+
+println("Mean coherence |g₁₂⁽¹⁾| over the significant band: ", round(mean(g12_A[significant]); digits=3))
 ```
 
 ```@example ex3; hide = true
@@ -66,19 +74,38 @@ using Plots
 gr()
 
 wl_nm = 2π * 2.99792458e8 ./ grid.W .* 1e9
-plot(wl_nm, g12_A, label="50 fs Pump Coherence |g₁₂⁽¹⁾|", xlabel="Wavelength (nm)", ylabel="Degree of Coherence", xlims=(400, 1600), ylims=(0, 1.05), color=:navy, lw=1.5, plot_title="Supercontinuum Coherence Spectrum")
+wl_sig = wl_nm[significant]
+g12_sig = g12_A[significant]
+ord = sortperm(wl_sig)
+
+plot(wl_sig[ord], g12_sig[ord], label="50 fs Pump Coherence |g₁₂⁽¹⁾|", xlabel="Wavelength (nm)", ylabel="Degree of Coherence", ylims=(0, 1.05), color=:navy, lw=1.5, plot_title="Supercontinuum Coherence Spectrum")
 ```
 
 ## Expected Results
 
-| Configuration | Expected ``\langle|g_{12}^{(1)}|\rangle`` |
-|:---|:---|
-| 50 fs, 10 kW (soliton fission) | ≈ 0.95–1.00 (fully coherent) |
-| 150 fs, same energy (MI onset) | ≈ 0.3–0.6 (partial coherence) |
-| CW / long pulse | ≈ 0.0–0.1 (incoherent) |
+!!! note "This model shows partial, not full, coherence for this benchmark"
+    The classic Dudley & Coen (2002) result for a similarly short pump in this fiber reports
+    coherence approaching 1 across most of the SC band. Our simulation reproduces the correct
+    **qualitative trend** — shorter/higher-power pumps are markedly more coherent than longer
+    ones — but the *absolute* coherence for the 50 fs case here is only partial (mean
+    ``|g_{12}^{(1)}| \approx 0.3-0.4`` over the spectrally-significant band), not near-unity.
+    This was verified not to be a normalization bug: the `add_noise` one-photon-per-mode energy
+    and the `spectral_coherence` pairwise estimator both check out analytically against the
+    expected ``n_p \hbar\omega`` per-mode energy and the standard ``|g_{12}^{(1)}|`` definition.
+    The extra sensitivity likely comes from this particular combination of Raman model,
+    self-steepening, and fiber dispersion being more MI-susceptible than the idealized textbook
+    case; treat the numbers below as representative of *this* solver configuration, not as a
+    precise reproduction of the original figure.
 
-The transition between coherent and incoherent SC is controlled by the fission length
-``L_{\rm fiss} = L_D / N`` — shorter pulses fission earlier before MI develops.
+| Configuration | Simulated ``\langle|g_{12}^{(1)}|\rangle`` (significant band) |
+|:---|:---|
+| 50 fs, 10 kW (soliton fission) | ≈ 0.3–0.4 (partially coherent — most coherent case) |
+| 200 fs, same energy (MI onset) | ≈ 0.05–0.1 (mostly incoherent) |
+| 500 fs, same energy (long pulse) | ≈ 0.05 (incoherent) |
+
+The transition between more- and less-coherent SC is controlled by the fission length
+``L_{\rm fiss} = L_D / N`` — shorter pulses fission earlier before modulation instability (MI)
+has time to amplify shot-to-shot noise differences.
 
 ## Quantum Noise Model
 
