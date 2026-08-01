@@ -18,6 +18,11 @@ using LinearAlgebra
 # To regenerate the reference CSVs (e.g. after changing gnlse-python version):
 #   cd <repo root>
 #   C:\Espressif\tools\python\python.exe test/generate_reference_data.py
+#
+# Scenario 6 (vectorial/birefringent) uses a separate reference generator,
+# test/generate_vectorial_reference_data.py, built on `cnlse`
+# (https://github.com/WUST-FOG/cgnlse-python — vendored in test/cnlse_pkg/),
+# the WUST-FOG group's own Coupled GNLSE solver built on top of gnlse-python.
 # ─────────────────────────────────────────────────────────────────────────────
 
 const REFDIR = joinpath(@__DIR__, "reference_data")
@@ -230,4 +235,61 @@ end
         @test xcorr >= 0.999
     end
 
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Scenario 6 — Vectorial / Birefringent Coupled GNLSE (Soliton Trapping & Walk-off)
+    # ─────────────────────────────────────────────────────────────────────────
+    @testset "Scenario 6 — Vectorial Birefringent Solver (Coupled GNLSE)" begin
+        ref_path = joinpath(REFDIR, "vectorial_soliton_trapping.csv")
+        @test isfile(ref_path)
+
+        ref = readdlm(ref_path, ',', Float64; skipstart=1)
+        t_ref = ref[:, 1]
+        Ax_real, Ax_imag, Ax_int = ref[:, 2], ref[:, 3], ref[:, 4]
+        Ay_real, Ay_imag, Ay_int = ref[:, 5], ref[:, 6], ref[:, 7]
+
+        Ax_ref = Ax_real .+ 1im .* Ax_imag
+        Ay_ref = Ay_real .+ 1im .* Ay_imag
+
+        N_vec = length(t_ref)
+        t_span = t_ref[end] - t_ref[1] + (t_ref[2] - t_ref[1])
+        lam0 = 1550e-9
+        grid = create_grid(N_vec, t_span, lam0)
+
+        # High-birefringence fiber with group-velocity mismatch (GVM) walk-off
+        # beta1_x = +0.5 ps/m, beta1_y = -0.5 ps/m
+        bmed = BirefringentMedium(
+            1.0,        # 1 m fiber
+            0.0012,     # 1.2 /W/km gamma
+            0.0,        # loss
+            TaylorDispersion([-21.5e-27], 0.5e-12),  # beta2_x, beta1_x (+0.5 ps/m)
+            TaylorDispersion([-21.5e-27], -0.5e-12), # beta2_y, beta1_y (-0.5 ps/m)
+            0.0,        # deltabeta0
+            lam0
+        )
+
+        pulse_x = sech_pulse(grid, 500.0, 1.0e-12)
+        pulse_y = sech_pulse(grid, 500.0, 1.0e-12)
+        vec_pulse = VectorialPulse(pulse_x.At, pulse_y.At, grid)
+
+        params = SimParams(; medium=bmed, z_saves=2, solver=SSFM(1e-4), raman_model=nothing, self_steepening=false)
+
+        sol = solve(vec_pulse, params; progress=false)
+
+        Ax_julia = sol.At[:, 1, end]
+        Ay_julia = sol.At[:, 2, end]
+
+        # Normalized cross-correlation for x and y components
+        xcorr_x = abs(dot(Ax_julia, Ax_ref))^2 / (sum(abs2, Ax_julia) * sum(abs2, Ax_ref))
+        xcorr_y = abs(dot(Ay_julia, Ay_ref))^2 / (sum(abs2, Ay_julia) * sum(abs2, Ay_ref))
+
+        @test xcorr_x >= 0.95
+        @test xcorr_y >= 0.95
+
+        # Peak intensity matches to within 5%
+        @test isapprox(maximum(abs2.(Ax_julia)), maximum(Ax_int); rtol=0.05)
+        @test isapprox(maximum(abs2.(Ay_julia)), maximum(Ay_int); rtol=0.05)
+    end
+
 end
+
