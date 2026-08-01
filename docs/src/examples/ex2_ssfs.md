@@ -172,6 +172,7 @@ plot(p1, p2, p3, layout=(1, 3), size=(1300, 450), # hide
 
     The ``T_0^{-4}`` *scaling* (the qualitative statement that shorter pulses shift much faster)
     is still exactly what both theory and simulation agree on:
+
     | T₀ | Simulated Δλ (10 periods) |
     |:---|:---|
     | 50 fs | ≈ 7 nm |

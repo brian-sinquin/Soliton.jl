@@ -19,7 +19,7 @@ In sub-micron silicon photonic integrated circuits (PICs), intense optical pulse
 using JuGNLSE
 
 grid = create_grid(2^12, 40e-12, 1550e-9)
-pulse = gaussian_pulse(grid, 30.0, 2.0e-12)
+pulse = gaussian_pulse(grid, 1.5, 2.0e-12)  # 1.5 W -> ~65% transmission (30 W over-depletes to ~8%)
 
 soi = SemiconductorMedium(
     length = 0.01,        # 1 cm waveguide length

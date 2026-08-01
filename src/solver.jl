@@ -80,9 +80,12 @@ function solve(pulse::AbstractPulse, params::SimParams; progress::Bool=true)
     )
 
     # Photon number is conserved by the GNLSE for a passive lossless fiber; a drift
-    # indicates the step-size tolerance is too loose. Skip this check for active
-    # (AmplifyingMedium) media where energy is intentionally not conserved.
-    if params.medium.loss == 0 && !(params.medium isa AmplifyingMedium)
+    # indicates the step-size tolerance is too loose. Skip this check for media with
+    # intentional non-conservative physics beyond the linear `loss` field: active
+    # (AmplifyingMedium) gain, and SemiconductorMedium's two-photon/free-carrier
+    # absorption (alpha2), where large photon-number loss is the expected physics.
+    if params.medium.loss == 0 && !(params.medium isa AmplifyingMedium) &&
+       !(params.medium isa SemiconductorMedium)
         n = photon_number(solution)
         drift = abs(n[end] - n[1]) / n[1]
         drift > 1e-2 && @warn "Photon number drifted by " *

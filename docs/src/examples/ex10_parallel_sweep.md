@@ -21,8 +21,6 @@ using JuGNLSE
 using FFTW
 using Base.Threads
 
-println("Julia worker threads available: ", Threads.nthreads())
-
 # 1. Setup Fiber and Grid (Standard NKT NL-PM-750 Photonic Crystal Fiber)
 medium = commercial_fiber("NKT_NL_PM_750"; length=0.15)  # 15 cm fiber
 grid   = create_grid(2^13, 12e-12, medium.lambda0)       # 835 nm center wavelength, 8192 points
