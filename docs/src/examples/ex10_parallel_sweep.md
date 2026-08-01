@@ -2,7 +2,7 @@
 
 This example demonstrates how to use **JuGNLSE.jl**'s `solve_sweep` API to simulate a **Pump Wavelength ($\lambda_{\text{pump}}$) Sweep across the Zero-Dispersion Wavelength ($\text{ZDW} = 780\text{ nm}$)** concurrently across all available Julia worker threads (`julia -t N`).
 
-Here, we launch a $50\text{ fs}, 5\text{ kW}$ pulse through $15\text{ cm}$ of photonic crystal fiber (PCF) and sweep the pump wavelength $\lambda_{\text{pump}}$ from **$720\text{ nm}$ to $920\text{ nm}$** across 30 parallel simulation trials.
+Here, a $50\text{ fs}, 5\text{ kW}$ pulse is launched into $15\text{ cm}$ of photonic crystal fiber (PCF), and we sweep the pump wavelength $\lambda_{\text{pump}}$ from **$720\text{ nm}$ to $920\text{ nm}$** across 30 parallel simulation trials.
 
 ---
 
@@ -106,4 +106,4 @@ savefig(p, "examples_ex10_parallel_sweep.png")
 1. **Dramatic Dispersive Wave Arm (Blue Island at $450\text{ nm} - 550\text{ nm}$):** As soon as $\lambda_{\text{pump}} > \text{ZDW} = 780\text{ nm}$, phase matching triggers intense Cherenkov dispersive wave generation in the blue.
 2. **Soliton Raman Arm (Infrared at $> 1200\text{ nm}$):** For anomalous pumping, fundamental solitons shoot out into the infrared, creating a wide spectral gap between the soliton and the dispersive wave.
 3. **Normal Dispersion Boundary ($\lambda_{\text{pump}} < 780\text{ nm}$):** Below ZDW, the output spectrum is strictly confined near the pump line with zero blue/red sideband emission.
-4. **Multithread Speedup:** 30 high-resolution non-linear GNLSE runs executed concurrently in **9 seconds** on 4 threads.
+4. **Multithread Speedup:** 30 high-resolution non-linear GNLSE runs executed concurrently in **5 seconds** on 4 threads.
