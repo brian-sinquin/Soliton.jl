@@ -16,6 +16,18 @@ Contributions to JuGNLSE.jl are welcome. Please follow these simple guidelines t
    ```julia
    Pkg.test()
    ```
+5. **Formatting**: This repo follows the style in `.JuliaFormatter.toml`. Format
+   before committing:
+   ```julia
+   using Pkg; Pkg.add("JuliaFormatter")
+   using JuliaFormatter; format(".")
+   ```
+6. **Docs build**: If you touch `docs/src/` or any docstring, build the docs
+   locally to catch broken examples/cross-references before opening a PR:
+   ```julia
+   using Pkg; Pkg.activate("docs"); Pkg.develop(path="."); Pkg.instantiate()
+   include("docs/make.jl")
+   ```
 
 ## Guidelines
 

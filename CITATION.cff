@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use this software in your research, please cite it as below."
+authors:
+  - family-names: "Sinquin"
+    given-names: "Brian"
+title: "JuGNLSE.jl: A Julia package for solving the Generalized Nonlinear Schrödinger Equation"
+version: 0.2.0
+date-released: 2026-08-02
+url: "https://github.com/brian-sinquin/JuGNLSE"
+repository-code: "https://github.com/brian-sinquin/JuGNLSE"
+license: MIT
+keywords:
+  - julia
+  - nonlinear-optics
+  - supercontinuum-generation
+  - gnlse
+  - optics

@@ -6,6 +6,16 @@
 
 JuGNLSE.jl is a Julia package for solving the Generalized Nonlinear Schrödinger Equation (GNLSE). It is designed to model the propagation of optical pulses in nonlinear media, such as optical fibers, with a focus on performance and numerical stability.
 
+## Features
+
+- Commercial fiber & glass presets (Corning, NKT, Thorlabs) and custom/tabulated dispersion
+- Active amplifying fibers (EDFA/YDFA) with gain saturation and ASE noise
+- Gas-filled hollow-core PCF with pressure-tunable dispersion and molecular Raman response
+- Silicon photonics: two-photon absorption and free-carrier dynamics
+- Coupled vectorial/birefringent GNLSE solver (SPM + XPM + FWM)
+- Cascaded multi-stage pipelines (fibers, amplifiers, filters) via `|>` piping
+- Adaptive (`ERK4IP`, `AdaptiveSSFM`) and fixed-step (`SSFM`) solvers, multi-threaded parameter sweeps
+
 ## Installation
 
 The package can be installed using the Julia package manager:
@@ -17,35 +27,28 @@ Pkg.add("JuGNLSE")
 
 ## Basic Usage
 
-All quantities are in natural SI units (seconds, metres, watts).
+All quantities are specified in natural SI units (seconds, meters, watts).
 
 ```julia
-using JuGNLSE
+using JuGNLSE, Plots
 
-# Define the fiber medium (keyword constructor — avoids argument-order mistakes)
-medium = Medium(;
-    fiber_length = 0.15,                  # m
-    gamma        = 0.11,                  # 1/(W·m)
-    loss         = 0.0,                   # dB/m
-    betas        = [-11.83e-27, 8.13e-41],# Taylor dispersion: β₂ [s²/m], β₃ [s³/m], …
-    lambda0      = 835e-9,                # m
-)
+# 1. Select a commercial fiber preset (e.g. NKT NL-PM-750 photonic crystal fiber)
+medium = commercial_fiber("NKT_NL_PM_750"; length=0.15) # 15 cm fiber
 
-# Set up the time–frequency grid: resolution, time window [s], center wavelength [m]
-grid = create_grid(2^13, 12.5e-12, 835e-9)
+# 2. Set up time-frequency grid (8192 resolution, 12.5 ps time window)
+grid = create_grid(2^13, 12.5e-12, medium.lambda0)
 
-# Generate an initial pulse: peak power [W], FWHM [s]
+# 3. Generate initial pulse (10 kW peak power, 50 fs sech² pulse)
 pulse = sech_pulse(grid, 10000.0, 50e-15)
 
-# Configure the simulation and solve
-params = SimParams(; medium=medium, raman_model=BlowWood(), self_steepening=true)
-solution = solve(pulse, params)
+# 4. Propagate & solve GNLSE (Kerr SPM, Raman scattering & self-steepening)
+solution = solve(pulse, SimParams(; medium=medium, raman_model=BlowWood(), self_steepening=true))
 
-# `solution.At` / `solution.AW` are (N × z_saves); each column is one distance.
+# 5. Visualize supercontinuum evolution (produces 4-panel dashboard)
+plot(solution)
 ```
 
-Measured dispersion can be supplied instead of a Taylor expansion via
-`TabulatedDispersion(detuning, beta)` (passed as `dispersion=` to `Medium`).
+Custom fibers and measured dispersion curves are also supported via `Medium(length, gamma, loss, betas, lambda0)` or `TabulatedDispersion(detuning, beta)`.
 
 ## Documentation
 

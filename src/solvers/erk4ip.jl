@@ -19,8 +19,8 @@ This is integrated with RK4 using only 3 FFT pairs per step (not 5).
 
 # Reference
 
-S. Balac & A. Fernandez, "Interaction picture method for solving the Generalized
-Nonlinear Schrödinger Equation", HAL-00850488 (2013)
+S. Balac & A. Mahé, "Embedded Runge-Kutta scheme for step-size control in the
+interaction picture method", Comput. Phys. Commun. 184, 1211-1219 (2013)
 """
 
 using FFTW
@@ -30,6 +30,32 @@ using ProgressMeter: Progress, update!
 
 # Import nonlinearity module functions
 import ..build_physics_model, ..PhysicsModel
+
+"""
+    propagate(model::PhysicsModel, pulse::Pulse, params::SimParams, solver::ERK4IP, progress::Bool)
+
+Propagate the pulse using the adaptive Runge-Kutta 4(3) interaction picture solver.
+"""
+function propagate(
+    model::PhysicsModel,
+    pulse::Pulse,
+    params::SimParams,
+    solver::ERK4IP,
+    progress::Bool,
+    rng::AbstractRNG=default_rng(),
+)
+    return _propagate_erk4ip!(
+        model,
+        pulse,
+        params,
+        progress,
+        solver.rtol,
+        solver.atol,
+        solver.dz_init,
+        solver.dz_min,
+        rng,
+    )
+end
 
 """
     propagate_erk4ip(pulse::Pulse, params::SimParams; rtol=1e-6, atol=1e-8, dz=nothing)
@@ -56,7 +82,8 @@ reusing computations and working in interaction picture throughout.
 
 # Reference
 
-Balac & Fernandez (2013), Heidt (2009)
+S. Balac & A. Mahé, Comput. Phys. Commun. 184, 1211 (2013);
+A. M. Heidt, J. Lightwave Technol. 27, 3984 (2009)
 """
 function propagate_erk4ip(
     pulse::Pulse,
@@ -66,13 +93,8 @@ function propagate_erk4ip(
     atol::Float64=1e-8,
     dz::Union{Float64, Nothing}=nothing,
 )
-    # Build the physics model, then run the loop behind a function barrier.
-    # build_physics_model's return type is not fully inferred (the nonlinear
-    # operator is selected at runtime), so running the loop in its own function
-    # lets Julia specialise it on the concrete model type — making every
-    # model-field access in the hot loop type-stable and allocation-free.
-    model = build_physics_model(pulse.grid, params)
-    return _propagate_erk4ip!(model, pulse, params, progress, rtol, atol, dz)
+    solver = ERK4IP(; rtol=rtol, atol=atol, dz_init=dz)
+    return propagate(pulse, params, solver; progress=progress)
 end
 
 function _propagate_erk4ip!(
@@ -83,6 +105,8 @@ function _propagate_erk4ip!(
     rtol::Float64,
     atol::Float64,
     dz_init::Union{Float64, Nothing},
+    dz_min_arg::Float64,
+    rng::AbstractRNG=default_rng(),
 )
     grid = pulse.grid
     N = grid.N
@@ -90,6 +114,7 @@ function _propagate_erk4ip!(
     # `SimParams.medium` has the abstract field type `Medium`, so annotate the
     # extracted length to keep the step variables type-stable in the hot loop.
     z_end::Float64 = params.medium.length
+    dz_min::Float64 = dz_min_arg > 0 ? dz_min_arg : max(1e-15, z_end * 1e-12)
 
     # Initial condition in frequency domain
     U = copy(pulse.AW)
@@ -98,11 +123,13 @@ function _propagate_erk4ip!(
     # contiguous column, so per-save writes are contiguous.
     z_out = zeros(n_saves)
     At_out = zeros(ComplexF64, N, n_saves)
-    Aw_out = zeros(ComplexF64, N, n_saves)
+    Aw_out = params.save_freq ? zeros(ComplexF64, N, n_saves) : zeros(ComplexF64, 0, 0)
 
     z_out[1] = 0.0
     At_out[:, 1] .= pulse.At
-    Aw_out[:, 1] .= fftshift(U)
+    if params.save_freq
+        Aw_out[:, 1] .= fftshift(U)
+    end
 
     # Adaptive stepping setup. `dz` is declared Float64 so the boxed
     # Union{Float64,Nothing} argument cannot leak into the hot loop.
@@ -139,15 +166,26 @@ function _propagate_erk4ip!(
 
     # Initialize Nu = N(U(0)) for FSAL property
     mul!(u_temp, model.to_time, U)  # frequency → time
-    copyto!(Nu, model.nonlinear_function(u_temp, model))
+    copyto!(Nu, model.nonlinear_function(u_temp, model, 0.0))
+
+    cached_dz = -1.0
+
+    # AmplifyingMedium perturbs U with ASE noise after each accepted step,
+    # which invalidates the FSAL shortcut (k5 was evaluated on the
+    # pre-noise field) — recompute Nu in that case only, so every other
+    # medium keeps the cheap "3 FFT pairs per step" FSAL path.
+    is_amplifying = haskey(model.aux_data, :noise_figure_db)
 
     while z < z_end && save_idx <= n_saves
         # Target for next save
         z_target = z_saves[save_idx]
         dz = min(dz, z_target - z)
 
-        # Dispersion half-step operator for this step size
-        @. exp_half_dz_D = exp(0.5 * dz * model.D)
+        # Dispersion half-step operator for this step size (cached when dz is unchanged)
+        if dz != cached_dz
+            @. exp_half_dz_D = exp(0.5 * dz * model.D)
+            cached_dz = dz
+        end
 
         # ============================================================
         # ERK4(3) in Interaction Picture - Following SPIP C code exactly
@@ -161,17 +199,17 @@ function _propagate_erk4ip!(
         # u₂ = exp(D̂h/2)·U + h/2·k₁, compute N(IFFT(u₂))
         @. U_temp = exp_half_dz_D * U + 0.5 * dz * k1
         mul!(u_temp, model.to_time, U_temp)  # frequency → time
-        copyto!(k2, model.nonlinear_function(u_temp, model))
+        copyto!(k2, model.nonlinear_function(u_temp, model, z + 0.5 * dz))
 
         # u₃ = exp(D̂h/2)·U + h/2·k₂
         @. U_temp = exp_half_dz_D * U + 0.5 * dz * k2
         mul!(u_temp, model.to_time, U_temp)  # frequency → time
-        copyto!(k3, model.nonlinear_function(u_temp, model))
+        copyto!(k3, model.nonlinear_function(u_temp, model, z + 0.5 * dz))
 
         # u₄ = exp(D̂h/2)·(exp(D̂h/2)·U + h·k₃) = exp(D̂h)·U + exp(D̂h/2)·h·k₃
         @. U_temp = exp_half_dz_D * (exp_half_dz_D * U + dz * k3)
         mul!(u_temp, model.to_time, U_temp)  # frequency → time
-        copyto!(k4, model.nonlinear_function(u_temp, model))
+        copyto!(k4, model.nonlinear_function(u_temp, model, z + dz))
 
         # ============================================================
         # 4th Order Solution (following SPIP exactly)
@@ -184,7 +222,7 @@ function _propagate_erk4ip!(
 
         # Transform to time domain and compute k₅ = N(u₄)
         mul!(u4, model.to_time, U4_fft)  # frequency → time
-        copyto!(k5, model.nonlinear_function(u4, model))
+        copyto!(k5, model.nonlinear_function(u4, model, z + dz))
 
         # ============================================================
         # 3rd Order Solution for Error Estimation (SPIP formula)
@@ -209,14 +247,22 @@ function _propagate_erk4ip!(
         safety = 0.9
         exponent = 0.25  # 1/(p+1) = 1/4 for the embedded 4(3) method
 
-        if local_error <= 1.0
+        if isfinite(local_error) && local_error <= 1.0
             # Accept step
             step_count += 1
             z += dz
             copyto!(U, U4_fft)
 
-            # FSAL property: Nu for next step = k5 from this step
-            copyto!(Nu, k5)
+            if is_amplifying
+                # u4 is the time-domain field at the end of this accepted step.
+                inject_ase_noise!(U, u4, model, dz, rng)
+                # Noise invalidated FSAL's k5 — recompute Nu for next step.
+                mul!(u_temp, model.to_time, U)
+                copyto!(Nu, model.nonlinear_function(u_temp, model, z))
+            else
+                # FSAL property: Nu for next step = k5 from this step
+                copyto!(Nu, k5)
+            end
 
             # Compute optimal step size for next iteration
             factor = safety * (1.0 / (local_error + 1e-300))^exponent
@@ -231,8 +277,10 @@ function _propagate_erk4ip!(
                 # interaction picture each step), so no exp(D·z) is applied.
                 copyto!(model.buf_f1, U)
 
-                # Apply fftshift for monotonic frequency ordering in output
-                fftshift!(@view(Aw_out[:, save_idx]), model.buf_f1)
+                # Apply fftshift for monotonic frequency ordering in output if requested
+                if params.save_freq
+                    fftshift!(@view(Aw_out[:, save_idx]), model.buf_f1)
+                end
 
                 # Transform to time domain (lab frame)
                 mul!(u_temp, model.to_time, model.buf_f1)
@@ -245,11 +293,30 @@ function _propagate_erk4ip!(
                 save_idx += 1
             end
         else
-            # Reject step and shrink (same formula as the acceptance case)
+            # Reject step and shrink (same formula as the acceptance case).
+            # A non-finite local_error means the field itself has already
+            # diverged (NaN/Inf) — the adaptive formula would also evaluate to
+            # NaN in that case, so fall back to a fixed hard shrink instead.
             rejected_steps += 1
-            factor = safety * (1.0 / (local_error + 1e-300))^exponent
-            factor = max(0.5, min(2.0, factor))
+            if isfinite(local_error)
+                factor = safety * (1.0 / (local_error + 1e-300))^exponent
+                factor = max(0.5, min(2.0, factor))
+            else
+                factor = 0.25
+            end
             dz = factor * dz
+
+            if dz < dz_min
+                throw(
+                    ErrorException(
+                        "ERK4IP: step size collapsed to $dz m (below dz_min=$dz_min m) " *
+                        "at z=$z m after $rejected_steps rejected steps. The field likely " *
+                        "diverged (local_error=$local_error). Check medium parameters " *
+                        "(gamma, loss/gain, dispersion) and pulse power for a numerically " *
+                        "unstable configuration, or relax `rtol`/`atol`.",
+                    ),
+                )
+            end
         end
     end
 

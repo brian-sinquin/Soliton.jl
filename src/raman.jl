@@ -11,14 +11,18 @@ Units: Time in [s] (natural SI units)
 Compute Raman response following gnlse-python raman_blowwood.
 
 # Arguments
-- `T::Vector{Float64}`: Time vector [ps]
-- `model::BlowWood`: Raman model with parameters
+
+  - `T::Vector{Float64}`: Time vector [s]
+  - `model::BlowWood`: Raman model with parameters
 
 # Returns
-- `(fr, RT)`: Raman fraction and response function
+
+  - `(fr, RT)`: Raman fraction and response function
 
 # Physics
+
 Following gnlse-python raman_blowwood:
+
 ```python
 tau1 = 0.0122  # ps
 tau2 = 0.032   # ps
@@ -50,14 +54,18 @@ end
 Compute Raman response following gnlse-python raman_linagrawal.
 
 # Arguments
-- `T::Vector{Float64}`: Time vector [ps]
-- `model::LinAgrawal`: Raman model with parameters
+
+  - `T::Vector{Float64}`: Time vector [s]
+  - `model::LinAgrawal`: Raman model with parameters
 
 # Returns
-- `(fr, RT)`: Raman fraction and response function
+
+  - `(fr, RT)`: Raman fraction and response function
 
 # Physics
+
 Following gnlse-python raman_linagrawal:
+
 ```python
 tau1 = 0.0122  # ps
 tau2 = 0.032   # ps
@@ -107,10 +115,12 @@ end
 Compute Raman response following D. Hollenbeck & C. D. Cantrell's 13-oscillator fit.
 
 # Arguments
+
   - `T::Vector{Float64}`: Time vector [s]
   - `model::Hollenbeck`: Raman model with Raman fraction fr
 
 # Returns
+
   - `(fr, RT)`: Raman fraction `fr` and impulse response `RT(t)` [1/s]
 
 # Physics
@@ -121,6 +131,7 @@ broadening to fit experimental Raman gain/loss data from silica fiber:
     h(ω) = Σ Aᵢ [Lorentzian(ω - ωᵢ, Γᵢ) ⊗ Gaussian(ΔGᵢ)]
 
 Each resonance is parametrized by:
+
   - **CP**: center position [cm⁻¹]
   - **A**: peak amplitude (relative units)
   - **Gauss**: Gaussian FWHM [cm⁻¹]
@@ -134,19 +145,58 @@ Reference: D. Hollenbeck & C. D. Cantrell, J. Opt. Soc. Am. B 19, 2886 (2002)
 """
 function raman_response(T::Vector{Float64}, model::Hollenbeck)
     # Component positions [1/cm]
-    CP = [56.25, 100.0, 231.25, 362.5, 463.0, 497.0, 611.5, 691.67, 793.67,
-          835.5, 930.0, 1080.0, 1215.0]
+    CP = [
+        56.25,
+        100.0,
+        231.25,
+        362.5,
+        463.0,
+        497.0,
+        611.5,
+        691.67,
+        793.67,
+        835.5,
+        930.0,
+        1080.0,
+        1215.0,
+    ]
 
     # Peak intensity (amplitude)
     A = [1.0, 11.40, 36.67, 67.67, 74.0, 4.5, 6.8, 4.6, 4.2, 4.5, 2.7, 3.1, 3.0]
 
     # Gaussian FWHM [1/cm]
-    Gauss = [52.10, 110.42, 175.00, 162.50, 135.33, 24.5, 41.5, 155.00, 59.5, 64.3,
-             150.0, 91.0, 160.0]
+    Gauss = [
+        52.10,
+        110.42,
+        175.00,
+        162.50,
+        135.33,
+        24.5,
+        41.5,
+        155.00,
+        59.5,
+        64.3,
+        150.0,
+        91.0,
+        160.0,
+    ]
 
     # Lorentzian FWHM [1/cm]
-    Lorentz = [17.37, 38.81, 58.33, 54.17, 45.11, 8.17, 13.83, 51.67, 19.83, 21.43,
-               50.00, 30.33, 53.33]
+    Lorentz = [
+        17.37,
+        38.81,
+        58.33,
+        54.17,
+        45.11,
+        8.17,
+        13.83,
+        51.67,
+        19.83,
+        21.43,
+        50.00,
+        30.33,
+        53.33,
+    ]
 
     # Convert wavenumbers [1/cm] to angular frequencies/rates [rad/s].
     # ω = 2π·c·(CP·100), with c in m/s; L and γ use π·c (FWHM convention).
@@ -166,11 +216,29 @@ function raman_response(T::Vector{Float64}, model::Hollenbeck)
     # gnlse-python: RT[T < 0] = 0
     RT[T .< 0] .= 0
 
-    # Normalize
-    # gnlse-python: dt = T[1] - T[0]; RT = RT / (sum(RT) * dt)
+    # Unlike BlowWood/LinAgrawal (whose analytic ha(t)/hb(t) forms integrate to ~1
+    # by construction), the 13-oscillator fit's amplitudes A[i] are empirical
+    # "relative units" that do NOT integrate to unity on their own. It must be
+    # explicitly normalized so that ∫RT(t)dt = 1, matching gnlse-python's
+    # `RT = RT / (np.sum(RT) * dt)`. Without this, the delayed-Raman convolution
+    # in `_spm_raman` (which assumes a unit-area impulse response) is suppressed
+    # by many orders of magnitude.
     dt = T[2] - T[1]
-    RT = RT ./ (sum(RT) * dt)
+    RT ./= (sum(RT) * dt)
 
+    return model.fr, RT
+end
+
+"""
+    raman_response(T::Vector{Float64}, model::MolecularRamanGas)
+
+Compute Raman impulse response for molecular gases (H₂, N₂).
+"""
+function raman_response(T::Vector{Float64}, model::MolecularRamanGas)
+    tau1 = model.tau1
+    tau2 = model.tau2
+    RT = (tau1^2 + tau2^2) / tau1 / (tau2^2) .* exp.(-T ./ tau2) .* sin.(T ./ tau1)
+    RT[T .< 0] .= 0
     return model.fr, RT
 end
 
@@ -180,11 +248,13 @@ end
 Convenience wrapper that extracts time vector from grid.
 
 # Arguments
-- `grid::Grid`: Grid with time vector T
-- `model::RamanModel`: Raman model
+
+  - `grid::Grid`: Grid with time vector T
+  - `model::RamanModel`: Raman model
 
 # Returns
-- `(fr, RT)`: Raman fraction and response function
+
+  - `(fr, RT)`: Raman fraction and response function
 """
 function raman_response(grid::Grid, model::RamanModel)
     return raman_response(grid.t, model)

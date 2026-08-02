@@ -64,6 +64,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
+      - name: Upload Documentation Artifact (PR Preview)
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation-preview
+          path: docs/build/
       - name: Run doctests
         shell: julia --project=docs --color=yes {0}
         run: |

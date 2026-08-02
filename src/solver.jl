@@ -5,13 +5,13 @@ Reference: gnlse-python GNLSE.run()
 """
 
 """
-    solve(pulse::Pulse, params::SimParams; progress::Bool=true)
+    solve(pulse::AbstractPulse, params::SimParams; progress::Bool=true)
 
 Solve GNLSE following gnlse-python conventions using adaptive ERK4IP method.
 
 # Arguments
 
-  - `pulse::Pulse`: Initial pulse condition
+  - `pulse::AbstractPulse`: Initial pulse condition
   - `params::SimParams`: Simulation parameters
   - `progress::Bool`: Show progress bar (default: true)
 
@@ -51,10 +51,41 @@ Integrates the GNLSE with the adaptive ERK4IP solver. All quantities are in
 natural SI units; the envelope spectrum follows the standard optics convention
 `AW = ifft(At)`.
 """
-function solve(pulse::Pulse, params::SimParams; progress::Bool=true)
-    z, At, AW = propagate_erk4ip(
-        pulse, params; progress=progress, rtol=params.rtol, atol=params.atol
-    )
+function propagate(
+    pulse::AbstractPulse,
+    params::SimParams,
+    solver::GNLSESolver;
+    progress::Bool=true,
+    rng::AbstractRNG=default_rng(),
+)
+    # Warn if grid and medium center wavelengths are significantly mismatched
+    if hasproperty(params.medium, :lambda0)
+        rel_diff = abs(pulse.grid.lambda0 - params.medium.lambda0) / params.medium.lambda0
+        if rel_diff > 0.01
+            @warn "Grid center wavelength ($(round(pulse.grid.lambda0 * 1e9; digits=1)) nm) " *
+                "differs from medium lambda0 ($(round(params.medium.lambda0 * 1e9; digits=1)) nm) " *
+                "by $(round(100 * rel_diff; digits=1))%. Ensure these are consistent."
+        end
+    end
+    model = build_physics_model(pulse.grid, params, pulse.At)
+    return propagate(model, pulse, params, solver, progress, rng)
+end
+
+"""
+    solve(pulse::AbstractPulse, params::SimParams; progress::Bool=true, rng::AbstractRNG=default_rng())
+
+Solve GNLSE following gnlse-python conventions using adaptive ERK4IP method.
+
+`rng` seeds the Amplified Spontaneous Emission (ASE) noise for `AmplifyingMedium`
+propagation (ignored for all other media).
+"""
+function solve(
+    pulse::AbstractPulse,
+    params::SimParams;
+    progress::Bool=true,
+    rng::AbstractRNG=default_rng(),
+)
+    z, At, AW = propagate(pulse, params, params.solver; progress=progress, rng=rng)
 
     # Build solution
     grid = pulse.grid
@@ -67,9 +98,14 @@ function solve(pulse::Pulse, params::SimParams; progress::Bool=true)
         AW,              # Frequency domain fields (N × z_saves)
     )
 
-    # Photon number is conserved by the GNLSE for a lossless fiber; a drift
-    # indicates the step-size tolerance is too loose.
-    if params.medium.loss == 0
+    # Photon number is conserved by the GNLSE for a passive lossless fiber; a drift
+    # indicates the step-size tolerance is too loose. Skip this check for media with
+    # intentional non-conservative physics beyond the linear `loss` field: active
+    # (AmplifyingMedium) gain, and SemiconductorMedium's two-photon/free-carrier
+    # absorption (alpha2), where large photon-number loss is the expected physics.
+    if params.medium.loss == 0 &&
+        !(params.medium isa AmplifyingMedium) &&
+        !(params.medium isa SemiconductorMedium)
         n = photon_number(solution)
         drift = abs(n[end] - n[1]) / n[1]
         drift > 1e-2 && @warn "Photon number drifted by " *
@@ -77,4 +113,161 @@ function solve(pulse::Pulse, params::SimParams; progress::Bool=true)
     end
 
     return solution
+end
+
+"""
+    solve(pulse::AbstractPulse, stages::AbstractVector; progress::Bool=true)
+
+Propagate an optical pulse through a sequence of stages (fibers, amplifiers, filters, etc.).
+
+Returns a vector of results corresponding to each stage (either a `Solution` for propagation stages,
+or a new `Pulse` for lumped elements / functional stages).
+"""
+function solve(pulse::AbstractPulse, stages::AbstractVector; progress::Bool=true)
+    current_pulse = pulse
+    results = Any[]
+
+    for (i, stage) in enumerate(stages)
+        if stage isa SimParams
+            # Fiber propagation stage (returns a Solution)
+            sol = solve(current_pulse, stage; progress=progress)
+            push!(results, sol)
+            # Use final state of the fiber propagation for the next stage
+            current_pulse = sol isa VectorialSolution ? VectorialPulse(sol) : Pulse(sol)
+        elseif stage isa LumpedElement
+            # Lumped element stage (returns a Pulse)
+            current_pulse = apply(current_pulse, stage)
+            push!(results, current_pulse)
+        elseif stage isa Function
+            # Custom functional stage (returns a Pulse)
+            current_pulse = stage(current_pulse)
+            push!(results, current_pulse)
+        else
+            throw(ArgumentError("Unsupported stage type: $(typeof(stage))"))
+        end
+    end
+
+    return results
+end
+
+"""
+    Pulse(sol::Solution)
+
+Extract the final state from a `Solution` as a new `Pulse` object.
+"""
+function Pulse(sol::Solution)
+    N = length(sol.t)
+    dt = sol.t[2] - sol.t[1]
+    V = sol.W .- sol.omega0
+    lambda0 = 2π * c / sol.omega0
+    grid = Grid(N, sol.t, V, sol.W, dt, sol.omega0, lambda0)
+    return Pulse(sol.At[:, end], sol.AW[:, end], grid)
+end
+
+# Make SimParams callable for piping support
+(params::SimParams)(pulse::AbstractPulse) = solve(pulse, params; progress=false)
+(params::SimParams)(sol::Solution) = solve(Pulse(sol), params; progress=false)
+
+# Vectorial solver implementations
+function propagate(
+    pulse::VectorialPulse, params::SimParams, solver::GNLSESolver; progress::Bool=true
+)
+    model = build_physics_model(pulse.grid, params, pulse.At)
+    return propagate(model, pulse, params, solver, progress)
+end
+
+"""
+    solve(pulse::VectorialPulse, params::SimParams; progress=true)
+
+Propagate a `VectorialPulse` through a `BirefringentMedium` according to `SimParams`.
+"""
+function solve(pulse::VectorialPulse, params::SimParams; progress::Bool=true)
+    z, At, AW = propagate(pulse, params, params.solver; progress=progress)
+    return VectorialSolution(pulse.grid.t, pulse.grid.W, pulse.grid.omega0, z, At, AW)
+end
+
+"""
+    VectorialPulse(sol::VectorialSolution)
+
+Extract the final state from a `VectorialSolution` as a new `VectorialPulse` object.
+"""
+function VectorialPulse(sol::VectorialSolution)
+    N = length(sol.t)
+    dt = sol.t[2] - sol.t[1]
+    V = sol.W .- sol.omega0
+    lambda0 = 2π * c / sol.omega0
+    grid = Grid(N, sol.t, V, sol.W, dt, sol.omega0, lambda0)
+    return VectorialPulse(sol.At[:, :, end], grid)
+end
+
+# Make SimParams callable for vectorial piping support
+(params::SimParams)(pulse::VectorialPulse) = solve(pulse, params; progress=false)
+(params::SimParams)(sol::VectorialSolution) =
+    solve(VectorialPulse(sol), params; progress=false)
+
+"""
+    solve_sweep(setup_fn::Function, param_space::AbstractArray; progress::Bool=true)
+    solve_sweep(pulses, params_list; progress::Bool=true)
+
+Perform a multi-threaded parallel parameter sweep over GNLSE simulations.
+
+Concurrently executes simulations across available Julia worker threads
+(`Threads.nthreads()`), ensuring thread-safe, isolated workspace memory per trial.
+
+# Arguments
+
+  - `setup_fn::Function`: Callable `param -> (pulse, params)` that maps a parameter combination to its pulse and simulation parameters.
+  - `param_space::AbstractArray`: Collection or grid of parameters.
+  - `progress::Bool`: Display a progress bar tracking trial completions (default: true).
+
+# Returns
+
+  - Array of `Solution` (or `VectorialSolution`) objects matching the shape of `param_space`.
+
+# Example
+
+```julia
+# Sweep peak power P0 from 1 kW to 10 kW across 10 trials
+powers = range(1e3, 10e3; length=10)
+sols = solve_sweep(powers) do P0
+    p = sech_pulse(grid, P0, 100e-15)
+    params = SimParams(; medium=medium, z_saves=20)
+    return (p, params)
+end
+```
+"""
+function solve_sweep(setup_fn::Function, param_space::AbstractArray; progress::Bool=true)
+    N_trials = length(param_space)
+    solutions = Vector{Any}(undef, N_trials)
+
+    prog = if progress
+        Progress(
+        N_trials; desc="Parallel Sweep (threads=$(Threads.nthreads()))... ", color=:cyan
+    )
+    else
+        nothing
+    end
+
+    Threads.@threads :static for i in 1:N_trials
+        param = param_space[i]
+        pulse, params = setup_fn(param)
+        solutions[i] = solve(pulse, params; progress=false)
+        if !isnothing(prog)
+            next!(prog)
+        end
+    end
+
+    return reshape(solutions, size(param_space))
+end
+
+function solve_sweep(
+    pulses::AbstractVector{<:AbstractPulse},
+    params_list::AbstractVector{<:SimParams};
+    progress::Bool=true,
+)
+    length(pulses) == length(params_list) ||
+        throw(ArgumentError("pulses and params_list must have identical length"))
+    return solve_sweep(1:length(pulses); progress=progress) do i
+        return (pulses[i], params_list[i])
+    end
 end

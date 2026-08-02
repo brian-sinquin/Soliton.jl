@@ -20,6 +20,11 @@ function pulse_energy(pulse::Pulse)
     return sum(abs2, pulse.At) * pulse.grid.dt
 end
 
+function pulse_energy(vpulse::VectorialPulse)
+    return (sum(abs2, @view(vpulse.At[:, 1])) + sum(abs2, @view(vpulse.At[:, 2]))) *
+           vpulse.grid.dt
+end
+
 """
     peak_power(pulse::Pulse)
 
@@ -27,6 +32,10 @@ Peak power P_peak = max(|A(t)|²) [W].
 """
 function peak_power(pulse::Pulse)
     return maximum(abs2, pulse.At)
+end
+
+function peak_power(vpulse::VectorialPulse)
+    return maximum(abs2.(vpulse.At[:, 1]) .+ abs2.(vpulse.At[:, 2]))
 end
 
 """
@@ -84,7 +93,8 @@ end
 """
     spectral_bandwidth(pulse::Pulse; level::Float64=0.5)
 
-Spectral width at the given intensity `level` (0.5 = FWHM), returned in Hz.
+Spectral width at the given intensity `level` (0.5 = FWHM), returned as ordinary
+frequency ν [Hz] (i.e. divided by 2π; not angular frequency ω [rad/s]).
 """
 function spectral_bandwidth(pulse::Pulse; level::Float64=0.5)
     spectrum = abs2.(fftshift(pulse.AW))
@@ -125,16 +135,12 @@ end
     photon_number(pulse::Pulse)
     photon_number(solution::Solution)
 
-Dimensionless photon count ∝ ∫|A(ω)|²/ω dω — the quantity conserved by the
-GNLSE (including self-steepening) in the absence of loss. The energy per photon
-scales as ħω, making this count independent of the optical carrier frequency.
-This metric is useful for verifying energy conservation and for understanding the
-role of ħω in the [`add_noise`](@ref) quantum-noise seeding. For a `Solution`,
-returns one value per saved distance.
-
-# Returns
-
-  - Float64 (for Pulse) or Vector (for Solution): photon count
+Conserved quantity ∝ ∫|A(ω)|²/ω dω used to monitor numerical accuracy of the
+GNLSE integration. For a lossless fiber this quantity is conserved by the GNLSE
+(including self-steepening); a drift indicates the step-size tolerance is too
+loose. Note: the returned value is *not* an absolute photon count — it lacks the
+ℏ and dω normalization factors and should only be compared *relative* to itself
+along the propagation axis. For a `Solution`, returns one value per saved distance.
 """
 function photon_number(pulse::Pulse)
     # pulse.AW = ifft(At) is in FFT order; align the absolute-frequency grid.
@@ -142,9 +148,17 @@ function photon_number(pulse::Pulse)
 end
 
 function photon_number(solution::Solution)
+    if isempty(solution.AW)
+        # When save_freq=false, AW is empty (0x0). Fallback to time-domain At computation.
+        # By Parseval's theorem, Σ |AW|² = (1/N) Σ |At|².
+        N = size(solution.At, 1)
+        return [
+            sum(abs2, view(solution.At, :, j)) / (N * solution.omega0) for
+            j in axes(solution.At, 2)
+        ]
+    end
     # solution.AW columns and solution.W are both in monotonic order
-    return [sum(abs2.(view(solution.AW, :, j)) ./ solution.W)
-            for j in axes(solution.AW, 2)]
+    return [sum(abs2.(view(solution.AW, :, j)) ./ solution.W) for j in axes(solution.AW, 2)]
 end
 
 """
@@ -172,6 +186,7 @@ nonlinear_length(gamma::Real, P0::Real) = 1 / (gamma * P0)
 Soliton number N = √(L_D / L_NL) = √(γ P₀ T₀² / |β₂|) (dimensionless). This
 parameter predicts the number of fundamental solitons that comprise the initial
 pulse and governs nonlinear-dispersive dynamics:
+
   - N ≪ 1: weakly nonlinear, dispersion dominates
   - N ≈ 1: fundamental soliton (stable in anomalous dispersion)
   - N > 1: higher-order soliton exhibiting periodic breathing; also indicates
@@ -205,7 +220,7 @@ end
     add_noise(pulse::Pulse; kwargs...) -> Pulse
 
 Return a copy of `pulse` with a physically motivated realization of input noise
-added. Three independent contributions can be enabled and tuned separately:
+added. Four independent contributions can be enabled and tuned separately:
 
  1. **Quantum noise** — vacuum fluctuations of the optical field, modelled as
     `photons_per_mode` photons per spectral mode. This is the fundamental seed
@@ -213,7 +228,13 @@ added. Three independent contributions can be enabled and tuned separately:
     decoherence) and is the only term enabled by default.
  2. **Relative intensity noise (RIN)** — classical shot-to-shot fluctuation of
     the laser output power, applied as a multiplicative amplitude scaling.
- 3. **Phase noise** — shot-to-shot common-mode optical phase jitter.
+ 3. **Phase noise (shot-to-shot)** — common-mode optical phase jitter drawn
+    from a single Gaussian deviate (white phase noise).
+ 4. **Laser linewidth** — frequency-domain colored phase noise with a
+    Lorentzian power spectrum corresponding to a laser of linewidth `linewidth_hz`.
+    Modeled as a Wiener (random-walk) phase process: the phase evolves as
+    Brownian motion in time, giving a Lorentzian electric-field spectrum with
+    FWHM = `linewidth_hz`.
 
 Independent `rng` draws give statistically independent realizations, so calling
 `add_noise` repeatedly on the same clean pulse builds the ensemble needed for a
@@ -233,18 +254,28 @@ Independent `rng` draws give statistically independent realizations, so calling
   - `rin::Real = 0.0`: RMS relative intensity noise σ_P/P (fractional, e.g.
     `0.01` = 1 % RMS power fluctuation). Convert a dBc/Hz spec with
     [`rin_rms`](@ref).
-  - `phase_rms::Real = 0.0`: RMS optical phase jitter [rad].
+  - `phase_rms::Real = 0.0`: RMS common-mode optical phase jitter [rad]
+    (shot-to-shot; white phase noise).
+  - `linewidth_hz::Real = 0.0`: Laser linewidth [Hz] (half-maximum of the
+    Lorentzian power spectrum). Generates a time-domain Wiener phase process
+    with diffusion coefficient `D = 2π · linewidth_hz`. Typical values:
+    < 1 kHz (narrow-linewidth CW), 1–100 MHz (standard DFB), > 10 GHz (free-running).
 
 # Physics
 
 In the package FFT convention the energy of spectral mode `m` is
 `N·dt·|AW[m]|²`, so a mode carrying `nₚ` photons of energy ħω satisfies
 `N·dt·⟨|δAW|²⟩ = nₚ·ħω`. RIN scales the field by `√(1 + δ)` with
-`δ ~ 𝒩(0, rin²)`; phase noise multiplies it by `exp(iφ)` with
+`δ ~ 𝒩(0, rin²)`; the shot-to-shot phase noise multiplies it by `exp(iφ)` with
 `φ ~ 𝒩(0, phase_rms²)`.
 
+The Wiener phase process satisfies `φ(t+dt) = φ(t) + 𝒩(0, 2π·Δν·dt)`, giving
+a Lorentzian electric-field autocorrelation `⟨E*(0)E(τ)⟩ ∝ exp(−π|Δν||τ|)` and
+power spectrum FWHM = Δν (Schawlow–Townes white-frequency-noise limit).
+
 Reference: J. M. Dudley & S. Coen, Opt. Lett. 27, 1180 (2002);
-J. M. Dudley, G. Genty & S. Coen, Rev. Mod. Phys. 78, 1135 (2006).
+J. M. Dudley, G. Genty & S. Coen, Rev. Mod. Phys. 78, 1135 (2006);
+A. L. Schawlow & C. H. Townes, Phys. Rev. 112, 1940 (1958).
 """
 function add_noise(
     pulse::Pulse;
@@ -253,10 +284,11 @@ function add_noise(
     quantum_model::Symbol=:gaussian,
     rin::Real=0.0,
     phase_rms::Real=0.0,
+    linewidth_hz::Real=0.0,
 )
-    photons_per_mode >= 0 ||
-        throw(ArgumentError("photons_per_mode must be non-negative"))
+    photons_per_mode >= 0 || throw(ArgumentError("photons_per_mode must be non-negative"))
     rin >= 0 || throw(ArgumentError("rin must be non-negative"))
+    linewidth_hz >= 0 || throw(ArgumentError("linewidth_hz must be non-negative"))
     quantum_model in (:gaussian, :phase_only) ||
         throw(ArgumentError("quantum_model must be :gaussian or :phase_only"))
 
@@ -270,6 +302,16 @@ function add_noise(
         amp = rin > 0 ? sqrt(max(0.0, 1.0 + rin * randn(rng))) : 1.0
         ϕ = phase_rms > 0 ? phase_rms * randn(rng) : 0.0
         @. At *= amp * cis(ϕ)
+    end
+
+    # --- Laser linewidth: Wiener phase process (colored phase noise) -----------
+    # φ(t) is a Brownian-motion phase with diffusion D = 2π · Δν [rad²/s].
+    # Per-step variance: Var[dφ] = 2π · Δν · dt.
+    # This gives a Lorentzian electric-field PSD with FWHM = Δν [Hz].
+    if linewidth_hz > 0
+        σ_step = sqrt(2π * linewidth_hz * pulse.grid.dt)
+        φ = cumsum(σ_step .* randn(rng, pulse.grid.N))
+        @. At *= cis(φ)
     end
 
     AW = ifft(At)
@@ -313,6 +355,7 @@ The estimator uses the algebraic identity `Σ_{i≠j} Aᵢ*Aⱼ = |ΣAᵢ|² - �
 which averages over all `M(M-1)` ordered pairs without an explicit double loop.
 
 !!! note "Finite-ensemble bias"
+
     For a truly incoherent field the pairwise estimator does not vanish but
     fluctuates around a positive floor `≈ 1/√(M(M-1)) ≈ 1/M`. Use a sufficiently
     large ensemble (`M ≳ 20`, ideally 50–100) so that this bias stays well below
@@ -361,3 +404,170 @@ then computes coherence across the ensemble.
 """
 spectral_coherence(solutions::AbstractVector{<:Solution}) =
     spectral_coherence([@view(sol.AW[:, end]) for sol in solutions])
+
+"""
+    spectrogram(pulse::Pulse; n_delay=200, gate_fwhm=nothing) -> (t_delays, V_grid, S_matrix)
+
+Compute Short-Time Fourier Transform (STFT) spectrogram of pulse:
+S(t, ω) = |∫ A(t') exp(-(t' - t)² / (2 τ_g²)) exp(-i ω t') dt'|²
+"""
+function spectrogram(
+    pulse::Pulse; n_delay::Int=200, gate_fwhm::Union{Real, Nothing}=nothing
+)
+    t = pulse.grid.t
+    At = pulse.At
+    dt = pulse.grid.dt
+    N = pulse.grid.N
+    V = pulse.grid.V
+
+    tau_g = gate_fwhm === nothing ? fwhm(pulse; domain=:time) : Float64(gate_fwhm)
+    tau_g = max(tau_g, 10 * dt)
+    sigma_g = tau_g / (2.0 * sqrt(2.0 * log(2.0)))
+
+    t_delays = collect(range(t[1], t[end]; length=n_delay))
+    S_matrix = zeros(Float64, N, n_delay)
+
+    gate_buf = zeros(ComplexF64, N)
+    freq_buf = zeros(ComplexF64, N)
+
+    for (j, tau) in enumerate(t_delays)
+        @. gate_buf = At * exp(-((t - tau)^2) / (2.0 * sigma_g^2))
+        freq_buf .= fftshift(ifft(gate_buf))
+        @. S_matrix[:, j] = abs2(freq_buf)
+    end
+
+    return t_delays, V, S_matrix
+end
+
+"""
+    shg_frog_trace(pulse::Pulse; n_delay=200) -> (delays, V_shg, I_frog)
+
+Compute Second-Harmonic Generation (SHG) FROG trace:
+I_FROG(ω, τ) = |∫ A(t) A(t - τ) exp(-i ω t) dt|²
+"""
+function shg_frog_trace(pulse::Pulse; n_delay::Int=200)
+    t = pulse.grid.t
+    At = pulse.At
+    N = pulse.grid.N
+    dt = pulse.grid.dt
+
+    t_delays = collect(range(t[1] / 2, t[end] / 2; length=n_delay))
+    I_frog = zeros(Float64, N, n_delay)
+    signal = zeros(ComplexF64, N)
+
+    for (j, tau) in enumerate(t_delays)
+        for i in 1:N
+            t_shifted = t[i] - tau
+            if t[1] <= t_shifted <= t[end]
+                idx = round(Int, (t_shifted - t[1]) / dt) + 1
+                idx_clamped = clamp(idx, 1, N)
+                signal[i] = At[i] * At[idx_clamped]
+            else
+                signal[i] = 0.0 + 0.0im
+            end
+        end
+        I_frog[:, j] .= abs2.(fftshift(ifft(signal)))
+    end
+
+    V_shg = 2.0 .* pulse.grid.V
+    return t_delays, V_shg, I_frog
+end
+
+"""
+    track_solitons(sol::Solution) -> (z_fiss, peak_power_z, centroid_w_z)
+
+Automated tracking of soliton fission and Soliton Self-Frequency Shift (SSFS) red-shift trajectory
+across propagation distances `sol.Z`.
+
+# Returns
+
+  - `z_fiss`: Estimated distance of peak compression / soliton fission [m]
+  - `peak_power_z`: Peak power P_max(z) [W] along propagation
+  - `centroid_w_z`: Spectral centroid ⟨ω - ω₀⟩(z) [rad/s] along propagation
+"""
+function track_solitons(sol::Solution)
+    n_saves = length(sol.Z)
+    peak_power_z = zeros(Float64, n_saves)
+    centroid_w_z = zeros(Float64, n_saves)
+
+    V = sol.W .- sol.omega0
+
+    for j in 1:n_saves
+        intensity_t = abs2.(@view(sol.At[:, j]))
+        peak_power_z[j] = maximum(intensity_t)
+
+        spectrum_w = abs2.(@view(sol.AW[:, j]))
+        sum_spec = sum(spectrum_w)
+        centroid_w_z[j] = sum_spec > 0 ? sum(V .* spectrum_w) / sum_spec : 0.0
+    end
+
+    idx_fiss = argmax(peak_power_z)
+    z_fiss = sol.Z[idx_fiss]
+
+    return z_fiss, peak_power_z, centroid_w_z
+end
+
+"""
+    dispersive_wave_wavelength(medium::Medium, pulse::Pulse; P0::Real=peak_power(pulse)) -> Float64
+
+Calculate the predicted resonant Cherenkov dispersive wave emission wavelength λ_DW [m]
+emitted during soliton fission in `medium`.
+
+Solves the phase-matching condition:
+Δβ(Δω) = β(ω₀ + Δω) - β(ω₀) - β₁(ω₀)·Δω - ½·γ·P₀ = 0
+for Δω ≠ 0.
+"""
+function dispersive_wave_wavelength(
+    medium::Medium, pulse::Pulse; P0::Real=peak_power(pulse)
+)
+    lambda0 = medium.lambda0
+    omega0 = 2π * c / lambda0
+    gamma_val = medium.gamma isa Real ? Float64(medium.gamma) : 0.0
+
+    V = pulse.grid.V
+    D_op = dispersion_operator(pulse.grid, medium)
+
+    # B_comoving: propagation-constant deviation in the co-moving frame,
+    # i.e. imag(D_op) = β(ω) - β₀ - β₁·(ω-ω₀). This already has β₁·V removed,
+    # which is exactly the form needed for the Cherenkov phase-matching condition.
+    B_comoving = imag.(D_op)
+    phase_mismatch = @. B_comoving - 0.5 * gamma_val * P0
+
+    N = length(V)
+    zero_crossings = Float64[]
+
+    for i in 1:(N - 1)
+        if abs(V[i]) > 1e12 # Skip trivial root at pump frequency V ≈ 0
+            if phase_mismatch[i] * phase_mismatch[i + 1] <= 0
+                dw_zero =
+                    V[i] -
+                    phase_mismatch[i] * (V[i + 1] - V[i]) /
+                    (phase_mismatch[i + 1] - phase_mismatch[i])
+                push!(zero_crossings, dw_zero)
+            end
+        end
+    end
+
+    if isempty(zero_crossings)
+        if medium.dispersion isa TaylorDispersion && length(medium.dispersion.betas) >= 2
+            b2 = medium.dispersion.betas[1]
+            b3 = medium.dispersion.betas[2]
+            if b3 != 0
+                dw_anal = -3.0 * b2 / b3
+                omega_dw = omega0 + dw_anal
+                return 2π * c / omega_dw
+            end
+        end
+        return lambda0
+    end
+
+    pos_crossings = filter(dw -> dw > 1e12, zero_crossings)
+    # Select the nearest positive-detuning crossing (physically closest to the pump)
+    dw_primary = if !isempty(pos_crossings)
+        pos_crossings[argmin(pos_crossings)]
+    else
+        (!isempty(zero_crossings) ? zero_crossings[argmax(abs.(zero_crossings))] : 0.0)
+    end
+    omega_dw = omega0 + dw_primary
+    return 2π * c / omega_dw
+end
