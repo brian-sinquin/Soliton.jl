@@ -74,5 +74,11 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/brian-sinquin/JuGNLSE", devbranch="master", push_preview=true
+    repo="github.com/brian-sinquin/JuGNLSE",
+    devbranch="master",
+    push_preview=true,
+    # Default is ["stable" => "v^", "v#.#"], which collapses releases into a
+    # "v0.2"-style minor-version rollup in the version dropdown. List the
+    # exact tag instead so e.g. "v0.2.0" is what readers see and pick.
+    versions=["stable" => "v^", "v#.#.#"],
 )
