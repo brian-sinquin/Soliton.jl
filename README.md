@@ -6,6 +6,16 @@
 
 JuGNLSE.jl is a Julia package for solving the Generalized Nonlinear Schrödinger Equation (GNLSE). It is designed to model the propagation of optical pulses in nonlinear media, such as optical fibers, with a focus on performance and numerical stability.
 
+## Features
+
+- Commercial fiber & glass presets (Corning, NKT, Thorlabs) and custom/tabulated dispersion
+- Active amplifying fibers (EDFA/YDFA) with gain saturation and ASE noise
+- Gas-filled hollow-core PCF with pressure-tunable dispersion and molecular Raman response
+- Silicon photonics: two-photon absorption and free-carrier dynamics
+- Coupled vectorial/birefringent GNLSE solver (SPM + XPM + FWM)
+- Cascaded multi-stage pipelines (fibers, amplifiers, filters) via `|>` piping
+- Adaptive (`ERK4IP`, `AdaptiveSSFM`) and fixed-step (`SSFM`) solvers, multi-threaded parameter sweeps
+
 ## Installation
 
 The package can be installed using the Julia package manager:
