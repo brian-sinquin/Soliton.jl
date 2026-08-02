@@ -48,7 +48,7 @@ Pkg.add("JuGNLSE")
 
 Or from the GitHub repository:
 ```julia
-Pkg.add(url="https://github.com/brian-sinquin/JuGNLSE.jl")
+Pkg.add(url="https://github.com/brian-sinquin/JuGNLSE")
 ```
 
 ## Quick Start
