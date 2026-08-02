@@ -10,6 +10,8 @@ jobs:
   build-sysimage:
     name: Compile Binary Sysimage (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write # needed by softprops/action-gh-release to create/update the release
     strategy:
       fail-fast: false
       matrix:
