@@ -3,6 +3,7 @@ using Pkg
 # Ensure PackageCompiler is available
 Pkg.add("PackageCompiler")
 using PackageCompiler
+using Libdl
 
 println("=== Building JuGNLSE Compiled Binary Sysimage ===")
 
@@ -11,9 +12,9 @@ precompile_script = joinpath(@__DIR__, "precompile_workload.jl")
 
 create_sysimage(
     :JuGNLSE;
-    sysimage_path = sysimage_path,
-    precompile_execution_file = precompile_script,
-    incremental = true
+    sysimage_path=sysimage_path,
+    precompile_execution_file=precompile_script,
+    incremental=true,
 )
 
 println("=== Successfully built JuGNLSE sysimage: $sysimage_path ===")

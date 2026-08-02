@@ -14,4 +14,5 @@ using JuGNLSE
     include("test_loss_gain.jl")
     include("test_conversions.jl")
     include("test_adversarial.jl")
+    include("test_recipes.jl")
 end
