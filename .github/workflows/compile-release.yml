@@ -44,7 +44,12 @@ jobs:
         run: |
           using Pkg
           Pkg.add("PackageCompiler")
-          include("deps/build_sysimage.jl")
+          # `include` with a relative path resolves against the currently
+          # executing script's own directory (a GitHub Actions temp file
+          # under _temp/), not the working directory — so a bare relative
+          # path here silently looks in the wrong place. Anchor explicitly
+          # to the checkout root.
+          include(joinpath(pwd(), "deps", "build_sysimage.jl"))
 
       - name: Upload Binary Artifact
         uses: actions/upload-artifact@v4
