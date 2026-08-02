@@ -43,7 +43,6 @@ jobs:
           SYSIMAGE_PATH: ${{ matrix.artifact_name }}
         run: |
           using Pkg
-          Pkg.add("PackageCompiler")
           # `include` with a relative path resolves against the currently
           # executing script's own directory (a GitHub Actions temp file
           # under _temp/), not the working directory — so a bare relative

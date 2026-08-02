@@ -22,7 +22,9 @@ med_vec = BirefringentMedium(
 )
 vpulse = VectorialPulse(pulse.At, pulse.At, grid)
 vsol = solve(
-    vpulse, SimParams(; medium=med_vec, raman_model=nothing, z_saves=2); progress=false
+    vpulse,
+    SimParams(; medium=med_vec, raman_model=nothing, z_saves=2, solver=SSFM(0.001));
+    progress=false,
 )
 
 # 3. Active EDFA amplifier
