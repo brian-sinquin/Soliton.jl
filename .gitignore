@@ -39,6 +39,7 @@ Thumbs.db
 /debug_*.jl
 /add.jl
 /PR_DESCRIPTION.md
+/PROPOSALS.md
 
 # Build artifacts
 *.so
