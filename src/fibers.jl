@@ -29,6 +29,9 @@ end
     SF6() -> SellmeierDispersion
 
 3-term Sellmeier model for Schott SF6 heavy flint glass.
+
+Reference: SCHOTT optical glass datasheet, SF6 (standard manufacturer Sellmeier
+fit; see e.g. the SCHOTT glass catalog or refractiveindex.info, "SCHOTT-SF: SF6").
 """
 function SF6()
     B = [1.72412305, 0.390104889, 1.04572858]
@@ -40,6 +43,9 @@ end
     SF57() -> SellmeierDispersion
 
 3-term Sellmeier model for Schott SF57 lead-silicate glass.
+
+Reference: SCHOTT optical glass datasheet, SF57 (standard manufacturer Sellmeier
+fit; see e.g. the SCHOTT glass catalog or refractiveindex.info, "SCHOTT-SF: SF57").
 """
 function SF57()
     B = [1.81651371, 0.42889364, 1.07186278]
@@ -64,7 +70,7 @@ function GeO2DopedSilica(x::Real)
 
     C1 = 0.0684043^2 + 0.00008 * x
     C2 = 0.1162414^2 + 0.00021 * x
-    C3 = 9.896161^2  + 0.01200 * x
+    C3 = 9.896161^2 + 0.01200 * x
 
     return SellmeierDispersion([B1, B2, B3], [C1, C2, C3]; microns=true)
 end
@@ -93,17 +99,32 @@ end
 
 Catalog dictionary mapping standard fiber key strings to [`FiberSpec`](@ref) objects.
 Available keys:
-- `"Corning_SMF28"`
-- `"NKT_NL_PM_750"`
-- `"Thorlabs_PM780"`
-- `"Thorlabs_PM1550"`
-- `"NKT_LMA10"`
+
+  - `"Corning_SMF28"`
+  - `"NKT_NL_PM_750"`
+  - `"Thorlabs_PM780"`
+  - `"Thorlabs_PM1550"`
+  - `"NKT_LMA10"`
 
 `FiberLibrary` is a plain `Dict{String, FiberSpec}` and can be extended at runtime:
+
 ```julia
-JuGNLSE.FiberLibrary["MyCustomFiber"] = FiberSpec("My Fiber", "Lab", "Custom PCF", 800e-9, 0.05, 0.001, TaylorDispersion([-5e-27]))
-medium = commercial_fiber("MyCustomFiber"; length=0.1)
+JuGNLSE.FiberLibrary[\"MyCustomFiber\"] = FiberSpec(
+    \"My Fiber\", \"Lab\", \"Custom PCF\", 800e-9, 0.05, 0.001, TaylorDispersion([-5e-27])
+)
+medium = commercial_fiber(\"MyCustomFiber\"; length=0.1)
 ```
+
+!!! warning "Representative values, not verified datasheet copies"
+
+    The γ, loss, and dispersion coefficients below are typical published
+    values for each fiber type/wavelength (of the kind commonly used in
+    simulation studies), not values transcribed from a specific dated
+    manufacturer datasheet. Individual fiber spools/batches vary, and
+    manufacturers revise specifications over time. For quantitative
+    comparison against a real experiment, always confirm γ, loss, and
+    dispersion against your fiber's current datasheet or a direct
+    measurement rather than relying on these presets.
 """
 const FiberLibrary = Dict{String, FiberSpec}(
     "Corning_SMF28" => FiberSpec(
@@ -113,7 +134,7 @@ const FiberLibrary = Dict{String, FiberSpec}(
         1550e-9,
         0.00127, # γ ≈ 1.27 /W/km = 0.00127 /W/m
         0.0002,  # 0.2 dB/km = 0.0002 dB/m
-        TaylorDispersion([-22.95e-27, 0.13e-39]) # β₂ = -22.95 ps²/km, β₃ = 0.13 ps³/km
+        TaylorDispersion([-22.95e-27, 0.13e-39]), # β₂ = -22.95 ps²/km, β₃ = 0.13 ps³/km
     ),
     "NKT_NL_PM_750" => FiberSpec(
         "NKT Photonics NL-PM-750",
@@ -123,10 +144,16 @@ const FiberLibrary = Dict{String, FiberSpec}(
         0.11,   # γ = 110 /W/km = 0.11 /W/m
         0.001,  # 1 dB/km
         TaylorDispersion([
-            -11.830e-27, 8.1038e-41, -9.5205e-56, 2.0737e-70,
-            -5.3943e-85, 1.3486e-99, -2.5495e-114, 3.0524e-129,
-            -1.7140e-144
-        ])
+            -11.830e-27,
+            8.1038e-41,
+            -9.5205e-56,
+            2.0737e-70,
+            -5.3943e-85,
+            1.3486e-99,
+            -2.5495e-114,
+            3.0524e-129,
+            -1.7140e-144,
+        ]),
     ),
     "Thorlabs_PM780" => FiberSpec(
         "Thorlabs PM780-HP",
@@ -135,7 +162,7 @@ const FiberLibrary = Dict{String, FiberSpec}(
         780e-9,
         0.0055,
         0.003, # 3 dB/km
-        TaylorDispersion([31.3e-27, 0.06e-39]) # β₂ = +31.3 ps²/km (normal dispersion)
+        TaylorDispersion([31.3e-27, 0.06e-39]), # β₂ = +31.3 ps²/km (normal dispersion)
     ),
     "Thorlabs_PM1550" => FiberSpec(
         "Thorlabs PM1550-HP",
@@ -144,7 +171,7 @@ const FiberLibrary = Dict{String, FiberSpec}(
         1550e-9,
         0.0012,
         0.0002,
-        TaylorDispersion([-22.5e-27, 0.12e-39])
+        TaylorDispersion([-22.5e-27, 0.12e-39]),
     ),
     "NKT_LMA10" => FiberSpec(
         "NKT Photonics LMA-10",
@@ -153,8 +180,8 @@ const FiberLibrary = Dict{String, FiberSpec}(
         1064e-9,
         0.0015,
         0.0005,
-        TaylorDispersion([15.2e-27, 0.05e-39])
-    )
+        TaylorDispersion([15.2e-27, 0.05e-39]),
+    ),
 )
 
 """
@@ -163,23 +190,26 @@ const FiberLibrary = Dict{String, FiberSpec}(
 Create a [`Medium`](@ref) from the commercial fiber catalog.
 
 # Arguments
-- `name::String`: Key name in [`FiberLibrary`](@ref) (e.g. `"Corning_SMF28"`, `"NKT_NL_PM_750"`).
-- `length::Real`: Propagation length [m].
-- `lambda0`: Center wavelength [m] (defaults to fiber spec default).
-- `loss`: Fiber attenuation [dB/m] (defaults to fiber spec default).
+
+  - `name::String`: Key name in [`FiberLibrary`](@ref) (e.g. `"Corning_SMF28"`, `"NKT_NL_PM_750"`).
+  - `length::Real`: Propagation length [m].
+  - `lambda0`: Center wavelength [m] (defaults to fiber spec default).
+  - `loss`: Fiber attenuation [dB/m] (defaults to fiber spec default).
 
 # Example
+
 ```julia
-medium = commercial_fiber("Corning_SMF28", length=100.0)
+medium = commercial_fiber(\"Corning_SMF28\"; length=100.0)
 ```
 """
 function commercial_fiber(
     name::String;
     length::Real,
     lambda0::Union{Real, Nothing}=nothing,
-    loss::Union{Real, Nothing}=nothing
+    loss::Union{Real, Nothing}=nothing,
 )
-    haskey(FiberLibrary, name) || throw(ArgumentError("Unknown fiber spec '$name'. Available: $(keys(FiberLibrary))"))
+    haskey(FiberLibrary, name) ||
+        throw(ArgumentError("Unknown fiber spec '$name'. Available: $(keys(FiberLibrary))"))
     spec = FiberLibrary[name]
     wl = lambda0 === nothing ? spec.default_lambda0 : Float64(lambda0)
     alpha = loss === nothing ? spec.default_loss : Float64(loss)
@@ -198,7 +228,9 @@ Supported gases: `:Ar`, `:Ne`, `:Kr`, `:Xe`, `:H2`, `:N2`, `:Air`.
 
 Reference: Börzsönyi et al., Opt. Express 21, 21086 (2013); Peck & Khanna, J. Opt. Soc. Am. 67, 1550 (1977).
 """
-function gas_refractive_index(gas::Symbol, lambda_m::Real, pressure_bar::Real; temperature_K::Real=293.15)
+function gas_refractive_index(
+    gas::Symbol, lambda_m::Real, pressure_bar::Real; temperature_K::Real=293.15
+)
     l_um = lambda_m * 1e6 # [μm]
     inv_l2 = 1.0 / (l_um^2)
 
@@ -216,7 +248,11 @@ function gas_refractive_index(gas::Symbol, lambda_m::Real, pressure_bar::Real; t
     elseif gas === :N2 || gas === :Air
         6498.2 + 29398.0 / (1.0 - 0.0073 * inv_l2)
     else
-        throw(ArgumentError("Unsupported gas '$gas'. Supported: :Ar, :Ne, :Kr, :Xe, :H2, :N2, :Air"))
+        throw(
+            ArgumentError(
+                "Unsupported gas '$gas'. Supported: :Ar, :Ne, :Kr, :Xe, :H2, :N2, :Air"
+            ),
+        )
     end
 
     n_stp_minus_1 = n_minus_1_1e8 * 1e-8
@@ -229,6 +265,13 @@ end
     gas_n2(gas::Symbol, pressure_bar::Real) -> Float64
 
 Nonlinear index n₂ [m²/W] of gas at pressure `pressure_bar` [bar] (STP values scaled linearly with pressure).
+
+Reference (order-of-magnitude STP values): J. K. Wahlstrand, Y.-H. Cheng &
+H. M. Milchberg, Phys. Rev. A 85, 043820 (2012) for noble gases; typical
+literature values for H₂/N₂ (e.g. compiled in Börzsönyi et al., Opt. Express
+18, 25847 (2010)). These are representative constants, not a specific-source
+tabulation — for quantitative work, verify against a dataset for your exact
+wavelength and pressure regime.
 """
 function gas_n2(gas::Symbol, pressure_bar::Real)
     n2_stp = if gas === :Ar
@@ -250,6 +293,40 @@ function gas_n2(gas::Symbol, pressure_bar::Real)
 end
 
 """
+    _capillary_confinement_loss_dB_per_m(w, gas, pressure, temperature, radius) -> Float64
+
+Marcatili-Schmeltzer capillary confinement loss for the fundamental HE₁₁ mode of a
+hollow dielectric (silica-clad) waveguide, evaluated at absolute angular frequency `w`:
+
+    α(λ) = (u₀₁/2π)² · λ²/a³ · (ν²+1)/√(ν²-1)
+
+where `a` is the core radius, and `ν = n_clad(λ)/n_gas(λ,P)` is the ratio of the silica
+cladding index (Malitson fused-silica Sellmeier fit, [`FusedSilica`](@ref)) to the
+gas core index. Returns the loss in [dB/m] (the natural-log/Np result of the formula
+above is converted via `10/ln(10)`), for direct use as a `Medium.loss` function.
+
+Reference: E. A. J. Marcatili & R. A. Schmeltzer, Bell Syst. Tech. J. 43, 1783 (1964).
+"""
+function _capillary_confinement_loss_dB_per_m(
+    w::Real, gas::Symbol, pressure::Real, temperature::Real, radius::Real
+)
+    u01 = 2.4048255577
+    lam = 2π * c / w
+    ngas = gas_refractive_index(gas, lam, pressure; temperature_K=temperature)
+
+    silica = FusedSilica()
+    n2_clad = 1.0
+    for i in eachindex(silica.B)
+        n2_clad += silica.B[i] * lam^2 / (lam^2 - silica.C[i])
+    end
+    nclad = sqrt(n2_clad)
+
+    nu = nclad / ngas
+    alpha_Np = (u01 / (2π))^2 * lam^2 / radius^3 * (nu^2 + 1.0) / sqrt(nu^2 - 1.0)  # [Np/m]
+    return alpha_Np * (10.0 / log(10.0))  # [dB/m]
+end
+
+"""
     HollowCoreFiber(; radius, gas, pressure, length, lambda0, loss=0.0, temperature=293.15, grid=nothing) -> Medium
 
 Construct a [`Medium`](@ref) for a gas-filled Hollow-Core Photonic Crystal Fiber (HC-PCF).
@@ -261,20 +338,40 @@ anti-resonance guidance model:
 
 where u₀₁ ≈ 2.40483 is the fundamental HE₁₁ mode Bessel root, and R_core is the hollow core radius [m].
 
+The wavelength-dependent Marcatili-Schmeltzer capillary confinement loss can
+optionally be added to the returned `Medium`'s `loss` field via
+`confinement_loss=true`; `loss` below always adds any extra
+(surface-scattering, bend, splice) attenuation on top of it.
+
+!!! warning "Confinement loss magnitude"
+
+    This is the bare single-wall thick-capillary formula — it does *not* include
+    the anti-resonant wall-thickness transmission-window term that real
+    negative-curvature HC-PCF designs use to suppress loss by orders of
+    magnitude. At small core radii (tens of μm) it can predict loss far higher
+    than measured in modern HC-PCF (e.g. hundreds of dB/m rather than the
+    dB/m-to-dB/km typical of real fibers), so it is opt-in rather than the
+    default and should be treated as a conservative (worst-case) capillary
+    bound, not a quantitative prediction for anti-resonant/Kagome designs.
+
 # Arguments
-- `radius::Real`: Core radius R_core [m] (e.g. 15e-6 for 30 μm core diameter)
-- `gas::Symbol`: Gas species (`:Ar`, `:Ne`, `:Kr`, `:Xe`, `:H2`, `:N2`)
-- `pressure::Real`: Gas pressure P [bar]
-- `length::Real`: Propagation length [m]
-- `lambda0::Real`: Central wavelength [m]
-- `loss::Real`: Fiber attenuation [dB/m] (default 0.0)
-- `temperature::Real`: Temperature T [K] (default 293.15 K)
-- `grid::Union{Grid, Nothing}`: Optional simulation grid. If provided, constructs exact [`TabulatedDispersion`](@ref) over the full frequency span.
+
+  - `radius::Real`: Core radius R_core [m] (e.g. 15e-6 for 30 μm core diameter)
+  - `gas::Symbol`: Gas species (`:Ar`, `:Ne`, `:Kr`, `:Xe`, `:H2`, `:N2`)
+  - `pressure::Real`: Gas pressure P [bar]
+  - `length::Real`: Propagation length [m]
+  - `lambda0::Real`: Central wavelength [m]
+  - `loss::Real`: Extra fiber attenuation beyond confinement loss [dB/m] (default 0.0)
+  - `confinement_loss::Bool`: Add the Marcatili-Schmeltzer capillary confinement
+    loss on top of `loss` (default `false`; see warning above)
+  - `temperature::Real`: Temperature T [K] (default 293.15 K)
+  - `grid::Union{Grid, Nothing}`: Optional simulation grid. If provided, constructs exact [`TabulatedDispersion`](@ref) over the full frequency span.
 
 # Example
+
 ```julia
 # 30 μm core HC-PCF filled with 5 bar Argon at 800 nm
-hcf = HollowCoreFiber(radius=15e-6, gas=:Ar, pressure=5.0, length=0.5, lambda0=800e-9)
+hcf = HollowCoreFiber(; radius=15e-6, gas=:Ar, pressure=5.0, length=0.5, lambda0=800e-9)
 ```
 """
 function HollowCoreFiber(;
@@ -284,12 +381,13 @@ function HollowCoreFiber(;
     length::Real,
     lambda0::Real,
     loss::Real=0.0,
+    confinement_loss::Bool=false,
     temperature::Real=293.15,
-    grid::Union{Grid, Nothing}=nothing
+    grid::Union{Grid, Nothing}=nothing,
 )
     radius > 0 || throw(ArgumentError("Core radius must be positive"))
     pressure >= 0 || throw(ArgumentError("Pressure must be non-negative"))
-    
+
     u01 = 2.4048255577
     w0 = 2π * c / lambda0
     dw = 1e-4 * w0
@@ -319,8 +417,16 @@ function HollowCoreFiber(;
         TabulatedDispersion(V_detuning, B_vals)
     else
         b2 = (beta_at_w(w0 + dw) - 2b0 + beta_at_w(w0 - dw)) / (dw^2)
-        b3 = (beta_at_w(w0 + 2dw) - 2beta_at_w(w0 + dw) + 2beta_at_w(w0 - dw) - beta_at_w(w0 - 2dw)) / (2dw^3)
-        b4 = (beta_at_w(w0 + 2dw) - 4beta_at_w(w0 + dw) + 6b0 - 4beta_at_w(w0 - dw) + beta_at_w(w0 - 2dw)) / (dw^4)
+        b3 =
+            (
+                beta_at_w(w0 + 2dw) - 2beta_at_w(w0 + dw) + 2beta_at_w(w0 - dw) -
+                beta_at_w(w0 - 2dw)
+            ) / (2dw^3)
+        b4 =
+            (
+                beta_at_w(w0 + 2dw) - 4beta_at_w(w0 + dw) + 6b0 - 4beta_at_w(w0 - dw) +
+                beta_at_w(w0 - 2dw)
+            ) / (dw^4)
         TaylorDispersion([b2, b3, b4])
     end
 
@@ -328,5 +434,14 @@ function HollowCoreFiber(;
     n2_val = gas_n2(gas, pressure)
     gamma_val = 2π * n2_val / (lambda0 * Aeff)
 
-    return Medium(length, gamma_val, loss, disp, lambda0)
+    loss_final = if confinement_loss
+        extra_loss = loss
+        w ->
+            extra_loss +
+            _capillary_confinement_loss_dB_per_m(w, gas, pressure, temperature, radius)
+    else
+        loss
+    end
+
+    return Medium(length, gamma_val, loss_final, disp, lambda0)
 end

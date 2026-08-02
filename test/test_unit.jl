@@ -68,6 +68,13 @@ using JuGNLSE
             @test all(abs.(RT[grid.t .< 0]) .< 1e-9 * maximum(abs.(RT)))
             # Non-trivial response for t > 0
             @test maximum(abs.(RT[grid.t .> 0])) > 0
+            # Unit-area normalization: ∫h_R(t)dt = 1, so the delayed-Raman
+            # convolution in `_spm_raman` (fr·dt·conv(|A|²,RT)) reduces to a
+            # true weighted average. Regression test for the Hollenbeck model,
+            # whose empirical oscillator amplitudes do NOT integrate to unity
+            # on their own and previously were left unnormalized (off by a
+            # factor of ~1e11).
+            @test sum(RT) * grid.dt ≈ 1.0 rtol = 1e-2
         end
     end
 
@@ -117,9 +124,9 @@ using JuGNLSE
         @test pulse_energy(np) ≈ pulse_energy(pulse) rtol = 1e-2
         # reproducible per seed, independent across seeds
         @test add_noise(pulse; rng=MersenneTwister(1)).At ==
-              add_noise(pulse; rng=MersenneTwister(1)).At
+            add_noise(pulse; rng=MersenneTwister(1)).At
         @test add_noise(pulse; rng=MersenneTwister(1)).At !=
-              add_noise(pulse; rng=MersenneTwister(2)).At
+            add_noise(pulse; rng=MersenneTwister(2)).At
 
         # spectral_coherence: identical realizations ⇒ g = 1
         base = randn(ComplexF64, 64)
@@ -128,7 +135,8 @@ using JuGNLSE
         indep = [randn(ComplexF64, 64) for _ in 1:300]
         @test maximum(spectral_coherence(indep)) < 0.3
         @test_throws ArgumentError spectral_coherence([randn(ComplexF64, 64)])
-        @test_throws ArgumentError spectral_coherence(
-            [randn(ComplexF64, 4), randn(ComplexF64, 5)])
+        @test_throws ArgumentError spectral_coherence([
+            randn(ComplexF64, 4), randn(ComplexF64, 5)
+        ])
     end
 end

@@ -11,7 +11,7 @@ import ..AdaptiveSSFM, ..propagate, ..Pulse, ..SimParams, ..Solution
 
 Propagate pulse using Phase-Controlled Adaptive Split-Step Fourier Method (AdaptiveSSFM).
 Step size is controlled via local nonlinear phase shift:
-    dz_opt = clamp(solver.phi_max / (gamma_phys * P_max + 1e-15), solver.dz_min, solver.dz_max)
+dz_opt = clamp(solver.phi_max / (gamma_phys * P_max + 1e-15), solver.dz_min, solver.dz_max)
 """
 function propagate(
     model::PhysicsModel,
@@ -19,6 +19,7 @@ function propagate(
     params::SimParams,
     solver::AdaptiveSSFM,
     progress::Bool,
+    rng::AbstractRNG=default_rng(),
 )
     grid = pulse.grid
     N = grid.N
@@ -49,8 +50,16 @@ function propagate(
 
     # Initial peak power and step size
     Pmax = maximum(abs2, pulse.At)
-    gamma_phys = (model.gamma isa Number) ? model.gamma * model.omega0 : model.gamma(0.0) * model.omega0
-    dz = solver.dz_init === nothing ? clamp(solver.phi_max / (gamma_phys * Pmax + 1e-12), solver.dz_min, solver.dz_max) : solver.dz_init
+    gamma_phys = if (model.gamma isa Number)
+        model.gamma * model.omega0
+    else
+        model.gamma(0.0) * model.omega0
+    end
+    dz = if solver.dz_init === nothing
+        clamp(solver.phi_max / (gamma_phys * Pmax + 1e-12), solver.dz_min, solver.dz_max)
+    else
+        solver.dz_init
+    end
 
     while z < z_end && save_idx <= n_saves
         z_target = save_points[save_idx]
@@ -68,10 +77,17 @@ function propagate(
             @. U = U_nl * exp_half_dz_D
             z += dz_step
 
+            # ASE noise (AmplifyingMedium only; no-op otherwise)
+            inject_ase_noise!(U, u_mid, model, dz_step, rng)
+
             # Adapt step size based on peak power
             mul!(u_temp, model.to_time, U)
             Pmax_curr = maximum(abs2, u_temp)
-            gamma_curr = (model.gamma isa Number) ? model.gamma * model.omega0 : model.gamma(z) * model.omega0
+            gamma_curr = if (model.gamma isa Number)
+                model.gamma * model.omega0
+            else
+                model.gamma(z) * model.omega0
+            end
             dz_suggest = solver.phi_max / (gamma_curr * Pmax_curr + 1e-15)
             dz = clamp(min(1.5 * dz_step, dz_suggest), solver.dz_min, solver.dz_max)
         end

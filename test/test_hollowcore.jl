@@ -15,7 +15,9 @@ using JuGNLSE
 
     @testset "HollowCoreFiber Constructor & Dispersion" begin
         # 30 μm core diameter (radius 15 μm) filled with 5 bar Argon at 800 nm
-        hcf = HollowCoreFiber(radius=15e-6, gas=:Ar, pressure=5.0, length=0.5, lambda0=800e-9)
+        hcf = HollowCoreFiber(
+            radius=15e-6, gas=:Ar, pressure=5.0, length=0.5, lambda0=800e-9
+        )
 
         @test hcf isa Medium
         @test hcf.length == 0.5
@@ -37,7 +39,9 @@ using JuGNLSE
         # branch, which previously errored because the `length` keyword argument
         # shadowed Base.length inside the constructor.
         grid = create_grid(2^10, 10e-12, 800e-9)
-        hcf = HollowCoreFiber(radius=15e-6, gas=:Ar, pressure=3.0, length=0.5, lambda0=800e-9, grid=grid)
+        hcf = HollowCoreFiber(
+            radius=15e-6, gas=:Ar, pressure=3.0, length=0.5, lambda0=800e-9, grid=grid
+        )
 
         @test hcf isa Medium
         @test hcf.dispersion isa TabulatedDispersion
@@ -63,5 +67,42 @@ using JuGNLSE
         @test length(RT) == grid.N
 
         @test_throws ArgumentError MolecularRamanGas(:InvalidGas)
+    end
+
+    @testset "Capillary confinement loss (opt-in)" begin
+        # Regression test: docs/src/physics.md documents the Marcatili-Schmeltzer
+        # capillary confinement loss as part of the HC-PCF model, but it was
+        # never implemented, silently giving a lossless fiber by default.
+        grid = create_grid(2^10, 5e-12, 800e-9)
+
+        hcf_default = HollowCoreFiber(
+            radius=15e-6, gas=:Ar, pressure=5.0, length=0.5, lambda0=800e-9
+        )
+        @test loss_vector(grid, hcf_default) == zeros(grid.N)
+
+        hcf_lossy = HollowCoreFiber(
+            radius=15e-6,
+            gas=:Ar,
+            pressure=5.0,
+            length=0.5,
+            lambda0=800e-9,
+            confinement_loss=true,
+        )
+        lv = loss_vector(grid, hcf_lossy)
+        @test all(isfinite, lv)
+        @test all(>(0), lv)  # confinement loss is strictly positive everywhere
+
+        # Extra `loss` stacks additively on top of the confinement loss.
+        hcf_extra = HollowCoreFiber(
+            radius=15e-6,
+            gas=:Ar,
+            pressure=5.0,
+            length=0.5,
+            lambda0=800e-9,
+            loss=2.0,
+            confinement_loss=true,
+        )
+        lv_extra = loss_vector(grid, hcf_extra)
+        @test all(lv_extra .> lv)
     end
 end

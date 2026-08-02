@@ -17,6 +17,7 @@ function propagate(
     params::SimParams,
     solver::SSFM,
     progress::Bool,
+    rng::AbstractRNG=default_rng(),
 )
     grid = pulse.grid
     N = grid.N
@@ -37,7 +38,11 @@ function propagate(
     end
 
     # Progress bar setup
-    prog = progress ? Progress(n_saves - 1; desc="SSFM Propagation... ", color=:green) : nothing
+    prog = if progress
+        Progress(n_saves - 1; desc="SSFM Propagation... ", color=:green)
+    else
+        nothing
+    end
 
     # Save target points
     save_points = range(0.0, z_end; length=n_saves)
@@ -47,7 +52,7 @@ function propagate(
     U_nl = similar(U)
     u_mid = similar(pulse.At)
     u_temp = similar(pulse.At)
-    
+
     # Calculate step count per save interval
     dz_save = z_end / (n_saves - 1)
     n_steps = max(1, round(Int, dz_save / solver.dz))
@@ -76,6 +81,9 @@ function propagate(
 
             # Apply nonlinear step: Euler step at midpoint
             @. U_nl = U_mid + dz_eff * Nu
+
+            # ASE noise (AmplifyingMedium only; no-op otherwise)
+            inject_ase_noise!(U_nl, u_mid, model, dz_eff, rng)
 
             if step < n_steps || save_idx < n_saves
                 # Advance midpoint to next step via linear full step

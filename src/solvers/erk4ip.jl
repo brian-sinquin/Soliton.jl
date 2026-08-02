@@ -19,8 +19,8 @@ This is integrated with RK4 using only 3 FFT pairs per step (not 5).
 
 # Reference
 
-S. Balac & A. Fernandez, "Interaction picture method for solving the Generalized
-Nonlinear Schrödinger Equation", HAL-00850488 (2013)
+S. Balac & A. Mahé, "Embedded Runge-Kutta scheme for step-size control in the
+interaction picture method", Comput. Phys. Commun. 184, 1211-1219 (2013)
 """
 
 using FFTW
@@ -42,8 +42,19 @@ function propagate(
     params::SimParams,
     solver::ERK4IP,
     progress::Bool,
+    rng::AbstractRNG=default_rng(),
 )
-    return _propagate_erk4ip!(model, pulse, params, progress, solver.rtol, solver.atol, solver.dz_init)
+    return _propagate_erk4ip!(
+        model,
+        pulse,
+        params,
+        progress,
+        solver.rtol,
+        solver.atol,
+        solver.dz_init,
+        solver.dz_min,
+        rng,
+    )
 end
 
 """
@@ -71,7 +82,8 @@ reusing computations and working in interaction picture throughout.
 
 # Reference
 
-Balac & Fernandez (2013), Heidt (2009)
+S. Balac & A. Mahé, Comput. Phys. Commun. 184, 1211 (2013);
+A. M. Heidt, J. Lightwave Technol. 27, 3984 (2009)
 """
 function propagate_erk4ip(
     pulse::Pulse,
@@ -93,6 +105,8 @@ function _propagate_erk4ip!(
     rtol::Float64,
     atol::Float64,
     dz_init::Union{Float64, Nothing},
+    dz_min_arg::Float64,
+    rng::AbstractRNG=default_rng(),
 )
     grid = pulse.grid
     N = grid.N
@@ -100,6 +114,7 @@ function _propagate_erk4ip!(
     # `SimParams.medium` has the abstract field type `Medium`, so annotate the
     # extracted length to keep the step variables type-stable in the hot loop.
     z_end::Float64 = params.medium.length
+    dz_min::Float64 = dz_min_arg > 0 ? dz_min_arg : max(1e-15, z_end * 1e-12)
 
     # Initial condition in frequency domain
     U = copy(pulse.AW)
@@ -154,6 +169,12 @@ function _propagate_erk4ip!(
     copyto!(Nu, model.nonlinear_function(u_temp, model, 0.0))
 
     cached_dz = -1.0
+
+    # AmplifyingMedium perturbs U with ASE noise after each accepted step,
+    # which invalidates the FSAL shortcut (k5 was evaluated on the
+    # pre-noise field) — recompute Nu in that case only, so every other
+    # medium keeps the cheap "3 FFT pairs per step" FSAL path.
+    is_amplifying = haskey(model.aux_data, :noise_figure_db)
 
     while z < z_end && save_idx <= n_saves
         # Target for next save
@@ -226,14 +247,22 @@ function _propagate_erk4ip!(
         safety = 0.9
         exponent = 0.25  # 1/(p+1) = 1/4 for the embedded 4(3) method
 
-        if local_error <= 1.0
+        if isfinite(local_error) && local_error <= 1.0
             # Accept step
             step_count += 1
             z += dz
             copyto!(U, U4_fft)
 
-            # FSAL property: Nu for next step = k5 from this step
-            copyto!(Nu, k5)
+            if is_amplifying
+                # u4 is the time-domain field at the end of this accepted step.
+                inject_ase_noise!(U, u4, model, dz, rng)
+                # Noise invalidated FSAL's k5 — recompute Nu for next step.
+                mul!(u_temp, model.to_time, U)
+                copyto!(Nu, model.nonlinear_function(u_temp, model, z))
+            else
+                # FSAL property: Nu for next step = k5 from this step
+                copyto!(Nu, k5)
+            end
 
             # Compute optimal step size for next iteration
             factor = safety * (1.0 / (local_error + 1e-300))^exponent
@@ -264,11 +293,30 @@ function _propagate_erk4ip!(
                 save_idx += 1
             end
         else
-            # Reject step and shrink (same formula as the acceptance case)
+            # Reject step and shrink (same formula as the acceptance case).
+            # A non-finite local_error means the field itself has already
+            # diverged (NaN/Inf) — the adaptive formula would also evaluate to
+            # NaN in that case, so fall back to a fixed hard shrink instead.
             rejected_steps += 1
-            factor = safety * (1.0 / (local_error + 1e-300))^exponent
-            factor = max(0.5, min(2.0, factor))
+            if isfinite(local_error)
+                factor = safety * (1.0 / (local_error + 1e-300))^exponent
+                factor = max(0.5, min(2.0, factor))
+            else
+                factor = 0.25
+            end
             dz = factor * dz
+
+            if dz < dz_min
+                throw(
+                    ErrorException(
+                        "ERK4IP: step size collapsed to $dz m (below dz_min=$dz_min m) " *
+                        "at z=$z m after $rejected_steps rejected steps. The field likely " *
+                        "diverged (local_error=$local_error). Check medium parameters " *
+                        "(gamma, loss/gain, dispersion) and pulse power for a numerically " *
+                        "unstable configuration, or relax `rtol`/`atol`.",
+                    ),
+                )
+            end
         end
     end
 
