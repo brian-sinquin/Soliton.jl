@@ -1,5 +1,5 @@
 using Test
-using JuGNLSE
+using GNLSE
 
 @testset "Solvers" begin
     @testset "Solution structure" begin

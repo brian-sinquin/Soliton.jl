@@ -1,6 +1,6 @@
 # Active Amplifying Fibers (EDFA / YDFA / TDFA)
 
-JuGNLSE supports rare-earth active amplifying fibers ([`AmplifyingMedium`](@ref)) with dynamic gain saturation and Amplified Spontaneous Emission (ASE) quantum noise.
+GNLSE supports rare-earth active amplifying fibers ([`AmplifyingMedium`](@ref)) with dynamic gain saturation and Amplified Spontaneous Emission (ASE) quantum noise.
 
 ---
 
@@ -26,7 +26,7 @@ $$n_{\text{sp}} = \frac{10^{F_{\text{dB}}/10}}{2}$$
 ## 💻 Usage Example
 
 ```julia
-using JuGNLSE
+using GNLSE
 
 grid = create_grid(2^13, 10e-12, 1550e-9)
 pulse = gaussian_pulse(grid, 10.0, 100e-15) # 10 W peak power input

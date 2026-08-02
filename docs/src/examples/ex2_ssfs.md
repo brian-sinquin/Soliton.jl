@@ -1,5 +1,5 @@
 ```@meta
-CurrentModule = JuGNLSE
+CurrentModule = GNLSE
 ```
 
 # Example 2: Soliton Self-Frequency Shift
@@ -33,7 +33,7 @@ We propagate a fundamental sech² soliton (N = 1) over 10 soliton periods and tr
 spectral centroid to directly observe the red-shift.
 
 ```@example ex2
-using JuGNLSE
+using GNLSE
 
 # ─── Fiber parameters (standard telecom SMF-like) ───────────────────────────
 lambda0 = 1550e-9       # [m] center wavelength
@@ -161,7 +161,7 @@ plot(p1, p2, p3, layout=(1, 3), size=(1300, 450), # hide
     `dΩ/dz = -8 T_R |β₂| / (15 T₀⁴)` uses the textbook approximation ``T_R \approx 3`` fs, a
     single number quoted for silica in general. The *actual* Raman-shift rate depends on the
     specific Raman response model: computing ``T_R = \int t\, h_R(t)\, dt`` directly for
-    JuGNLSE's `BlowWood` model (``\tau_1=12.2``fs, ``\tau_2=32``fs) gives ``T_R \approx 8`` fs,
+    GNLSE's `BlowWood` model (``\tau_1=12.2``fs, ``\tau_2=32``fs) gives ``T_R \approx 8`` fs,
     not 3 fs — and even that doesn't fully reconcile the curves, since Gordon's coefficient
     ``8/15`` was itself derived under additional approximations about the Raman gain spectrum's
     shape near zero detuning. In short: **the Gordon line is a rough theoretical guide, not a

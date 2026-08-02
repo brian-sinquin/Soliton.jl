@@ -1,5 +1,5 @@
 using Test
-using JuGNLSE
+using GNLSE
 using Random
 
 @testset "Active Amplifying Fiber Dynamics (EDFA/YDFA/TDFA)" begin

@@ -1,10 +1,10 @@
 ```@meta
-CurrentModule = JuGNLSE
+CurrentModule = GNLSE
 ```
 
 # Birefringent & Vectorial Propagation
 
-JuGNLSE.jl supports the simulation of birefringent fibers and waveguides through the **Coupled GNLSE** — propagating two orthogonal polarization components simultaneously.
+GNLSE.jl supports the simulation of birefringent fibers and waveguides through the **Coupled GNLSE** — propagating two orthogonal polarization components simultaneously.
 
 ## When to Use the Vectorial Solver
 
@@ -19,7 +19,7 @@ JuGNLSE.jl supports the simulation of birefringent fibers and waveguides through
 ### 1. Define a `BirefringentMedium`
 
 ```julia
-using JuGNLSE
+using GNLSE
 
 # Separate dispersion models for each polarization axis
 disp_x = TaylorDispersion([-21.5e-27])      # x-axis dispersion

@@ -36,7 +36,7 @@ jobs:
       - name: Cache Julia Packages & Benchmarks
         uses: julia-actions/cache@v2
 
-      - name: Run JuGNLSE Benchmark Suite
+      - name: Run GNLSE Benchmark Suite
         run: |
           julia --project=benchmark benchmark/run_benchmarks.jl
 

@@ -1,18 +1,18 @@
 ```@meta
-CurrentModule = JuGNLSE
+CurrentModule = GNLSE
 ```
 
 ```@docs
-JuGNLSE
+GNLSE
 ```
 
-# JuGNLSE.jl
+# GNLSE.jl
 
 *Generalized Nonlinear Schrödinger Equation solver in Julia*
 
 ---
 
-**JuGNLSE.jl** is a high-performance Julia package for simulating the propagation of ultrashort optical pulses in nonlinear dispersive media such as optical fibers, waveguides, and birefringent media.
+**GNLSE.jl** is a high-performance Julia package for simulating the propagation of ultrashort optical pulses in nonlinear dispersive media such as optical fibers, waveguides, and birefringent media.
 
 It implements the **Generalized Nonlinear Schrödinger Equation (GNLSE)** in natural SI units, with a rich physical model and a modern, composable API.
 
@@ -43,18 +43,18 @@ It implements the **Generalized Nonlinear Schrödinger Equation (GNLSE)** in nat
 
 ```julia
 using Pkg
-Pkg.add("JuGNLSE")
+Pkg.add("GNLSE")
 ```
 
 Or from the GitHub repository:
 ```julia
-Pkg.add(url="https://github.com/brian-sinquin/JuGNLSE.jl")
+Pkg.add(url="https://github.com/brian-sinquin/GNLSE.jl")
 ```
 
 ## Quick Start
 
 ```julia
-using JuGNLSE
+using GNLSE
 
 # 1. Define time-frequency grid
 grid = create_grid(2^13, 12.5e-12, 835e-9)

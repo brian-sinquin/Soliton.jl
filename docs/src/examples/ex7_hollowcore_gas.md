@@ -23,7 +23,7 @@ undergoes clear higher-order-soliton compression and spectral broadening.
 ## 💻 Julia Code
 
 ```@example ex7
-using JuGNLSE
+using GNLSE
 
 grid = create_grid(2^13, 15e-12, 800e-9)
 pulse = sech_pulse(grid, 7.0e6, 30e-15)  # 7 MW peak power -> N ≈ 3

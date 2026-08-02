@@ -1,5 +1,5 @@
 ```@meta
-CurrentModule = JuGNLSE
+CurrentModule = GNLSE
 ```
 
 # Example 4: Soliton Trapping in a Birefringent Fiber
@@ -40,7 +40,7 @@ fundamental soliton (``P_0 \approx 6.1\text{ kW}``, ``L_D \approx 0.15``m), givi
 ``|\delta| \approx 0.33`` ps/m:
 
 ```@example ex4
-using JuGNLSE
+using GNLSE
 
 lambda0 = 1550e-9
 beta2   = -21.5e-27

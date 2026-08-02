@@ -1,10 +1,10 @@
 ```@meta
-CurrentModule = JuGNLSE
+CurrentModule = GNLSE
 ```
 
 # Physics Background
 
-This page summarizes the physical models implemented in JuGNLSE.jl.
+This page summarizes the physical models implemented in GNLSE.jl.
 
 ## The Generalized Nonlinear Schrödinger Equation
 

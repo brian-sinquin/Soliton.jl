@@ -1,4 +1,4 @@
-# JuliaFormatter configuration for JuGNLSE.jl
+# JuliaFormatter configuration for GNLSE.jl
 # Use with: using JuliaFormatter; format(".")
 
 # Indentation

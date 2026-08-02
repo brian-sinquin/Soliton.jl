@@ -1,7 +1,7 @@
 using Test
-using JuGNLSE
+using GNLSE
 
-@testset verbose = true "JuGNLSE.jl" begin
+@testset verbose = true "GNLSE.jl" begin
     include("test_unit.jl")
     include("test_api.jl")
     include("test_solvers.jl")

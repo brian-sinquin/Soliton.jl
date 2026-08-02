@@ -1,5 +1,5 @@
 """
-Types and structures for JuGNLSE in natural SI units.
+Types and structures for GNLSE in natural SI units.
 
 Adapted from: gnlse-python (https://github.com/WUST-FOG/gnlse-python)
 """

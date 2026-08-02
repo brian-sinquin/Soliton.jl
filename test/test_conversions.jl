@@ -1,5 +1,5 @@
 using Test
-using JuGNLSE
+using GNLSE
 
 @testset "Optics Units Conversions & Soliton Tracker" begin
     @testset "Dispersion D <-> beta2 conversion" begin

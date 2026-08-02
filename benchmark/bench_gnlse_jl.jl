@@ -1,9 +1,9 @@
-using JuGNLSE
+using GNLSE
 using Statistics
 using LinearAlgebra
 
 # Scenario: SCG in PCF
-function run_jugnlse_benchmark()
+function run_gnlse_benchmark()
     # 1. Grid
     N = 2^14
     time_window = 10e-12  # 10 ps
@@ -44,7 +44,7 @@ function run_jugnlse_benchmark()
     )
 
     # 5. Run (Warmup)
-    println("Warming up JuGNLSE...")
+    println("Warming up GNLSE...")
     warmup_start = time_ns()
     solve(pulse, params; progress=false)
     warmup_end = time_ns()
@@ -59,9 +59,9 @@ function run_jugnlse_benchmark()
     println("Execution time: ", exec_time, " s")
 
     # Save timing to a file for the runner
-    open("time_jugnlse.txt", "w") do io
+    open("time_gnlse_jl.txt", "w") do io
         println(io, exec_time)
     end
 end
 
-run_jugnlse_benchmark()
+run_gnlse_benchmark()

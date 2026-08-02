@@ -19,7 +19,7 @@ $$S_{\text{ASE}}(\omega) = n_{\text{sp}} \cdot \hbar \omega_0 \cdot \left(e^{g \
 ## 💻 Julia Code
 
 ```@example ex9
-using JuGNLSE
+using GNLSE
 
 grid = create_grid(2^13, 10e-12, 1550e-9)
 pulse = gaussian_pulse(grid, 50.0, 100e-15)

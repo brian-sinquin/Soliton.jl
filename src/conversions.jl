@@ -1,5 +1,5 @@
 """
-Optics units & conversion utilities for JuGNLSE.jl.
+Optics units & conversion utilities for GNLSE.jl.
 """
 
 """

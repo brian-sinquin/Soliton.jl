@@ -1,7 +1,7 @@
 using Test
 using FFTW
 using Random
-using JuGNLSE
+using GNLSE
 
 @testset "Unit" begin
     @testset "Grid" begin
@@ -12,7 +12,7 @@ using JuGNLSE
         @test length(grid.V) == N
         @test length(grid.W) == N
         @test grid.dt > 0
-        @test grid.omega0 ≈ 2π * JuGNLSE.c / 835e-9
+        @test grid.omega0 ≈ 2π * GNLSE.c / 835e-9
 
         # V is monotonic and contains a zero element
         @test issorted(grid.V)

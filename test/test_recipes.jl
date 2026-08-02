@@ -1,5 +1,5 @@
 using Test
-using JuGNLSE
+using GNLSE
 using Plots
 
 @testset "Plot Recipes" begin

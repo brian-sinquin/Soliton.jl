@@ -1,6 +1,6 @@
 # Commercial Fiber Library & Glass Presets
 
-JuGNLSE provides a built-in catalog of commercial optical fibers (`FiberLibrary`) and standard optical glass Sellmeier dispersion models (`RefractiveIndex.io` database parameters).
+GNLSE provides a built-in catalog of commercial optical fibers (`FiberLibrary`) and standard optical glass Sellmeier dispersion models (`RefractiveIndex.io` database parameters).
 
 ---
 
@@ -9,7 +9,7 @@ JuGNLSE provides a built-in catalog of commercial optical fibers (`FiberLibrary`
 Instead of manually constructing Taylor dispersion vectors and nonlinear coefficients, you can instantiate standard commercial fibers with a single call to [`commercial_fiber`](@ref):
 
 ```julia
-using JuGNLSE
+using GNLSE
 
 # 1. Corning SMF-28e+ (Standard Telecom Fiber at 1550 nm)
 smf28 = commercial_fiber("Corning_SMF28", length=100.0)
@@ -43,7 +43,7 @@ custom_smf = commercial_fiber("Corning_SMF28", length=50.0, lambda0=1310e-9, los
 
 ## 🧪 Glass Refractive Index Presets (`RefractiveIndex.io`)
 
-JuGNLSE provides standard Sellmeier dispersion models derived from the `RefractiveIndex.io` database:
+GNLSE provides standard Sellmeier dispersion models derived from the `RefractiveIndex.io` database:
 
 - [`FusedSilica()`](@ref): Pure fused silica glass ($0.21 - 3.71\,\mu\text{m}$, Malitson 1965).
 - [`SF6()`](@ref): Schott SF6 heavy flint glass.

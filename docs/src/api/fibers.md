@@ -1,5 +1,5 @@
 ```@meta
-CurrentModule = JuGNLSE
+CurrentModule = GNLSE
 ```
 
 # Commercial Fibers & Glass Presets

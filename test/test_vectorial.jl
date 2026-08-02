@@ -1,5 +1,5 @@
 using Test
-using JuGNLSE
+using GNLSE
 
 @testset "Vectorial/Birefringent Coupled Solver" begin
     @testset "Type validation" begin

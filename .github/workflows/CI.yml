@@ -73,6 +73,6 @@ jobs:
         shell: julia --project=docs --color=yes {0}
         run: |
           using Documenter: DocMeta, doctest
-          using JuGNLSE
-          DocMeta.setdocmeta!(JuGNLSE, :DocTestSetup, :(using JuGNLSE); recursive=true)
-          doctest(JuGNLSE)
+          using GNLSE
+          DocMeta.setdocmeta!(GNLSE, :DocTestSetup, :(using GNLSE); recursive=true)
+          doctest(GNLSE)

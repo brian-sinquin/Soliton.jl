@@ -1,5 +1,5 @@
 using Test
-using JuGNLSE
+using GNLSE
 
 @testset "Semiconductor Waveguides (SOI, TPA, Free-Carrier Dynamics)" begin
     grid = create_grid(2^10, 10e-12, 1550e-9)

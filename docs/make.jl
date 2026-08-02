@@ -1,15 +1,15 @@
-using JuGNLSE
+using GNLSE
 using Documenter
 
-DocMeta.setdocmeta!(JuGNLSE, :DocTestSetup, :(using JuGNLSE); recursive=true)
+DocMeta.setdocmeta!(GNLSE, :DocTestSetup, :(using GNLSE); recursive=true)
 
 makedocs(;
-    modules=[JuGNLSE],
+    modules=[GNLSE],
     authors="Brian Sinquin <148503669+brian-sinquin@users.noreply.github.com> and contributors",
-    sitename="JuGNLSE.jl",
+    sitename="GNLSE.jl",
     checkdocs=:exports,
     format=Documenter.HTML(;
-        canonical="https://brian-sinquin.github.io/JuGNLSE.jl",
+        canonical="https://brian-sinquin.github.io/GNLSE.jl",
         edit_link="master",
         assets=String[],
         mathengine=Documenter.MathJax3(),
@@ -74,7 +74,7 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/brian-sinquin/JuGNLSE.jl",
+    repo="github.com/brian-sinquin/GNLSE.jl",
     devbranch="master",
     push_preview=true,
     # Default is ["stable" => "v^", "v#.#"], which collapses releases into a

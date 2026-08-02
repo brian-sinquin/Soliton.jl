@@ -16,12 +16,12 @@ the cgnlse-python GitHub repo; not published on PyPI).
 Physics/convention notes
 -------------------------
 `cnlse.CNLSE` follows the exact same FFT convention as `gnlse-python` and
-JuGNLSE (`AW = ifft(At)`, `At = fft(AW)`), so no sign flips are needed for
+GNLSE (`AW = ifft(At)`, `At = fft(AW)`), so no sign flips are needed for
 beta1 here (unlike a naive hand-written SSFM using the opposite convention).
 
 `CNLSE`'s coupled nonlinear term only includes the coherent FWM/XPM term
 (the (1/3)*Ay^2*conj(Ax)*exp(-2i*deltaBeta*z) term) when a Raman model is
-supplied — the no-Raman branch silently drops it. JuGNLSE's vectorial
+supplied — the no-Raman branch silently drops it. GNLSE's vectorial
 solver (`src/nonlinearity.jl::_vectorial_spm_fwm`) always includes it, matching
 the full coupled-NLS equations for a linearly birefringent fiber (Agrawal,
 "Nonlinear Fiber Optics", Ch. 6). To get an apples-to-apples comparison, we
@@ -57,12 +57,12 @@ def main():
     T_WIN_PS = 20.0          # ps
     LAM_NM = 1550.0          # nm
     L = 1.0                  # m
-    GAMMA = 0.0012           # 1/W/m (matches JuGNLSE BirefringentMedium gamma)
+    GAMMA = 0.0012           # 1/W/m (matches GNLSE BirefringentMedium gamma)
 
     # beta2_x = beta2_y = -21.5e-27 s^2/m -> ps^2/m
     BETA2_PS2M = -21.5e-27 * 1e24  # = -0.0215 ps^2/m
 
-    # JuGNLSE: TaylorDispersion(betas, beta1) with beta1_x=+0.5e-12 s/m, beta1_y=-0.5e-12 s/m.
+    # GNLSE: TaylorDispersion(betas, beta1) with beta1_x=+0.5e-12 s/m, beta1_y=-0.5e-12 s/m.
     # DubbleDispersionFiberFromTaylor defines:
     #   Lx = -1j*deltaB1/2*V + ...   (so beta1_x = -deltaB1/2)
     #   Ly = +1j*deltaB1/2*V + ...   (so beta1_y = +deltaB1/2)
@@ -79,7 +79,7 @@ def main():
     setup.nonlinearity = [GAMMA, GAMMA]
     setup.raman_model = raman_zero          # activates coherent-FWM branch, fr=0
     setup.self_steepning = False
-    # deltaN = 0 -> deltaB (phase-mismatch term) = 0, matching JuGNLSE's deltabeta0=0.0
+    # deltaN = 0 -> deltaB (phase-mismatch term) = 0, matching GNLSE's deltabeta0=0.0
     setup.dispersion_model = DubbleDispersionFiberFromTaylor(
         0.0, np.array([[BETA2_PS2M], [BETA2_PS2M]]), 0.0, DELTA_B1, 2 * np.pi * gnlse.common.c / LAM_NM
     )

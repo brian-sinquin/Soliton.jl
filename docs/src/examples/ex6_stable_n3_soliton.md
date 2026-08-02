@@ -1,5 +1,5 @@
 ```@meta
-CurrentModule = JuGNLSE
+CurrentModule = GNLSE
 ```
 
 # Example 6: Stable 3rd-Order Soliton (Akhmediev Recurrence)
@@ -45,7 +45,7 @@ This is **Fermi–Pasta–Ulam–Tsingou (FPUT) recurrence** in the optical doma
 ## Part 1 — Ideal Recurrence (Pure NLS)
 
 ```@example ex6
-using JuGNLSE
+using GNLSE
 
 lambda0 = 1550e-9
 beta2   = -21.5e-27

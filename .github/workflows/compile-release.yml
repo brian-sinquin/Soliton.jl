@@ -17,11 +17,11 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            artifact_name: JuGNLSE_sysimage.so
+            artifact_name: GNLSE_sysimage.so
           - os: windows-latest
-            artifact_name: JuGNLSE_sysimage.dll
+            artifact_name: GNLSE_sysimage.dll
           - os: macos-latest
-            artifact_name: JuGNLSE_sysimage.dylib
+            artifact_name: GNLSE_sysimage.dylib
 
     steps:
       - uses: actions/checkout@v4

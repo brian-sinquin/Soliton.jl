@@ -1,7 +1,7 @@
 """
 generate_reference_data.py
 ==========================
-Generates CSV reference data for JuGNLSE adversarial comparison tests using
+Generates CSV reference data for GNLSE adversarial comparison tests using
 gnlse-python 2.0.0 (https://pypi.org/project/gnlse/).
 
 Run once to regenerate fixtures (committed to the repo as golden data):

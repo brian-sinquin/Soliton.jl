@@ -1,5 +1,5 @@
 using Test
-using JuGNLSE
+using GNLSE
 
 @testset "Hollow-Core PCF (HC-PCF) & Molecular Gas Raman" begin
     @testset "Gas Refractive Index & Pressure Scaling" begin

@@ -7,4 +7,4 @@ Only the `cnlse/` subpackage is vendored here (not published on PyPI). Used by
 third-party reference for the Scenario 6 vectorial/birefringent adversarial
 test in `test/test_adversarial.jl`. It is built directly on the real `gnlse`
 package (same one used for Scenarios 1-5), following the same FFT/frequency
-convention as JuGNLSE.
+convention as GNLSE.

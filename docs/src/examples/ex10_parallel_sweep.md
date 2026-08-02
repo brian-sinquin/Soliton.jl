@@ -1,6 +1,6 @@
 # Example 10: Multithreaded Parameter Sweep — High-Resolution Supercontinuum Sweep
 
-This example demonstrates how to perform a **high-resolution 100-simulation parameter sweep** over Continuous-Wave / Femtosecond Supercontinuum generation using **JuGNLSE.jl**'s `solve_sweep` API, executing concurrently across 8 Julia worker threads (`julia -t 8`).
+This example demonstrates how to perform a **high-resolution 100-simulation parameter sweep** over Continuous-Wave / Femtosecond Supercontinuum generation using **GNLSE.jl**'s `solve_sweep` API, executing concurrently across 8 Julia worker threads (`julia -t 8`).
 
 Here, we sweep input peak power $P_0$ from **$100\text{ W}$ to $5\text{ kW}$** across **100 parallel simulation trials** in a $15\text{ cm}$ photonic crystal fiber (`NKT_NL_PM_750` at $835\text{ nm}$), capturing the output spectrum across a wide **$500\text{ nm}$ to $1400\text{ nm}$** spectral span (900 nm bandwidth).
 
@@ -17,7 +17,7 @@ Here, we sweep input peak power $P_0$ from **$100\text{ W}$ to $5\text{ kW}$** a
 ## 💻 Julia Implementation
 
 ```@example ex10
-using JuGNLSE
+using GNLSE
 using FFTW
 using Base.Threads
 

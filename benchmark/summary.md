@@ -1,4 +1,4 @@
-# 🚀 JuGNLSE Benchmark Results Summary
+# 🚀 GNLSE Benchmark Results Summary
 
 | Benchmark Target | Median Time | Memory | Allocations | Comparison |
 | :--- | :--- | :--- | :--- | :--- |

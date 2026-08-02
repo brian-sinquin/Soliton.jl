@@ -1,4 +1,4 @@
-# JuGNLSE Copilot Instructions
+# GNLSE Copilot Instructions
 
 High-performance Julia package for solving the Generalized Nonlinear Schrödinger Equation (GNLSE) for ultrafast optical pulse propagation in fibers.
 

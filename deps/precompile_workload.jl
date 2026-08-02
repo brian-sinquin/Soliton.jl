@@ -1,4 +1,4 @@
-using JuGNLSE
+using GNLSE
 
 # Warm-up precompile workload for C/C++/JLL sysimage compilation
 grid = create_grid(2^10, 10e-12, 1550e-9)

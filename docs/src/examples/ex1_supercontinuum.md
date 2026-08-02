@@ -1,5 +1,5 @@
 ```@meta
-CurrentModule = JuGNLSE
+CurrentModule = GNLSE
 ```
 
 # Example 1: Supercontinuum Generation in a PCF
@@ -38,7 +38,7 @@ All dispersion coefficients from Dudley et al. (2006) Table 1:
 ## Julia Code
 
 ```@example ex1
-using JuGNLSE
+using GNLSE
 
 # ─── PCF fiber (NKT NL-PM-750 commercial fiber preset) ─────────────────────
 # Matches the exact 9-term Taylor dispersion coefficients and gamma from

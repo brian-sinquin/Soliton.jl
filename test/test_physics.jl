@@ -1,5 +1,5 @@
 using Test
-using JuGNLSE
+using GNLSE
 
 # --- local measurement helpers -------------------------------------------
 

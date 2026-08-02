@@ -1,10 +1,10 @@
 ```@meta
-CurrentModule = JuGNLSE
+CurrentModule = GNLSE
 ```
 
 # Wavelength-Dependent Nonlinearity
 
-JuGNLSE.jl supports three levels of nonlinearity specification:
+GNLSE.jl supports three levels of nonlinearity specification:
 
 ## 1. Constant Nonlinearity
 

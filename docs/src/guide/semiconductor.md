@@ -1,6 +1,6 @@
 # Semiconductor Waveguides & Silicon Photonics
 
-JuGNLSE supports semiconductor optical waveguides ([`SemiconductorMedium`](@ref)) with Two-Photon Absorption (TPA) and Free-Carrier Dynamics (FCA, FCR, carrier lifetime $\tau_c$).
+GNLSE supports semiconductor optical waveguides ([`SemiconductorMedium`](@ref)) with Two-Photon Absorption (TPA) and Free-Carrier Dynamics (FCA, FCR, carrier lifetime $\tau_c$).
 
 ---
 
@@ -21,7 +21,7 @@ The total optical non-linear envelope equation includes:
 ## 💻 Usage Example
 
 ```julia
-using JuGNLSE
+using GNLSE
 
 grid = create_grid(2^12, 20e-12, 1550e-9)
 pulse = gaussian_pulse(grid, 50.0, 1.0e-12) # 50 W peak power input

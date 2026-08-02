@@ -1,5 +1,5 @@
 ```@meta
-CurrentModule = JuGNLSE
+CurrentModule = GNLSE
 ```
 
 # Example 5: Higher-Order Soliton Compression
@@ -33,7 +33,7 @@ The N=3 soliton was the first experimentally observed higher-order soliton in an
 ## Simulation
 
 ```@example ex5
-using JuGNLSE
+using GNLSE
 
 # ─── Corning SMF-28 telecom fiber ───────────────────────────────────────────
 medium = commercial_fiber("Corning_SMF28", length=100.0, lambda0=1550e-9)

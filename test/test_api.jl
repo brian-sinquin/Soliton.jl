@@ -1,5 +1,5 @@
 using Test
-using JuGNLSE
+using GNLSE
 
 @testset verbose = true "API" begin
     @testset "Medium" begin

@@ -1,5 +1,5 @@
 using Test
-using JuGNLSE
+using GNLSE
 
 @testset "Commercial Fiber Library and Glass Presets" begin
     @testset "Glass Refractive Index Presets" begin
