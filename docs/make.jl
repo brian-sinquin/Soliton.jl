@@ -9,7 +9,7 @@ makedocs(;
     sitename="JuGNLSE.jl",
     checkdocs=:exports,
     format=Documenter.HTML(;
-        canonical="https://brian-sinquin.github.io/JuGNLSE",
+        canonical="https://brian-sinquin.github.io/JuGNLSE.jl",
         edit_link="master",
         assets=String[],
         mathengine=Documenter.MathJax3(),
@@ -74,7 +74,7 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/brian-sinquin/JuGNLSE",
+    repo="github.com/brian-sinquin/JuGNLSE.jl",
     devbranch="master",
     push_preview=true,
     # Default is ["stable" => "v^", "v#.#"], which collapses releases into a

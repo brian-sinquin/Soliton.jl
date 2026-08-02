@@ -6,8 +6,8 @@ authors:
 title: "JuGNLSE.jl: A Julia package for solving the Generalized Nonlinear Schrödinger Equation"
 version: 0.2.0
 date-released: 2026-08-02
-url: "https://github.com/brian-sinquin/JuGNLSE"
-repository-code: "https://github.com/brian-sinquin/JuGNLSE"
+url: "https://github.com/brian-sinquin/JuGNLSE.jl"
+repository-code: "https://github.com/brian-sinquin/JuGNLSE.jl"
 license: MIT
 keywords:
   - julia
