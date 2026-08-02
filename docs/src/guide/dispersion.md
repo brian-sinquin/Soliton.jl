@@ -78,5 +78,6 @@ D = dispersion_operator(grid, medium)
 ```
 
 The imaginary part of `D` is the propagation-constant deviation ``B(\omega)``;
-the real part is ``(g - \alpha)/2`` — the net gain/loss contribution (zero for passive
-fibers with `gain=0`, negative for lossy fibers, positive for amplifiers).
+the real part is ``(g - \alpha)/2`` — the net gain/loss contribution (zero for a
+plain [`Medium`](@ref) with `loss=0`, negative for lossy fibers via `loss`,
+positive for active fibers via [`AmplifyingMedium`](@ref)'s `g0`/`g0_db`).

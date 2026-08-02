@@ -6,7 +6,7 @@ This example models non-linear pulse propagation in a Silicon-on-Insulator (SOI)
 
 ## 🔬 Literature Comparison & Physics
 
-In sub-micron silicon photonic integrated circuits (PICs), intense optical pulses at 1550 nm experience strong Kerr self-phase modulation alongside Two-Photon Absorption ($\alpha_2 \approx 0.5\text{ cm/GW} = 5.0\times 10^{-12}\text{ m/W}$) and TPA-generated free carrier dynamics (L. Yin et al., *Opt. Express* 15, 13833 (2007)):
+In sub-micron silicon photonic integrated circuits (PICs), intense optical pulses at 1550 nm experience strong Kerr self-phase modulation alongside Two-Photon Absorption ($\alpha_2 \approx 0.5\text{ cm/GW} = 5.0\times 10^{-12}\text{ m/W}$) and TPA-generated free carrier dynamics (L. Yin & G. P. Agrawal, *Opt. Lett.* 32, 2031 (2007)):
 
 1. **Two-Photon Absorption (TPA)**: Non-linear attenuation scaling with $|A|^4 / A_{\text{eff}}$.
 2. **Free-Carrier Refraction (FCR)**: Generated free electron-hole pairs decrease the refractive index ($n_{FC} = -k_{\text{FCR}} N_c$), shifting the pulse spectrum towards shorter wavelengths (blue-shift).

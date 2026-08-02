@@ -8,8 +8,10 @@ CurrentModule = JuGNLSE
 GNLSESolver
 ERK4IP
 SSFM
+AdaptiveSSFM
 SimParams
 Solution
 VectorialSolution
 solve
+solve_sweep
 ```

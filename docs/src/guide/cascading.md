@@ -56,13 +56,14 @@ sol = pulse |> fiber1 |> amp |> filter |> fiber2
 !!! note "Solution-to-Pulse conversion"
     When a `SimParams` or `LumpedElement` receives a [`Solution`](@ref) (output of `solve`), it automatically extracts the final field state as a new [`Pulse`](@ref) before processing it. This makes the pipe seamless.
 
-## Cascaded Simulation with `propagate_cascade`
+## Cascaded Simulation with `solve`
 
-For more complex topologies, use `propagate_cascade` to run a vector of stages:
+For more complex topologies, [`solve`](@ref) also accepts a `Vector` of stages
+directly, rather than piping them one at a time with `|>`:
 
 ```julia
 stages = [fiber1, amp, fiber2, filter]
-results = propagate_cascade(pulse, stages)
+results = solve(pulse, stages)
 
 # results is a Vector of Pulse/Solution objects, one per stage
 ```

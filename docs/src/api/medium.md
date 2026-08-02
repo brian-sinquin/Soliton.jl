@@ -8,4 +8,6 @@ CurrentModule = JuGNLSE
 AbstractMedium
 Medium
 BirefringentMedium
+AmplifyingMedium
+SemiconductorMedium
 ```

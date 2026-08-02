@@ -10,6 +10,8 @@ ConstantNonlinearity
 FrequencyDependentNonlinearity
 NonlinearityFromEffectiveArea
 build_physics_model
+step_index_aeff
+MarcuseAeff
 ```
 
 # Raman Models

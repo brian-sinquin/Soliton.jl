@@ -41,6 +41,12 @@ params = SimParams(; medium=hcf, z_saves=100)
 sol = solve(pulse, params)
 ```
 
+By default `HollowCoreFiber` is lossless (`loss=0.0`). Pass `confinement_loss=true`
+to additionally include the Marcatili-Schmeltzer capillary confinement loss
+``\alpha(\lambda) \propto \lambda^2/a^3`` — note this bare-capillary formula is a
+conservative bound that can overestimate loss for real anti-resonant/negative-curvature
+HC-PCF designs (see `docs/src/physics.md`), so it defaults to off.
+
 ---
 
 ## 🧬 Molecular Gas Raman Response (`MolecularRamanGas`)

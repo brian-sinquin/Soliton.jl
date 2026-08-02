@@ -9,13 +9,13 @@ Each example in **JuGNLSE.jl** reproduces a key result from the nonlinear optics
 | # | Title | Reference Paper | Key Physical Phenomena | Primary Modules |
 |:---|:---|:---|:---|:---|
 | **1** | [Supercontinuum in PCF](ex1_supercontinuum.md) | Dudley et al., *Rev. Mod. Phys.* **78**, 1135 (2006) | Soliton fission, Cherenkov dispersive waves | `Medium`, `Hollenbeck`, `sech_pulse` |
-| **2** | [Soliton Self-Frequency Shift](ex2_ssfs.md) | Mitschke & Mollenauer (1986); Gordon (1986) | Raman red-shift ($\propto T_0^{-4}$) | `BlowWood`, `centroid_wavelength` |
+| **2** | [Soliton Self-Frequency Shift](ex2_ssfs.md) | Mitschke & Mollenauer (1986); Gordon (1986) | Raman red-shift ($\propto T_0^{-4}$) | `BlowWood`, `track_solitons` |
 | **3** | [Supercontinuum Coherence](ex3_coherence.md) | Dudley & Coen, *Opt. Lett.* **27**, 1180 (2002) | MI noise seeding, ensemble coherence | `add_noise`, `spectral_coherence` |
 | **4** | [Soliton Trapping in Birefringent Fiber](ex4_birefringence.md) | Menyuk, *J. Opt. Soc. Am. B* **5**, 392 (1988) | XPM polarization locking, vector GNLSE | `BirefringentMedium`, `VectorialPulse` |
 | **5** | [Higher-Order Soliton Compression](ex5_soliton_compression.md) | Mollenauer et al., *Phys. Rev. Lett.* **45**, 1095 (1980) | Periodic temporal compression ($N=3$) | `soliton_number`, `Medium` |
 | **6** | [Stable N=3 Soliton Recurrence](ex6_stable_n3_soliton.md) | Zakharov & Shabat (1972); Akhmediev (1987) | FPUT recurrence & perturbation stability | `solve`, `ERK4IP` |
 | **7** | [Gas-Filled Hollow-Core PCF](ex7_hollowcore_gas.md) | Russell et al., *Nat. Photonics* **8**, 278 (2014) | Pressure-tuned dispersion ($\beta_n(P)$) & gas Raman | `HollowCoreFiber`, `MolecularRamanGas` |
-| **8** | [Silicon Photonics (TPA)](ex8_silicon_tpa.md) | Yin et al., *Opt. Express* **15**, 13833 (2007) | Two-photon absorption & free-carrier blue-shift | `SemiconductorMedium` |
+| **8** | [Silicon Photonics (TPA)](ex8_silicon_tpa.md) | Yin & Agrawal, *Opt. Lett.* **32**, 2031 (2007) | Two-photon absorption & free-carrier blue-shift | `SemiconductorMedium` |
 | **9** | [Femtosecond EDFA Amplifier](ex9_edfa_amplifier.md) | Agrawal, *Nonlinear Fiber Optics*, Ch. 11 | Gain saturation & quantum ASE noise | `AmplifyingMedium` |
 | **10** | [Multithreaded Parameter Sweep](ex10_parallel_sweep.md) | ZDW Boundary & Dispersive Wave Trapping | 2D Spectral Heatmap across ZDW | `solve_sweep`, `Threads` |
 

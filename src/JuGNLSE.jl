@@ -19,6 +19,7 @@ gnlse-python conventions for optical pulse propagation in nonlinear dispersive m
 # Units
 
 Natural SI units throughout:
+
   - Time: s (seconds)
   - Wavelength: m (meters)
   - Frequency: rad/s
@@ -43,7 +44,7 @@ medium = Medium(0.15, 0.11, 0.0, [-11.83e-27], 835e-9)
 pulse = sech_pulse(grid, 10000.0, 50e-15)  # Pmax [W], FWHM [s]
 
 # Setup parameters
-params = SimParams(medium=medium, z_saves=200, raman_model=BlowWood())
+params = SimParams(; medium=medium, z_saves=200, raman_model=BlowWood())
 
 # Solve
 solution = solve(pulse, params)
@@ -72,8 +73,12 @@ using FFTW
 using LinearAlgebra
 using ProgressMeter
 
-# Physical constants - natural SI units
-const c = 299792458.0  # Speed of light [m/s]
+"""
+    c
+
+Speed of light in vacuum [m/s] (exact SI value, 299792458.0).
+"""
+const c = 299792458.0
 
 # Include submodules
 include("solvers.jl")
@@ -102,9 +107,11 @@ export Medium, SimParams, Grid, Pulse, Solution
 export RamanModel, BlowWood, LinAgrawal, Hollenbeck
 export DispersionModel, TaylorDispersion, TabulatedDispersion, SellmeierDispersion
 export GNLSESolver, ERK4IP, SSFM, AdaptiveSSFM
-export VectorialPulse, BirefringentMedium, VectorialSolution, AmplifyingMedium, SemiconductorMedium
+export VectorialPulse,
+    BirefringentMedium, VectorialSolution, AmplifyingMedium, SemiconductorMedium
 export LumpedElement, Amplifier, Attenuator, Filter, PMDElement, apply
-export NonlinearityModel, ConstantNonlinearity, FrequencyDependentNonlinearity, NonlinearityFromEffectiveArea
+export NonlinearityModel,
+    ConstantNonlinearity, FrequencyDependentNonlinearity, NonlinearityFromEffectiveArea
 
 # Commercial Fibers, Gas-Filled Hollow Core & Refractive Index Presets
 export FiberSpec, FiberLibrary, commercial_fiber, HollowCoreFiber, gas_refractive_index
@@ -126,7 +133,8 @@ export create_grid, wavelength_grid
 export sech_pulse, gaussian_pulse, lorentzian_pulse, cw_pulse
 
 # Export dispersion functions
-export dispersion_operator, propagation_constant, loss_vector, loss_vector!, gain_vector, gain_vector!
+export dispersion_operator,
+    propagation_constant, loss_vector, loss_vector!, gain_vector, gain_vector!
 
 # Export Raman functions
 export raman_response

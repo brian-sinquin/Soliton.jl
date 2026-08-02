@@ -16,4 +16,8 @@ dispersion_length
 nonlinear_length
 soliton_number
 spectral_coherence
+spectrogram
+shg_frog_trace
+track_solitons
+dispersive_wave_wavelength
 ```

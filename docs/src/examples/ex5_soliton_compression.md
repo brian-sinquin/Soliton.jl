@@ -68,6 +68,11 @@ plot(sol) # 4-panel dashboard showing pulse breathing & compression # hide
 Run all soliton orders 1–4 and compare:
 
 ```julia
+FWHM  = 1e-12                          # same pulse duration as above
+T0    = FWHM / 1.7627                  # sech FWHM -> T0
+beta2 = medium.dispersion.betas[1]     # [s²/m]
+gamma = medium.gamma                   # [1/(W·m)]
+
 for N in 1:4
     P0_N = N^2 * abs(beta2) / (gamma * T0^2)
     pulse_N = sech_pulse(grid, P0_N, FWHM)
@@ -89,12 +94,15 @@ In practice, the clean higher-order soliton evolution is disrupted by:
 Enable these to observe realistic (imperfect) soliton dynamics:
 
 ```julia
+L_D    = T0^2 / abs(beta2)             # dispersion length [m]
+Zhalf  = (π / 2) * L_D                 # soliton half-period [m]
+
 medium_realistic = Medium(;
     length  = Zhalf,
     gamma   = gamma,
     loss    = 0.0,
     betas   = [beta2, 5e-41],    # add β₃
-    lambda0 = lambda0,
+    lambda0 = medium.lambda0,
 )
 sol_real = solve(pulse, SimParams(;
     medium          = medium_realistic,

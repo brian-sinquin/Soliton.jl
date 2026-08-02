@@ -103,11 +103,17 @@ where $F_{\text{dB}}$ is the amplifier Noise Figure in dB.
 ## Gas-Filled Hollow-Core PCF
 
 Gas guidance in hollow-core anti-resonant / photonic crystal fibers (HC-PCF) combines:
-1. **Marcatili-Schmeltzer Capillary Loss**:
+1. **Marcatili-Schmeltzer Capillary Loss** (opt-in via `confinement_loss=true` in
+   [`HollowCoreFiber`](@ref); `false` by default):
    ```math
    \alpha(\lambda) = \left( \frac{u_{01}}{2\pi} \right)^2 \frac{\lambda^2}{a^3} \frac{\nu^2 + 1}{\sqrt{\nu^2 - 1}}
    ```
-   where $a$ is the core radius and $\nu$ is the cladding index ratio.
+   where $a$ is the core radius and $\nu$ is the cladding index ratio. This is the
+   bare single-wall thick-capillary bound — it excludes the anti-resonant
+   wall-thickness transmission-window term that real negative-curvature HC-PCF
+   use to suppress loss by orders of magnitude, so at typical HC-PCF core radii
+   (tens of μm) it substantially *overestimates* loss relative to measured
+   fibers. Treat it as a conservative bound, not a quantitative prediction.
 2. **Pressure-Dependent Gas Sellmeier**:
    ```math
    n(\lambda, P) = 1 + P \cdot \frac{C_1}{C_2 - \lambda^{-2}}
@@ -139,7 +145,7 @@ All solvers work in the **interaction picture** — the simulation variable ``U 
 - G. P. Agrawal, *Nonlinear Fiber Optics*, 6th ed. (Academic Press, 2019)
 - J. M. Dudley, G. Genty & S. Coen, Rev. Mod. Phys. **78**, 1135 (2006)
 - P. St.J. Russell et al., Nat. Photonics **8**, 278 (2014)
-- L. Yin et al., Opt. Express **15**, 13833 (2007)
+- L. Yin & G. P. Agrawal, Opt. Lett. **32**, 2031-2033 (2007)
 - A. Börzsönyi et al., Opt. Express **21**, 21086 (2013)
 - Q. Lin & G. P. Agrawal, Opt. Lett. **31**, 3086 (2006)
 - D. Hollenbeck & C. D. Cantrell, J. Opt. Soc. Am. B **19**, 2886 (2002)
