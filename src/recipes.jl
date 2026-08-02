@@ -5,10 +5,11 @@ using Measures: mm
     @recipe function f(sol::Solution)
 
 Plot recipe for `Solution` creating a 4-panel dashboard:
-1. Temporal evolution heat map |A(z, t)|²
-2. Spectral evolution heat map |A(z, λ)|² (or |A(z, ω)|²)
-3. Initial vs Final Temporal Intensity
-4. Initial vs Final Spectral Power
+
+ 1. Temporal evolution heat map |A(z, t)|²
+ 2. Spectral evolution heat map |A(z, λ)|² (or |A(z, ω)|²)
+ 3. Initial vs Final Temporal Intensity
+ 4. Initial vs Final Spectral Power
 """
 @recipe function f(sol::Solution)
     layout := (2, 2)
@@ -51,8 +52,11 @@ Plot recipe for `Solution` creating a 4-panel dashboard:
     # its internal grid allocation.
     peak_per_bin = vec(maximum(Pw_db_raw; dims=2))
     significant = findall(>=(floor_db), peak_per_bin)
-    lo_idx, hi_idx = isempty(significant) ? (1, length(lambda_nm)) :
-                     (first(significant), last(significant))
+    lo_idx, hi_idx = if isempty(significant)
+        (1, length(lambda_nm))
+    else
+        (first(significant), last(significant))
+    end
     lambda_nm = lambda_nm[lo_idx:hi_idx]
     Pw_db = Pw_db[lo_idx:hi_idx, :]
     lam_lo, lam_hi = extrema(lambda_nm)

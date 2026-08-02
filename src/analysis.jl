@@ -21,7 +21,8 @@ function pulse_energy(pulse::Pulse)
 end
 
 function pulse_energy(vpulse::VectorialPulse)
-    return (sum(abs2, @view(vpulse.At[:, 1])) + sum(abs2, @view(vpulse.At[:, 2]))) * vpulse.grid.dt
+    return (sum(abs2, @view(vpulse.At[:, 1])) + sum(abs2, @view(vpulse.At[:, 2]))) *
+           vpulse.grid.dt
 end
 
 """
@@ -151,12 +152,13 @@ function photon_number(solution::Solution)
         # When save_freq=false, AW is empty (0x0). Fallback to time-domain At computation.
         # By Parseval's theorem, Σ |AW|² = (1/N) Σ |At|².
         N = size(solution.At, 1)
-        return [sum(abs2, view(solution.At, :, j)) / (N * solution.omega0)
-                for j in axes(solution.At, 2)]
+        return [
+            sum(abs2, view(solution.At, :, j)) / (N * solution.omega0) for
+            j in axes(solution.At, 2)
+        ]
     end
     # solution.AW columns and solution.W are both in monotonic order
-    return [sum(abs2.(view(solution.AW, :, j)) ./ solution.W)
-            for j in axes(solution.AW, 2)]
+    return [sum(abs2.(view(solution.AW, :, j)) ./ solution.W) for j in axes(solution.AW, 2)]
 end
 
 """
@@ -184,6 +186,7 @@ nonlinear_length(gamma::Real, P0::Real) = 1 / (gamma * P0)
 Soliton number N = √(L_D / L_NL) = √(γ P₀ T₀² / |β₂|) (dimensionless). This
 parameter predicts the number of fundamental solitons that comprise the initial
 pulse and governs nonlinear-dispersive dynamics:
+
   - N ≪ 1: weakly nonlinear, dispersion dominates
   - N ≈ 1: fundamental soliton (stable in anomalous dispersion)
   - N > 1: higher-order soliton exhibiting periodic breathing; also indicates
@@ -283,8 +286,7 @@ function add_noise(
     phase_rms::Real=0.0,
     linewidth_hz::Real=0.0,
 )
-    photons_per_mode >= 0 ||
-        throw(ArgumentError("photons_per_mode must be non-negative"))
+    photons_per_mode >= 0 || throw(ArgumentError("photons_per_mode must be non-negative"))
     rin >= 0 || throw(ArgumentError("rin must be non-negative"))
     linewidth_hz >= 0 || throw(ArgumentError("linewidth_hz must be non-negative"))
     quantum_model in (:gaussian, :phase_only) ||
@@ -353,6 +355,7 @@ The estimator uses the algebraic identity `Σ_{i≠j} Aᵢ*Aⱼ = |ΣAᵢ|² - �
 which averages over all `M(M-1)` ordered pairs without an explicit double loop.
 
 !!! note "Finite-ensemble bias"
+
     For a truly incoherent field the pairwise estimator does not vanish but
     fluctuates around a positive floor `≈ 1/√(M(M-1)) ≈ 1/M`. Use a sufficiently
     large ensemble (`M ≳ 20`, ideally 50–100) so that this bias stays well below
@@ -406,9 +409,11 @@ spectral_coherence(solutions::AbstractVector{<:Solution}) =
     spectrogram(pulse::Pulse; n_delay=200, gate_fwhm=nothing) -> (t_delays, V_grid, S_matrix)
 
 Compute Short-Time Fourier Transform (STFT) spectrogram of pulse:
-    S(t, ω) = |∫ A(t') exp(-(t' - t)² / (2 τ_g²)) exp(-i ω t') dt'|²
+S(t, ω) = |∫ A(t') exp(-(t' - t)² / (2 τ_g²)) exp(-i ω t') dt'|²
 """
-function spectrogram(pulse::Pulse; n_delay::Int=200, gate_fwhm::Union{Real, Nothing}=nothing)
+function spectrogram(
+    pulse::Pulse; n_delay::Int=200, gate_fwhm::Union{Real, Nothing}=nothing
+)
     t = pulse.grid.t
     At = pulse.At
     dt = pulse.grid.dt
@@ -438,7 +443,7 @@ end
     shg_frog_trace(pulse::Pulse; n_delay=200) -> (delays, V_shg, I_frog)
 
 Compute Second-Harmonic Generation (SHG) FROG trace:
-    I_FROG(ω, τ) = |∫ A(t) A(t - τ) exp(-i ω t) dt|²
+I_FROG(ω, τ) = |∫ A(t) A(t - τ) exp(-i ω t) dt|²
 """
 function shg_frog_trace(pulse::Pulse; n_delay::Int=200)
     t = pulse.grid.t
@@ -475,9 +480,10 @@ Automated tracking of soliton fission and Soliton Self-Frequency Shift (SSFS) re
 across propagation distances `sol.Z`.
 
 # Returns
-- `z_fiss`: Estimated distance of peak compression / soliton fission [m]
-- `peak_power_z`: Peak power P_max(z) [W] along propagation
-- `centroid_w_z`: Spectral centroid ⟨ω - ω₀⟩(z) [rad/s] along propagation
+
+  - `z_fiss`: Estimated distance of peak compression / soliton fission [m]
+  - `peak_power_z`: Peak power P_max(z) [W] along propagation
+  - `centroid_w_z`: Spectral centroid ⟨ω - ω₀⟩(z) [rad/s] along propagation
 """
 function track_solitons(sol::Solution)
     n_saves = length(sol.Z)
@@ -508,10 +514,12 @@ Calculate the predicted resonant Cherenkov dispersive wave emission wavelength �
 emitted during soliton fission in `medium`.
 
 Solves the phase-matching condition:
-    Δβ(Δω) = β(ω₀ + Δω) - β(ω₀) - β₁(ω₀)·Δω - ½·γ·P₀ = 0
+Δβ(Δω) = β(ω₀ + Δω) - β(ω₀) - β₁(ω₀)·Δω - ½·γ·P₀ = 0
 for Δω ≠ 0.
 """
-function dispersive_wave_wavelength(medium::Medium, pulse::Pulse; P0::Real=peak_power(pulse))
+function dispersive_wave_wavelength(
+    medium::Medium, pulse::Pulse; P0::Real=peak_power(pulse)
+)
     lambda0 = medium.lambda0
     omega0 = 2π * c / lambda0
     gamma_val = medium.gamma isa Real ? Float64(medium.gamma) : 0.0
@@ -531,7 +539,10 @@ function dispersive_wave_wavelength(medium::Medium, pulse::Pulse; P0::Real=peak_
     for i in 1:(N - 1)
         if abs(V[i]) > 1e12 # Skip trivial root at pump frequency V ≈ 0
             if phase_mismatch[i] * phase_mismatch[i + 1] <= 0
-                dw_zero = V[i] - phase_mismatch[i] * (V[i + 1] - V[i]) / (phase_mismatch[i + 1] - phase_mismatch[i])
+                dw_zero =
+                    V[i] -
+                    phase_mismatch[i] * (V[i + 1] - V[i]) /
+                    (phase_mismatch[i + 1] - phase_mismatch[i])
                 push!(zero_crossings, dw_zero)
             end
         end
@@ -552,7 +563,11 @@ function dispersive_wave_wavelength(medium::Medium, pulse::Pulse; P0::Real=peak_
 
     pos_crossings = filter(dw -> dw > 1e12, zero_crossings)
     # Select the nearest positive-detuning crossing (physically closest to the pump)
-    dw_primary = !isempty(pos_crossings) ? pos_crossings[argmin(pos_crossings)] : (!isempty(zero_crossings) ? zero_crossings[argmax(abs.(zero_crossings))] : 0.0)
+    dw_primary = if !isempty(pos_crossings)
+        pos_crossings[argmin(pos_crossings)]
+    else
+        (!isempty(zero_crossings) ? zero_crossings[argmax(abs.(zero_crossings))] : 0.0)
+    end
     omega_dw = omega0 + dw_primary
     return 2π * c / omega_dw
 end

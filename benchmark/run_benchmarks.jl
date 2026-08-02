@@ -1,6 +1,6 @@
 using Pkg
 Pkg.activate(@__DIR__)
-Pkg.develop(PackageSpec(path=joinpath(@__DIR__, "..")))
+Pkg.develop(PackageSpec(; path=joinpath(@__DIR__, "..")))
 Pkg.instantiate()
 
 using BenchmarkTools
@@ -23,11 +23,7 @@ results = run(SUITE; verbose=true)
 # Convert results to clean serializable dictionary
 function benchmark_to_dict(b)
     m = median(b)
-    return Dict(
-        "time_ns" => m.time,
-        "memory_bytes" => m.memory,
-        "allocs" => m.allocs
-    )
+    return Dict("time_ns" => m.time, "memory_bytes" => m.memory, "allocs" => m.allocs)
 end
 
 function group_to_dict(g)
@@ -76,7 +72,9 @@ println("\n[3/3] Generating summary report...")
 
 summary_io = IOBuffer()
 println(summary_io, "# 🚀 JuGNLSE Benchmark Results Summary\n")
-println(summary_io, "| Benchmark Target | Median Time | Memory | Allocations | Comparison |")
+println(
+    summary_io, "| Benchmark Target | Median Time | Memory | Allocations | Comparison |"
+)
 println(summary_io, "| :--- | :--- | :--- | :--- | :--- |")
 
 function process_group_markdown(group_name, group_data, baseline_group=nothing)
@@ -84,7 +82,7 @@ function process_group_markdown(group_name, group_data, baseline_group=nothing)
         t_str = format_time(data["time_ns"])
         m_str = format_bytes(data["memory_bytes"])
         a_str = "$(data["allocs"])"
-        
+
         comp_str = "Baseline"
         if !isnothing(baseline_group) && haskey(baseline_group, name)
             b_data = baseline_group[name]
@@ -98,13 +96,19 @@ function process_group_markdown(group_name, group_data, baseline_group=nothing)
                 comp_str = "⚪ ~Same"
             end
         end
-        
-        println(summary_io, "| `$group_name/$name` | $t_str | $m_str | $a_str | $comp_str |")
+
+        println(
+            summary_io, "| `$group_name/$name` | $t_str | $m_str | $a_str | $comp_str |"
+        )
     end
 end
 
 for (group_name, group_data) in results_dict
-    base_grp = !isnothing(baseline_dict) && haskey(baseline_dict, group_name) ? baseline_dict[group_name] : nothing
+    base_grp = if !isnothing(baseline_dict) && haskey(baseline_dict, group_name)
+        baseline_dict[group_name]
+    else
+        nothing
+    end
     process_group_markdown(group_name, group_data, base_grp)
 end
 

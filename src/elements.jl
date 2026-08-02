@@ -134,10 +134,12 @@ function apply(vpulse::VectorialPulse, filt::Filter)
 end
 
 function apply(::Pulse, ::PMDElement)
-    throw(ArgumentError(
-        "PMDElement requires a VectorialPulse. " *
-        "PMD is a polarization effect and has no meaning for a scalar (single-polarization) pulse."
-    ))
+    throw(
+        ArgumentError(
+            "PMDElement requires a VectorialPulse. " *
+            "PMD is a polarization effect and has no meaning for a scalar (single-polarization) pulse.",
+        ),
+    )
 end
 
 """
@@ -153,7 +155,7 @@ function apply(vpulse::VectorialPulse, pmd::PMDElement)
     # If g ~ N(0, σ²I₃), then |g| ~ Maxwell(σ), with E[|g|] = 2σ√(2/π).
     # Setting 2σ√(2/π) = mean_dgd  →  σ = mean_dgd · √(π/8)
     σ_maxwell = pmd.mean_dgd * sqrt(π / 8)
-    g  = randn(pmd.rng, 3)
+    g = randn(pmd.rng, 3)
     Δτ = σ_maxwell * sqrt(g[1]^2 + g[2]^2 + g[3]^2)   # [s]
 
     # ── 2. Random PSP orientation θ ∈ [0, π) ─────────────────────────────────
@@ -167,7 +169,7 @@ function apply(vpulse::VectorialPulse, pmd::PMDElement)
     AW_out = similar(vpulse.AW)
 
     @inbounds for k in eachindex(V_fft)
-        φ  = V_fft[k] * (Δτ / 2)         # half-DGD phase at frequency bin k
+        φ = V_fft[k] * (Δτ / 2)         # half-DGD phase at frequency bin k
         ep = cis(+φ)                       # fast-PSP phasor
         em = cis(-φ)                       # slow-PSP phasor
 
@@ -175,7 +177,7 @@ function apply(vpulse::VectorialPulse, pmd::PMDElement)
         Ey = vpulse.AW[k, 2]
 
         # Rotate to PSP basis: R(−θ) · [Ex; Ey]
-        u =  cosθ * Ex + sinθ * Ey        # projection onto fast PSP
+        u = cosθ * Ex + sinθ * Ey        # projection onto fast PSP
         v = -sinθ * Ex + cosθ * Ey        # projection onto slow PSP
 
         # Apply differential delay
@@ -196,6 +198,6 @@ function apply(vpulse::VectorialPulse, pmd::PMDElement)
 end
 
 # ── Callable dispatch for piping ─────────────────────────────────────────────
-(element::LumpedElement)(pulse::AbstractPulse)     = apply(pulse, element)
-(element::LumpedElement)(sol::Solution)            = apply(Pulse(sol), element)
-(element::LumpedElement)(vsol::VectorialSolution)  = apply(VectorialPulse(vsol), element)
+(element::LumpedElement)(pulse::AbstractPulse) = apply(pulse, element)
+(element::LumpedElement)(sol::Solution) = apply(Pulse(sol), element)
+(element::LumpedElement)(vsol::VectorialSolution) = apply(VectorialPulse(vsol), element)

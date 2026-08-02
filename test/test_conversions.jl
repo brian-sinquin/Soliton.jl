@@ -6,7 +6,7 @@ using JuGNLSE
         lambda0 = 1550e-9
         D = 17.0 # ps/(nm*km) for SMF-28
         b2 = dispersion_D_to_beta2(D, lambda0)
-        
+
         # SMF-28 beta2 at 1550 nm is approx -21.6 ps^2/km = -21.6e-27 s^2/m
         @test b2 < 0 # anomalous dispersion
         @test isapprox(b2, -21.67e-27; rtol=0.01)

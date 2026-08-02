@@ -29,7 +29,8 @@ function propagate(
     # Storage for output
     z_out = zeros(n_saves)
     At_out = zeros(ComplexF64, N, 2, n_saves)
-    Aw_out = params.save_freq ? zeros(ComplexF64, N, 2, n_saves) : zeros(ComplexF64, 0, 0, 0)
+    Aw_out =
+        params.save_freq ? zeros(ComplexF64, N, 2, n_saves) : zeros(ComplexF64, 0, 0, 0)
 
     z_out[1] = 0.0
     At_out[:, :, 1] .= pulse.At
@@ -39,7 +40,8 @@ function propagate(
     end
 
     # Progress bar setup
-    prog = progress ? Progress(n_saves - 1; desc="Vectorial SSFM... ", color=:blue) : nothing
+    prog =
+        progress ? Progress(n_saves - 1; desc="Vectorial SSFM... ", color=:blue) : nothing
 
     # Target save points
     save_points = range(0.0, z_end; length=n_saves)
@@ -49,7 +51,7 @@ function propagate(
     U_nl = similar(U)
     u_mid = similar(pulse.At)
     u_temp = similar(pulse.At)
-    
+
     # Calculate step count per save interval
     dz_save = z_end / (n_saves - 1)
     n_steps = max(1, round(Int, dz_save / solver.dz))
@@ -91,7 +93,7 @@ function propagate(
 
         # Save state
         z_out[save_idx] = z
-        
+
         # Save U components
         copyto!(model.buf_f1, U)
         if params.save_freq

@@ -12,10 +12,18 @@ function run_jugnlse_benchmark()
 
     # 2. Medium (PCF parameters typical for SCG)
     # Betas at 835 nm:
-    betas = [-11.830e-27, 8.1038e-41, -9.5205e-56, 2.0737e-70,
-             -5.3943e-85, 1.3486e-99, -2.5495e-114, 3.0524e-129,
-             -1.7140e-144]
-    
+    betas = [
+        -11.830e-27,
+        8.1038e-41,
+        -9.5205e-56,
+        2.0737e-70,
+        -5.3943e-85,
+        1.3486e-99,
+        -2.5495e-114,
+        3.0524e-129,
+        -1.7140e-144,
+    ]
+
     dispersion = TaylorDispersion(betas)
     gamma = 0.11 # 1 / (W * m)
     length_m = 0.15 # 15 cm
@@ -28,11 +36,11 @@ function run_jugnlse_benchmark()
     pulse = sech_pulse(grid, P0, T0)
 
     # 4. Params (Raman on, Self-steepening on)
-    params = SimParams(
-        medium = medium,
-        raman_model = BlowWood(),
-        self_steepening = true,
-        solver = SSFM(0.0001) # Use RK4IP adaptive later, or fixed step SSFM
+    params = SimParams(;
+        medium=medium,
+        raman_model=BlowWood(),
+        self_steepening=true,
+        solver=SSFM(0.0001), # Use RK4IP adaptive later, or fixed step SSFM
     )
 
     # 5. Run (Warmup)

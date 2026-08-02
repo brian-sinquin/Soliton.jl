@@ -36,7 +36,9 @@ using JuGNLSE
         @test smf28.gamma == 0.00127
 
         # Custom wavelength & loss overrides
-        custom_smf = commercial_fiber("Corning_SMF28", length=50.0, lambda0=1310e-9, loss=0.0004)
+        custom_smf = commercial_fiber(
+            "Corning_SMF28", length=50.0, lambda0=1310e-9, loss=0.0004
+        )
         @test custom_smf.length == 50.0
         @test custom_smf.lambda0 == 1310e-9
         @test custom_smf.loss == 0.0004

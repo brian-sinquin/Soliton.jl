@@ -30,11 +30,11 @@ const REFDIR = joinpath(@__DIR__, "reference_data")
 # ─────────────────────────────────────────────────────────────────────────────
 # Shared parameters (must match generate_reference_data.py exactly)
 # ─────────────────────────────────────────────────────────────────────────────
-const LAM0   = 835e-9   # m
-const BETA2  = -1.0e-26 # s²/m  (anomalous)
-const GAMMA  = 0.1      # 1/(W·m)
-const N_PTS  = 2^12
-const T_WIN  = 20e-12   # s   (gnlse-python uses 20 ps)
+const LAM0 = 835e-9   # m
+const BETA2 = -1.0e-26 # s²/m  (anomalous)
+const GAMMA = 0.1      # 1/(W·m)
+const N_PTS = 2^12
+const T_WIN = 20e-12   # s   (gnlse-python uses 20 ps)
 
 # Helper: intensity FWHM on a monotonic axis
 function _fwhm_test(intensity, axis)
@@ -48,7 +48,7 @@ end
 function _rms_width_test(AW, V)
     P = abs2.(AW)
     m = sum(V .* P) / sum(P)
-    return sqrt(sum((V .- m).^2 .* P) / sum(P))
+    return sqrt(sum((V .- m) .^ 2 .* P) / sum(P))
 end
 
 # Helper: intensity-weighted spectral centroid on absolute-frequency axis
@@ -56,7 +56,6 @@ function _centroid_test(AW, W_abs)
     P = abs2.(AW)
     return sum(W_abs .* P) / sum(P)
 end
-
 
 @testset "Adversarial: JuGNLSE vs gnlse-python" begin
 
@@ -70,19 +69,24 @@ end
     # ─────────────────────────────────────────────────────────────────────────
     @testset "Scenario 1 — Fundamental soliton peak power" begin
         ref = readdlm(joinpath(REFDIR, "gnlse_soliton.csv"), ',', Float64; skipstart=1)
-        z_ref        = ref[:, 1]   # m
-        peak_ref     = ref[:, 2]   # W
+        z_ref = ref[:, 1]   # m
+        peak_ref = ref[:, 2]   # W
 
-        T0      = 100e-15   # soliton 1/e half-width [s]
-        P0      = abs(BETA2) / (GAMMA * T0^2)
+        T0 = 100e-15   # soliton 1/e half-width [s]
+        P0 = abs(BETA2) / (GAMMA * T0^2)
         L_fiber = z_ref[end]
 
-        grid   = create_grid(N_PTS, T_WIN, LAM0)
+        grid = create_grid(N_PTS, T_WIN, LAM0)
         medium = Medium(L_fiber, GAMMA, 0.0, [BETA2], LAM0)
-        pulse  = sech_pulse(grid, P0, 2 * log(1 + sqrt(2)) * T0)
-        params = SimParams(; medium=medium, z_saves=length(z_ref),
-                           raman_model=nothing, self_steepening=false,
-                           rtol=1e-8, atol=1e-10)
+        pulse = sech_pulse(grid, P0, 2 * log(1 + sqrt(2)) * T0)
+        params = SimParams(;
+            medium=medium,
+            z_saves=length(z_ref),
+            raman_model=nothing,
+            self_steepening=false,
+            rtol=1e-8,
+            atol=1e-10,
+        )
         sol = solve(pulse, params; progress=false)
 
         peak_julia = [maximum(abs2, sol.At[:, i]) for i in axes(sol.At, 2)]
@@ -103,63 +107,69 @@ end
         @test ref_drift < 0.005
     end
 
-
     # ─────────────────────────────────────────────────────────────────────────
     # Scenario 2 — Pure SPM: RMS spectral width monotonically increases
     # ─────────────────────────────────────────────────────────────────────────
     @testset "Scenario 2 — Pure SPM spectral broadening" begin
         ref = readdlm(joinpath(REFDIR, "gnlse_spm.csv"), ',', Float64; skipstart=1)
-        z_ref       = ref[:, 1]   # m
-        rms_ref     = ref[:, 2]   # rad/s
+        z_ref = ref[:, 1]   # m
+        rms_ref = ref[:, 2]   # rad/s
 
         L_spm = z_ref[end]
         P_spm = 100.0   # W
         FWHM_spm = 100e-15  # 100 fs
 
-        grid   = create_grid(N_PTS, T_WIN, LAM0)
+        grid = create_grid(N_PTS, T_WIN, LAM0)
         medium = Medium(L_spm, GAMMA, 0.0, Float64[], LAM0)  # no dispersion
-        pulse  = sech_pulse(grid, P_spm, FWHM_spm)
-        params = SimParams(; medium=medium, z_saves=length(z_ref),
-                           raman_model=nothing, self_steepening=false,
-                           rtol=1e-8, atol=1e-10)
+        pulse = sech_pulse(grid, P_spm, FWHM_spm)
+        params = SimParams(;
+            medium=medium,
+            z_saves=length(z_ref),
+            raman_model=nothing,
+            self_steepening=false,
+            rtol=1e-8,
+            atol=1e-10,
+        )
         sol = solve(pulse, params; progress=false)
 
-        rms_julia = [_rms_width_test(sol.AW[:, i], grid.V)
-                     for i in axes(sol.At, 2)]
+        rms_julia = [_rms_width_test(sol.AW[:, i], grid.V) for i in axes(sol.At, 2)]
 
         # Both solvers produce monotonically increasing spectral width
         @test all(diff(rms_julia) .>= -0.01 .* maximum(rms_julia))
-        @test all(diff(rms_ref)   .>= -0.01 .* maximum(rms_ref))
+        @test all(diff(rms_ref) .>= -0.01 .* maximum(rms_ref))
 
         # The broadening ratio final/initial matches to within 0.1% (exact match)
         ratio_julia = rms_julia[end] / rms_julia[1]
-        ratio_ref   = rms_ref[end]   / rms_ref[1]
+        ratio_ref = rms_ref[end] / rms_ref[1]
         @test isapprox(ratio_julia, ratio_ref; rtol=0.01)
     end
-
 
     # ─────────────────────────────────────────────────────────────────────────
     # Scenario 3 — Linear dispersion: Gaussian FWHM broadens as √(1+(L/LD)²)
     # ─────────────────────────────────────────────────────────────────────────
     @testset "Scenario 3 — Linear dispersion broadening" begin
         ref = readdlm(joinpath(REFDIR, "gnlse_dispersion.csv"), ',', Float64; skipstart=1)
-        z_ref    = ref[:, 1]   # m
+        z_ref = ref[:, 1]   # m
         fwhm_ref = ref[:, 2]   # s
 
         FWHM_IN = 200e-15   # 200 fs input intensity FWHM
-        T0G     = FWHM_IN / (2 * sqrt(log(2)))
-        LD      = T0G^2 / abs(BETA2)
+        T0G = FWHM_IN / (2 * sqrt(log(2)))
+        LD = T0G^2 / abs(BETA2)
 
-        grid   = create_grid(N_PTS, T_WIN, LAM0)
+        grid = create_grid(N_PTS, T_WIN, LAM0)
         medium = Medium(LD, 0.0, 0.0, [BETA2], LAM0)
-        pulse  = gaussian_pulse(grid, 1.0, FWHM_IN)
-        params = SimParams(; medium=medium, z_saves=length(z_ref),
-                           raman_model=nothing, self_steepening=false,
-                           rtol=1e-8, atol=1e-10)
+        pulse = gaussian_pulse(grid, 1.0, FWHM_IN)
+        params = SimParams(;
+            medium=medium,
+            z_saves=length(z_ref),
+            raman_model=nothing,
+            self_steepening=false,
+            rtol=1e-8,
+            atol=1e-10,
+        )
         sol = solve(pulse, params; progress=false)
 
-        fwhm_julia = [_fwhm_test(abs2.(sol.At[:, i]), grid.t)
-                      for i in axes(sol.At, 2)]
+        fwhm_julia = [_fwhm_test(abs2.(sol.At[:, i]), grid.t) for i in axes(sol.At, 2)]
 
         # Both solvers agree on final FWHM to within 1%
         @test isapprox(fwhm_julia[end], fwhm_ref[end]; rtol=0.01)
@@ -168,43 +178,45 @@ end
         @test isapprox(fwhm_julia[end], FWHM_IN * sqrt(2); rtol=0.02)
     end
 
-
     # ─────────────────────────────────────────────────────────────────────────
     # Scenario 4 — Raman self-frequency shift: spectral centroid must red-shift
     # ─────────────────────────────────────────────────────────────────────────
     @testset "Scenario 4 — Raman SSFS direction and magnitude" begin
         ref = readdlm(joinpath(REFDIR, "gnlse_raman_ssfs.csv"), ',', Float64; skipstart=1)
-        z_ref      = ref[:, 1]   # m
-        cent_ref   = ref[:, 2]   # rad/s (absolute optical frequency centroid)
+        z_ref = ref[:, 1]   # m
+        cent_ref = ref[:, 2]   # rad/s (absolute optical frequency centroid)
 
         T0_RAMAN = 50e-15   # 50 fs
         P0_RAMAN = abs(BETA2) / (GAMMA * T0_RAMAN^2)
 
-        grid   = create_grid(N_PTS, T_WIN, LAM0)
+        grid = create_grid(N_PTS, T_WIN, LAM0)
         medium = Medium(z_ref[end], GAMMA, 0.0, [BETA2], LAM0)
-        pulse  = sech_pulse(grid, P0_RAMAN, 2 * log(1 + sqrt(2)) * T0_RAMAN)
-        params = SimParams(; medium=medium, z_saves=length(z_ref),
-                           raman_model=BlowWood(), self_steepening=false,
-                           rtol=1e-8, atol=1e-10)
+        pulse = sech_pulse(grid, P0_RAMAN, 2 * log(1 + sqrt(2)) * T0_RAMAN)
+        params = SimParams(;
+            medium=medium,
+            z_saves=length(z_ref),
+            raman_model=BlowWood(),
+            self_steepening=false,
+            rtol=1e-8,
+            atol=1e-10,
+        )
         sol = solve(pulse, params; progress=false)
 
-        cent_julia = [_centroid_test(sol.AW[:, i], grid.W)
-                      for i in axes(sol.At, 2)]
+        cent_julia = [_centroid_test(sol.AW[:, i], grid.W) for i in axes(sol.At, 2)]
 
         # Both solvers show a monotonic red-shift (ω decreases)
         @test cent_julia[end] < cent_julia[1]   # JuGNLSE red-shifts
-        @test cent_ref[end]   < cent_ref[1]     # gnlse-python red-shifts (sanity)
+        @test cent_ref[end] < cent_ref[1]     # gnlse-python red-shifts (sanity)
 
         # Absolute shift direction must agree
         julia_shift = cent_julia[end] - cent_julia[1]
-        ref_shift   = cent_ref[end]   - cent_ref[1]
+        ref_shift = cent_ref[end] - cent_ref[1]
         @test julia_shift < 0   # red-shift
-        @test ref_shift   < 0   # red-shift
+        @test ref_shift < 0   # red-shift
 
         # Shift magnitude matches to within 0.5% (exact numerical agreement)
         @test isapprox(julia_shift, ref_shift; rtol=0.005)
     end
-
 
     # ─────────────────────────────────────────────────────────────────────────
     # Scenario 5 — Full field output: compare JuGNLSE and gnlse-python output
@@ -212,29 +224,32 @@ end
     # ─────────────────────────────────────────────────────────────────────────
     @testset "Scenario 5 — Full field cross-correlation at fiber output" begin
         ref = readdlm(joinpath(REFDIR, "gnlse_field_output.csv"), ',', Float64; skipstart=1)
-        t_ref    = ref[:, 1]   # s
-        At_ref   = ref[:, 2] .+ 1im .* ref[:, 3]   # sqrt(W)
+        t_ref = ref[:, 1]   # s
+        At_ref = ref[:, 2] .+ 1im .* ref[:, 3]   # sqrt(W)
 
-        T0   = 100e-15
-        P0   = abs(BETA2) / (GAMMA * T0^2)
-        L    = 0.4    # same as Scenario 1
+        T0 = 100e-15
+        P0 = abs(BETA2) / (GAMMA * T0^2)
+        L = 0.4    # same as Scenario 1
 
-        grid   = create_grid(N_PTS, T_WIN, LAM0)
+        grid = create_grid(N_PTS, T_WIN, LAM0)
         medium = Medium(L, GAMMA, 0.0, [BETA2], LAM0)
-        pulse  = sech_pulse(grid, P0, 2 * log(1 + sqrt(2)) * T0)
-        params = SimParams(; medium=medium, z_saves=2,
-                           raman_model=nothing, self_steepening=false,
-                           rtol=1e-8, atol=1e-10)
+        pulse = sech_pulse(grid, P0, 2 * log(1 + sqrt(2)) * T0)
+        params = SimParams(;
+            medium=medium,
+            z_saves=2,
+            raman_model=nothing,
+            self_steepening=false,
+            rtol=1e-8,
+            atol=1e-10,
+        )
         sol = solve(pulse, params; progress=false)
 
         At_julia = sol.At[:, end]
 
         # Normalized cross-correlation must be >= 0.999
-        xcorr = abs(dot(At_julia, At_ref))^2 /
-                (sum(abs2, At_julia) * sum(abs2, At_ref))
+        xcorr = abs(dot(At_julia, At_ref))^2 / (sum(abs2, At_julia) * sum(abs2, At_ref))
         @test xcorr >= 0.999
     end
-
 
     # ─────────────────────────────────────────────────────────────────────────
     # Scenario 6 — Vectorial / Birefringent Coupled GNLSE (Soliton Trapping & Walk-off)
@@ -265,14 +280,20 @@ end
             TaylorDispersion([-21.5e-27], 0.5e-12),  # beta2_x, beta1_x (+0.5 ps/m)
             TaylorDispersion([-21.5e-27], -0.5e-12), # beta2_y, beta1_y (-0.5 ps/m)
             0.0,        # deltabeta0
-            lam0
+            lam0,
         )
 
         pulse_x = sech_pulse(grid, 500.0, 1.0e-12)
         pulse_y = sech_pulse(grid, 500.0, 1.0e-12)
         vec_pulse = VectorialPulse(pulse_x.At, pulse_y.At, grid)
 
-        params = SimParams(; medium=bmed, z_saves=2, solver=SSFM(1e-4), raman_model=nothing, self_steepening=false)
+        params = SimParams(;
+            medium=bmed,
+            z_saves=2,
+            solver=SSFM(1e-4),
+            raman_model=nothing,
+            self_steepening=false,
+        )
 
         sol = solve(vec_pulse, params; progress=false)
 
@@ -290,6 +311,4 @@ end
         @test isapprox(maximum(abs2.(Ax_julia)), maximum(Ax_int); rtol=0.05)
         @test isapprox(maximum(abs2.(Ay_julia)), maximum(Ay_int); rtol=0.05)
     end
-
 end
-
