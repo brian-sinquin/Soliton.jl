@@ -4,8 +4,8 @@ authors:
   - family-names: "Sinquin"
     given-names: "Brian"
 title: "Soliton.jl: A Julia package for solving the Generalized Nonlinear Schrödinger Equation"
-version: 0.2.0
-date-released: 2026-08-02
+version: 0.2.1
+date-released: 2026-08-03
 url: "https://github.com/brian-sinquin/Soliton.jl"
 repository-code: "https://github.com/brian-sinquin/Soliton.jl"
 license: MIT
