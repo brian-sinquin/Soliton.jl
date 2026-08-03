@@ -1,18 +1,18 @@
 ```@meta
-CurrentModule = GNLSE
+CurrentModule = Soliton
 ```
 
 ```@docs
-GNLSE
+Soliton
 ```
 
-# GNLSE.jl
+# Soliton.jl
 
 *Generalized Nonlinear Schrödinger Equation solver in Julia*
 
 ---
 
-**GNLSE.jl** is a high-performance Julia package for simulating the propagation of ultrashort optical pulses in nonlinear dispersive media such as optical fibers, waveguides, and birefringent media.
+**Soliton.jl** is a high-performance Julia package for simulating the propagation of ultrashort optical pulses in nonlinear dispersive media such as optical fibers, waveguides, and birefringent media.
 
 It implements the **Generalized Nonlinear Schrödinger Equation (GNLSE)** in natural SI units, with a rich physical model and a modern, composable API.
 
@@ -43,18 +43,18 @@ It implements the **Generalized Nonlinear Schrödinger Equation (GNLSE)** in nat
 
 ```julia
 using Pkg
-Pkg.add("GNLSE")
+Pkg.add("Soliton")
 ```
 
 Or from the GitHub repository:
 ```julia
-Pkg.add(url="https://github.com/brian-sinquin/GNLSE.jl")
+Pkg.add(url="https://github.com/brian-sinquin/Soliton.jl")
 ```
 
 ## Quick Start
 
 ```julia
-using GNLSE
+using Soliton
 
 # 1. Define time-frequency grid
 grid = create_grid(2^13, 12.5e-12, 835e-9)

@@ -1,6 +1,6 @@
-# Contributing to GNLSE.jl
+# Contributing to Soliton.jl
 
-Contributions to GNLSE.jl are welcome. Please follow these simple guidelines to ensure a smooth process.
+Contributions to Soliton.jl are welcome. Please follow these simple guidelines to ensure a smooth process.
 
 ## Development Workflow
 
@@ -36,4 +36,4 @@ Contributions to GNLSE.jl are welcome. Please follow these simple guidelines to 
 - **Tests**: Include tests for new features or bug fixes in the `test/` directory.
 - **Pull Requests**: Keep pull requests focused on a single change. Provide a clear description of the modifications.
 
-Thank you for helping improve GNLSE.jl.
+Thank you for helping improve Soliton.jl.

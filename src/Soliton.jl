@@ -1,5 +1,5 @@
 """
-    GNLSE
+    Soliton
 
 Numerical solver for the Generalized Nonlinear Schrödinger Equation (GNLSE) following
 gnlse-python conventions for optical pulse propagation in nonlinear dispersive media.
@@ -32,7 +32,7 @@ Natural SI units throughout:
 # Usage
 
 ```julia
-using GNLSE
+using Soliton
 
 # Define grid (natural SI units)
 grid = create_grid(2^13, 12.5e-12, 835e-9)  # resolution, time_window [s], λ [m]
@@ -67,7 +67,7 @@ solution = solve(pulse, params)
 Adapted from gnlse-python (https://github.com/WUST-FOG/gnlse-python)
 G. P. Agrawal, "Nonlinear Fiber Optics" (Academic Press, 2019)
 """
-module GNLSE
+module Soliton
 
 using FFTW
 using LinearAlgebra

@@ -39,7 +39,7 @@ disp_fast = TaylorDispersion([-21.5e-27], 1.0e-10)   # y axis: 100 fs/mm walk-of
 When you have measured ``\beta(\omega)`` data from your waveguide characterization:
 
 ```julia
-using GNLSE
+using Soliton
 
 # Relative frequencies [rad/s] and corresponding β(ω) [1/m]
 detuning = range(-5e13, 5e13; length=201)

@@ -1,5 +1,5 @@
 using Test
-using GNLSE
+using Soliton
 
 @testset "Commercial Fiber Library and Glass Presets" begin
     @testset "Glass Refractive Index Presets" begin

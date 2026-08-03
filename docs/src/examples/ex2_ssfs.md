@@ -33,7 +33,7 @@ We propagate a fundamental sech² soliton (N = 1) over 10 soliton periods and tr
 spectral centroid to directly observe the red-shift.
 
 ```@example ex2
-using GNLSE
+using Soliton
 
 # ─── Fiber parameters (standard telecom SMF-like) ───────────────────────────
 lambda0 = 1550e-9       # [m] center wavelength

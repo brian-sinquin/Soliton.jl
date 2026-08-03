@@ -1,5 +1,5 @@
 using Test
-using GNLSE
+using Soliton
 
 @testset verbose = true "API" begin
     @testset "Medium" begin

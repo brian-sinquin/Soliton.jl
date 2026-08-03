@@ -17,7 +17,7 @@ Here, we sweep input peak power $P_0$ from **$100\text{ W}$ to $5\text{ kW}$** a
 ## 💻 Julia Implementation
 
 ```@example ex10
-using GNLSE
+using Soliton
 using FFTW
 using Base.Threads
 

@@ -1,4 +1,4 @@
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
-GNLSE = "de7fb3a1-4e7f-4e82-aee4-7ca52755e5ed"
+Soliton = "de7fb3a1-4e7f-4e82-aee4-7ca52755e5ed"

@@ -25,7 +25,7 @@ Each example in **GNLSE.jl** reproduces a key result from the nonlinear optics l
 
 ### 1. Standard Scalar GNLSE (Photonic Crystal Fiber)
 ```julia
-using GNLSE, Plots
+using Soliton, Plots
 
 medium = commercial_fiber("NKT_NL_PM_750", length=0.15) # 15 cm fiber
 grid   = create_grid(2^13, 12.5e-12, medium.lambda0)
@@ -36,7 +36,7 @@ plot(sol) # Dashboard visualization
 
 ### 2. Birefringent Coupled Vectorial GNLSE
 ```julia
-using GNLSE
+using Soliton
 
 grid   = create_grid(2^12, 50e-12, 1550e-9)
 disp_x = TaylorDispersion([-21.5e-27], 0.0)
@@ -50,7 +50,7 @@ vsol   = solve(vpulse, SimParams(; medium=medium, solver=SSFM(1e-3), raman_model
 
 ### 3. Active EDFA Fiber Amplifier
 ```julia
-using GNLSE
+using Soliton
 
 grid   = create_grid(2^13, 10e-12, 1550e-9)
 pulse  = gaussian_pulse(grid, 50.0, 100e-15)
@@ -60,7 +60,7 @@ sol    = solve(pulse, SimParams(; medium=edfa, raman_model=nothing))
 
 ### 4. Gas-Filled Hollow-Core PCF
 ```julia
-using GNLSE
+using Soliton
 
 grid   = create_grid(2^13, 15e-12, 800e-9)
 pulse  = sech_pulse(grid, 50e3, 30e-15)
@@ -70,7 +70,7 @@ sol    = solve(pulse, SimParams(; medium=hcf, raman_model=nothing))
 
 ### 5. Silicon Nanowire (TPA & Free Carriers)
 ```julia
-using GNLSE
+using Soliton
 
 grid   = create_grid(2^12, 40e-12, 1550e-9)
 pulse  = gaussian_pulse(grid, 30.0, 2.0e-12)

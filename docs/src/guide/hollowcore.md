@@ -23,7 +23,7 @@ where $u_{01} \approx 2.40483$ is the fundamental $\text{HE}_{11}$ mode Bessel z
 ## 💻 Usage Example
 
 ```julia
-using GNLSE
+using Soliton
 
 grid = create_grid(2^13, 10e-12, 800e-9)
 pulse = gaussian_pulse(grid, 5000.0, 50e-15)

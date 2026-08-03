@@ -9,7 +9,7 @@ GNLSE provides a built-in catalog of commercial optical fibers (`FiberLibrary`) 
 Instead of manually constructing Taylor dispersion vectors and nonlinear coefficients, you can instantiate standard commercial fibers with a single call to [`commercial_fiber`](@ref):
 
 ```julia
-using GNLSE
+using Soliton
 
 # 1. Corning SMF-28e+ (Standard Telecom Fiber at 1550 nm)
 smf28 = commercial_fiber("Corning_SMF28", length=100.0)

@@ -1,5 +1,5 @@
 using BenchmarkTools
-using GNLSE
+using Soliton
 
 const SUITE = BenchmarkGroup()
 
@@ -55,10 +55,10 @@ model_vec = build_physics_model(grid, params_vssfm, vpulse.At)
 SUITE["operators"]["build_physics_model"] = @benchmarkable build_physics_model(
     $grid, $params_erk4ip, $(pulse.At)
 )
-SUITE["operators"]["spm_raman_eval"] = @benchmarkable GNLSE._spm_raman(
+SUITE["operators"]["spm_raman_eval"] = @benchmarkable Soliton._spm_raman(
     $(pulse.AW), $model_scalar, 0.025
 )
-SUITE["operators"]["vectorial_spm_fwm_eval"] = @benchmarkable GNLSE._vectorial_spm_fwm(
+SUITE["operators"]["vectorial_spm_fwm_eval"] = @benchmarkable Soliton._vectorial_spm_fwm(
     $(vpulse.At), $model_vec, 0.025
 )
 

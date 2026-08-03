@@ -32,7 +32,7 @@ We run an ensemble of M = 20 independent shots, each seeded with a different one
 quantum noise realization (`add_noise`), then compute the pairwise coherence estimator.
 
 ```@example ex3
-using GNLSE
+using Soliton
 using Statistics
 
 betas = [

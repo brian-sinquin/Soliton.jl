@@ -1,4 +1,4 @@
-using GNLSE
+using Soliton
 using Statistics
 using LinearAlgebra
 
@@ -44,7 +44,7 @@ function run_gnlse_benchmark()
     )
 
     # 5. Run (Warmup)
-    println("Warming up GNLSE...")
+    println("Warming up Soliton...")
     warmup_start = time_ns()
     solve(pulse, params; progress=false)
     warmup_end = time_ns()

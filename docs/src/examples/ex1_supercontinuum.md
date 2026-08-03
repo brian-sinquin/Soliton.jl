@@ -38,7 +38,7 @@ All dispersion coefficients from Dudley et al. (2006) Table 1:
 ## Julia Code
 
 ```@example ex1
-using GNLSE
+using Soliton
 
 # ─── PCF fiber (NKT NL-PM-750 commercial fiber preset) ─────────────────────
 # Matches the exact 9-term Taylor dispersion coefficients and gamma from

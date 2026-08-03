@@ -33,7 +33,7 @@ The N=3 soliton was the first experimentally observed higher-order soliton in an
 ## Simulation
 
 ```@example ex5
-using GNLSE
+using Soliton
 
 # ─── Corning SMF-28 telecom fiber ───────────────────────────────────────────
 medium = commercial_fiber("Corning_SMF28", length=100.0, lambda0=1550e-9)

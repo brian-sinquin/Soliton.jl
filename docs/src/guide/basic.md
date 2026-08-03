@@ -11,7 +11,7 @@ This guide walks through the fundamental workflow in GNLSE.jl step by step.
 All simulations start with a [`Grid`](@ref) — it defines the time and frequency axes:
 
 ```julia
-using GNLSE
+using Soliton
 
 # create_grid(N, time_window, lambda0)
 # N           — number of grid points (power of 2 recommended for FFT efficiency)
@@ -92,7 +92,7 @@ A [`Solution`](@ref) is returned:
 ## Full Example: Soliton Propagation
 
 ```julia
-using GNLSE
+using Soliton
 
 # Grid: 4096 points, 20 ps window, 1550 nm
 grid = create_grid(2^12, 20e-12, 1550e-9)

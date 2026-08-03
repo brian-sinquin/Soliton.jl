@@ -1,7 +1,7 @@
 using Test
 using FFTW
 using Random
-using GNLSE
+using Soliton
 
 @testset "Unit" begin
     @testset "Grid" begin

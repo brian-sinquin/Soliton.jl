@@ -85,7 +85,7 @@ Raman scattering produces several physically important effects:
 ### Example: Observing the Soliton Self-Frequency Shift
 
 ```julia
-using GNLSE
+using Soliton
 
 grid = create_grid(2^12, 20e-12, 1550e-9)
 

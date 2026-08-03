@@ -1,5 +1,5 @@
 using Test
-using GNLSE
+using Soliton
 
 # --- local measurement helpers -------------------------------------------
 

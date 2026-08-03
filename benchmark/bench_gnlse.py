@@ -10,7 +10,7 @@ T0 = 0.05 # ps
 P0 = 10000.0 # W
 
 # Setup grid and envelope
-setup = gnlse.GNLSESetup()
+setup = gnlse.SolitonSetup()
 setup.resolution = N
 setup.time_window = time_window
 setup.wavelength = lambda0
@@ -35,7 +35,7 @@ setup.nonlinearity = 0.11
 setup.pulse_model = gnlse.envelopes.SechEnvelope(Pmax=P0, FWHM=T0 * 1.763)
 
 # Model
-solver = gnlse.GNLSE(setup)
+solver = gnlse.Soliton(setup)
 
 print("Running gnlse-python benchmark...")
 start_time = time.time()

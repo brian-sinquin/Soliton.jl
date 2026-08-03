@@ -16,7 +16,7 @@ In sub-micron silicon photonic integrated circuits (PICs), intense optical pulse
 ## 💻 Julia Code
 
 ```@example ex8
-using GNLSE
+using Soliton
 
 grid = create_grid(2^12, 40e-12, 1550e-9)
 pulse = gaussian_pulse(grid, 1.5, 2.0e-12)  # 1.5 W -> ~65% transmission (30 W over-depletes to ~8%)

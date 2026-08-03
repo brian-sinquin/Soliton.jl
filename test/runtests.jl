@@ -1,7 +1,7 @@
 using Test
-using GNLSE
+using Soliton
 
-@testset verbose = true "GNLSE.jl" begin
+@testset verbose = true "Soliton.jl" begin
     include("test_unit.jl")
     include("test_api.jl")
     include("test_solvers.jl")

@@ -17,7 +17,7 @@ Point-like optical components between fiber segments are represented by [`Lumped
 | `Filter(f)` | Applies frequency-domain transfer function `f(ω)` |
 
 ```julia
-using GNLSE
+using Soliton
 
 amp      = Amplifier(20.0)         # +20 dB gain
 att      = Attenuator(3.0)         # −3 dB
@@ -38,7 +38,7 @@ When `SimParams` receives a `Pulse` as a callable argument, it propagates it and
 This enables the Julia `|>` pipe operator for clean multi-stage chains:
 
 ```julia
-using GNLSE
+using Soliton
 
 grid = create_grid(2^12, 20e-12, 1550e-9)
 pulse = sech_pulse(grid, 1000.0, 1e-12)
@@ -71,7 +71,7 @@ results = solve(pulse, stages)
 ## Example: Fiber Amplifier Chain
 
 ```julia
-using GNLSE
+using Soliton
 
 grid = create_grid(2^12, 20e-12, 1550e-9)
 pulse = gaussian_pulse(grid, 1.0, 10e-12)  # low power, 10 ps input
