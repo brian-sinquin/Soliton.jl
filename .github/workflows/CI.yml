@@ -73,6 +73,6 @@ jobs:
         shell: julia --project=docs --color=yes {0}
         run: |
           using Documenter: DocMeta, doctest
-          using GNLSE
-          DocMeta.setdocmeta!(GNLSE, :DocTestSetup, :(using GNLSE); recursive=true)
-          doctest(GNLSE)
+          using Soliton
+          DocMeta.setdocmeta!(Soliton, :DocTestSetup, :(using Soliton); recursive=true)
+          doctest(Soliton)
