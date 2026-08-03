@@ -1,4 +1,4 @@
-# 🚀 GNLSE Benchmark Results Summary
+# 🚀 Soliton Benchmark Results Summary
 
 | Benchmark Target | Median Time | Memory | Allocations | Comparison |
 | :--- | :--- | :--- | :--- | :--- |
