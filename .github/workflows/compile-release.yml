@@ -24,7 +24,7 @@ jobs:
             artifact_name: GNLSE_sysimage.dylib
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: julia-actions/setup-julia@v2
         with:
