@@ -109,7 +109,7 @@ Available keys:
 `FiberLibrary` is a plain `Dict{String, FiberSpec}` and can be extended at runtime:
 
 ```julia
-GNLSE.FiberLibrary[\"MyCustomFiber\"] = FiberSpec(
+Soliton.FiberLibrary[\"MyCustomFiber\"] = FiberSpec(
     \"My Fiber\", \"Lab\", \"Custom PCF\", 800e-9, 0.05, 0.001, TaylorDispersion([-5e-27])
 )
 medium = commercial_fiber(\"MyCustomFiber\"; length=0.1)
