@@ -1,6 +1,6 @@
 # Semiconductor Waveguides & Silicon Photonics
 
-GNLSE supports semiconductor optical waveguides ([`SemiconductorMedium`](@ref)) with Two-Photon Absorption (TPA) and Free-Carrier Dynamics (FCA, FCR, carrier lifetime $\tau_c$).
+Soliton supports semiconductor optical waveguides ([`SemiconductorMedium`](@ref)) with Two-Photon Absorption (TPA) and Free-Carrier Dynamics (FCA, FCR, carrier lifetime $\tau_c$).
 
 ---
 

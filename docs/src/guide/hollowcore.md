@@ -1,6 +1,6 @@
 # Gas-Filled Hollow-Core PCF & Molecular Raman
 
-GNLSE supports gas-filled Hollow-Core Photonic Crystal Fibers ([`HollowCoreFiber`](@ref)) and molecular gas Raman response models ([`MolecularRamanGas`](@ref)).
+Soliton supports gas-filled Hollow-Core Photonic Crystal Fibers ([`HollowCoreFiber`](@ref)) and molecular gas Raman response models ([`MolecularRamanGas`](@ref)).
 
 ---
 

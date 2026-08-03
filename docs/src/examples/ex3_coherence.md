@@ -1,5 +1,5 @@
 ```@meta
-CurrentModule = GNLSE
+CurrentModule = Soliton
 ```
 
 # Example 3: Supercontinuum Coherence
@@ -109,7 +109,7 @@ has time to amplify shot-to-shot noise differences.
 
 ## Quantum Noise Model
 
-GNLSE implements the standard Dudley & Coen quantum-noise seed:
+Soliton implements the standard Dudley & Coen quantum-noise seed:
 
 ```julia
 # One-photon-per-mode quantum noise (the default)

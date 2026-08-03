@@ -1,6 +1,6 @@
 # Examples Overview & Literature Benchmarks
 
-Each example in **GNLSE.jl** reproduces a key result from the nonlinear optics literature, providing exact parameters to match published figures and experimental data. All quantities are specified in natural SI units.
+Each example in **Soliton.jl** reproduces a key result from the nonlinear optics literature, providing exact parameters to match published figures and experimental data. All quantities are specified in natural SI units.
 
 ---
 

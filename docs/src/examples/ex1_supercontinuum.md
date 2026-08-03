@@ -1,5 +1,5 @@
 ```@meta
-CurrentModule = GNLSE
+CurrentModule = Soliton
 ```
 
 # Example 1: Supercontinuum Generation in a PCF

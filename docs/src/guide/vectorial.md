@@ -1,10 +1,10 @@
 ```@meta
-CurrentModule = GNLSE
+CurrentModule = Soliton
 ```
 
 # Birefringent & Vectorial Propagation
 
-GNLSE.jl supports the simulation of birefringent fibers and waveguides through the **Coupled GNLSE** — propagating two orthogonal polarization components simultaneously.
+Soliton.jl supports the simulation of birefringent fibers and waveguides through the **Coupled GNLSE** — propagating two orthogonal polarization components simultaneously.
 
 ## When to Use the Vectorial Solver
 

@@ -1,10 +1,10 @@
 ```@meta
-CurrentModule = GNLSE
+CurrentModule = Soliton
 ```
 
 # Dispersion Models
 
-GNLSE.jl provides three ways to specify the chromatic dispersion of your waveguide.
+Soliton.jl provides three ways to specify the chromatic dispersion of your waveguide.
 
 ## Taylor Expansion
 

@@ -1,6 +1,6 @@
 # Active Amplifying Fibers (EDFA / YDFA / TDFA)
 
-GNLSE supports rare-earth active amplifying fibers ([`AmplifyingMedium`](@ref)) with dynamic gain saturation and Amplified Spontaneous Emission (ASE) quantum noise.
+Soliton supports rare-earth active amplifying fibers ([`AmplifyingMedium`](@ref)) with dynamic gain saturation and Amplified Spontaneous Emission (ASE) quantum noise.
 
 ---
 

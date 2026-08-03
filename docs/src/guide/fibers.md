@@ -1,6 +1,6 @@
 # Commercial Fiber Library & Glass Presets
 
-GNLSE provides a built-in catalog of commercial optical fibers (`FiberLibrary`) and standard optical glass Sellmeier dispersion models (`RefractiveIndex.io` database parameters).
+Soliton provides a built-in catalog of commercial optical fibers (`FiberLibrary`) and standard optical glass Sellmeier dispersion models (`RefractiveIndex.io` database parameters).
 
 ---
 
@@ -43,7 +43,7 @@ custom_smf = commercial_fiber("Corning_SMF28", length=50.0, lambda0=1310e-9, los
 
 ## 🧪 Glass Refractive Index Presets (`RefractiveIndex.io`)
 
-GNLSE provides standard Sellmeier dispersion models derived from the `RefractiveIndex.io` database:
+Soliton provides standard Sellmeier dispersion models derived from the `RefractiveIndex.io` database:
 
 - [`FusedSilica()`](@ref): Pure fused silica glass ($0.21 - 3.71\,\mu\text{m}$, Malitson 1965).
 - [`SF6()`](@ref): Schott SF6 heavy flint glass.

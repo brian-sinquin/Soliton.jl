@@ -1,10 +1,10 @@
 ```@meta
-CurrentModule = GNLSE
+CurrentModule = Soliton
 ```
 
 # Basic Usage Guide
 
-This guide walks through the fundamental workflow in GNLSE.jl step by step.
+This guide walks through the fundamental workflow in Soliton.jl step by step.
 
 ## Step 1: Create a Time–Frequency Grid
 

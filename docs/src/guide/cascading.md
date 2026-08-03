@@ -1,10 +1,10 @@
 ```@meta
-CurrentModule = GNLSE
+CurrentModule = Soliton
 ```
 
 # Cascaded Propagation & Piping
 
-GNLSE.jl supports fluent multi-stage simulation pipelines using Julia's native `|>` operator.
+Soliton.jl supports fluent multi-stage simulation pipelines using Julia's native `|>` operator.
 
 ## Lumped Elements
 

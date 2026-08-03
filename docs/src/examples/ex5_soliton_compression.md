@@ -1,5 +1,5 @@
 ```@meta
-CurrentModule = GNLSE
+CurrentModule = Soliton
 ```
 
 # Example 5: Higher-Order Soliton Compression

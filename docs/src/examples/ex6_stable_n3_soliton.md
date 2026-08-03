@@ -1,5 +1,5 @@
 ```@meta
-CurrentModule = GNLSE
+CurrentModule = Soliton
 ```
 
 # Example 6: Stable 3rd-Order Soliton (Akhmediev Recurrence)
