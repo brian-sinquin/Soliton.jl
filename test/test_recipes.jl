@@ -1,5 +1,5 @@
 using Test
-using GNLSE
+using Soliton
 using Plots
 
 @testset "Plot Recipes" begin

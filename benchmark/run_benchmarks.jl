@@ -10,7 +10,7 @@ using Printf
 include("benchmarks.jl")
 
 println("=========================================================")
-println("  GNLSE Performance Benchmark Suite")
+println("  Soliton Performance Benchmark Suite")
 println("=========================================================")
 
 # Tune and run benchmark suite
@@ -71,7 +71,7 @@ baseline_dict = isfile(baseline_path) ? JSON.parsefile(baseline_path) : nothing
 println("\n[3/3] Generating summary report...")
 
 summary_io = IOBuffer()
-println(summary_io, "# 🚀 GNLSE Benchmark Results Summary\n")
+println(summary_io, "# 🚀 Soliton Benchmark Results Summary\n")
 println(
     summary_io, "| Benchmark Target | Median Time | Memory | Allocations | Comparison |"
 )

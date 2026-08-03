@@ -1,5 +1,5 @@
 using Test
-using GNLSE
+using Soliton
 using DelimitedFiles
 using LinearAlgebra
 

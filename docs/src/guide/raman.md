@@ -1,10 +1,10 @@
 ```@meta
-CurrentModule = GNLSE
+CurrentModule = Soliton
 ```
 
 # Raman Scattering Models
 
-Raman scattering introduces a delayed, frequency-dependent nonlinear response that is important for pulses shorter than ~1 ps. GNLSE.jl provides three validated models for fused-silica fibers.
+Raman scattering introduces a delayed, frequency-dependent nonlinear response that is important for pulses shorter than ~1 ps. Soliton.jl provides three validated models for fused-silica fibers.
 
 ## Choosing a Raman Model
 
@@ -85,7 +85,7 @@ Raman scattering produces several physically important effects:
 ### Example: Observing the Soliton Self-Frequency Shift
 
 ```julia
-using GNLSE
+using Soliton
 
 grid = create_grid(2^12, 20e-12, 1550e-9)
 

@@ -1,5 +1,5 @@
 using Test
-using GNLSE
+using Soliton
 
 @testset "Wavelength & z-Dependent Loss and Gain Models" begin
     grid = create_grid(2^10, 10e-12, 1550e-9)

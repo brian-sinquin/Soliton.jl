@@ -1,5 +1,5 @@
 ```@meta
-CurrentModule = GNLSE
+CurrentModule = Soliton
 ```
 
 # Example 3: Supercontinuum Coherence
@@ -32,7 +32,7 @@ We run an ensemble of M = 20 independent shots, each seeded with a different one
 quantum noise realization (`add_noise`), then compute the pairwise coherence estimator.
 
 ```@example ex3
-using GNLSE
+using Soliton
 using Statistics
 
 betas = [
@@ -109,7 +109,7 @@ has time to amplify shot-to-shot noise differences.
 
 ## Quantum Noise Model
 
-GNLSE implements the standard Dudley & Coen quantum-noise seed:
+Soliton implements the standard Dudley & Coen quantum-noise seed:
 
 ```julia
 # One-photon-per-mode quantum noise (the default)

@@ -1,5 +1,5 @@
 """
-Optics units & conversion utilities for GNLSE.jl.
+Optics units & conversion utilities for Soliton.jl.
 """
 
 """

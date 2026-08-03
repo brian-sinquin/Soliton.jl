@@ -1,5 +1,5 @@
 using Test
-using GNLSE
+using Soliton
 
 @testset "Optics Units Conversions & Soliton Tracker" begin
     @testset "Dispersion D <-> beta2 conversion" begin

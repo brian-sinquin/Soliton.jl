@@ -1,10 +1,10 @@
 ```@meta
-CurrentModule = GNLSE
+CurrentModule = Soliton
 ```
 
 # Physics Background
 
-This page summarizes the physical models implemented in GNLSE.jl.
+This page summarizes the physical models implemented in Soliton.jl.
 
 ## The Generalized Nonlinear Schrödinger Equation
 

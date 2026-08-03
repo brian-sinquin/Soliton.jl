@@ -1,10 +1,10 @@
 ```@meta
-CurrentModule = GNLSE
+CurrentModule = Soliton
 ```
 
 # Wavelength-Dependent Nonlinearity
 
-GNLSE.jl supports three levels of nonlinearity specification:
+Soliton.jl supports three levels of nonlinearity specification:
 
 ## 1. Constant Nonlinearity
 

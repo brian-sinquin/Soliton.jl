@@ -1,15 +1,15 @@
-using GNLSE
+using Soliton
 using Documenter
 
-DocMeta.setdocmeta!(GNLSE, :DocTestSetup, :(using GNLSE); recursive=true)
+DocMeta.setdocmeta!(Soliton, :DocTestSetup, :(using Soliton); recursive=true)
 
 makedocs(;
-    modules=[GNLSE],
+    modules=[Soliton],
     authors="Brian Sinquin <148503669+brian-sinquin@users.noreply.github.com> and contributors",
-    sitename="GNLSE.jl",
+    sitename="Soliton.jl",
     checkdocs=:exports,
     format=Documenter.HTML(;
-        canonical="https://brian-sinquin.github.io/GNLSE.jl",
+        canonical="https://brian-sinquin.github.io/Soliton.jl",
         edit_link="master",
         assets=String[],
         mathengine=Documenter.MathJax3(),
@@ -74,7 +74,7 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/brian-sinquin/GNLSE.jl",
+    repo="github.com/brian-sinquin/Soliton.jl",
     devbranch="master",
     push_preview=true,
     # Default is ["stable" => "v^", "v#.#"], which collapses releases into a

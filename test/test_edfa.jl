@@ -1,5 +1,5 @@
 using Test
-using GNLSE
+using Soliton
 using Random
 
 @testset "Active Amplifying Fiber Dynamics (EDFA/YDFA/TDFA)" begin

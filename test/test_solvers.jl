@@ -1,5 +1,5 @@
 using Test
-using GNLSE
+using Soliton
 
 @testset "Solvers" begin
     @testset "Solution structure" begin

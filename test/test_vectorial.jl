@@ -1,5 +1,5 @@
 using Test
-using GNLSE
+using Soliton
 
 @testset "Vectorial/Birefringent Coupled Solver" begin
     @testset "Type validation" begin

@@ -1,10 +1,10 @@
 ```@meta
-CurrentModule = GNLSE
+CurrentModule = Soliton
 ```
 
 # Noise and Stochastic Modeling
 
-GNLSE provides a comprehensive suite of tools for modeling noise in optical systems, spanning from fundamental quantum vacuum fluctuations to classical laser noise and random birefringence (Polarization Mode Dispersion).
+Soliton provides a comprehensive suite of tools for modeling noise in optical systems, spanning from fundamental quantum vacuum fluctuations to classical laser noise and random birefringence (Polarization Mode Dispersion).
 
 These tools are designed to support ensemble simulations, where multiple independent realizations of a noisy system are computed to extract statistical properties like spectral coherence.
 
