@@ -53,7 +53,7 @@ jobs:
           include(joinpath(pwd(), "deps", "build_sysimage.jl"))
 
       - name: Upload Binary Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sysimage-${{ matrix.os }}
           path: ${{ matrix.artifact_name }}
