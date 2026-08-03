@@ -8,6 +8,7 @@ version: 0.2.1
 date-released: 2026-08-03
 url: "https://github.com/brian-sinquin/Soliton.jl"
 repository-code: "https://github.com/brian-sinquin/Soliton.jl"
+doi: "10.5281/zenodo.21779368"
 license: MIT
 keywords:
   - julia

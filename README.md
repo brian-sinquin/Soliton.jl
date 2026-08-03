@@ -3,6 +3,7 @@
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://brian-sinquin.github.io/Soliton.jl/stable/)
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://brian-sinquin.github.io/Soliton.jl/dev/)
 [![Build status](https://github.com/brian-sinquin/Soliton.jl/actions/workflows/CI.yml/badge.svg?branch=master)](https://github.com/brian-sinquin/Soliton.jl/actions/workflows/CI.yml)
+[![DOI](https://zenodo.org/badge/doi/10.5281/zenodo.21779368.svg)](https://doi.org/10.5281/zenodo.21779368)
 
 Soliton.jl is a Julia package for solving the Generalized Nonlinear Schrödinger Equation (GNLSE). It is designed to model the propagation of optical pulses in nonlinear media, such as optical fibers, with a focus on performance and numerical stability.
 
