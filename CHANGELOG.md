@@ -4,6 +4,19 @@ All notable changes to Soliton.jl are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased] — `second-order` branch
+
+### Added
+
+- **Second-order (χ⁽²⁾) nonlinearity — Phase 1 (`SecondOrderMedium`)** ([src/types.jl](src/types.jl), [src/nonlinearity.jl](src/nonlinearity.jl)): coupled fundamental + second-harmonic envelope propagation for SHG/SFG/DFG/degenerate-OPA, following the classical coupled-mode formalism (see `ROADMAP.md` for the phased plan; Phase 2 will add the unified broadband χ⁽²⁾+χ⁽³⁾ model from T. Voumard et al., *APL Photonics* **8**, 036114 (2023)).
+  - New types `SecondOrderMedium`, `SecondOrderPulse`, `SecondOrderSolution`, and a shared `CoupledPulse <: AbstractPulse` abstract type (also now the supertype of `VectorialPulse`) so the existing coupled-field SSFM propagator serves both without duplication.
+  - Coupled equations use a single real, power-normalized coupling `kappa` [1/(√W·m)] in both the fundamental and SH equations, which by construction conserves total power exactly in the lossless case (Manley-Rowe).
+  - Quasi-phase-matching via an idealized period-`poling_period` sign-flipping `kappa(z)`.
+  - Validated against **exact closed-form physics** rather than internal-only regression tests: undepleted-pump `sinc²(Δk₀L/2)` scaling, the exact depleted-pump `tanh²(κ√P₁(0)z)` SHG conversion formula (through >75% depletion), and Manley-Rowe power conservation at multiple phase mismatches — 31 new tests in `test/test_second_order.jl`.
+  - New guide page `docs/src/guide/second_order.md`.
+  - New example `docs/src/examples/ex13_ppln_shg.md`: PPLN waveguide SHG simulation with literature-realistic parameters (Fejer et al. 1992; Parameswaran et al. 2002), demonstrating why periodic poling is needed (natural LN phase mismatch vs. QPM-poled vs. ideal), the depleted-pump `tanh²` conversion curve, and the `sinc²` QPM acceptance bandwidth.
+  - New example `docs/src/examples/ex14_opcpa.md`: degenerate optical parametric chirped-pulse amplification (OPCPA) — the SHG coupled equations run with a strong pump and weak signal, deriving and validating the exact `cosh(2gL)` small-signal parametric gain formula, then demonstrating a full stretch → amplify → recompress CPA cycle on a chirped pulse, including the realistic residual gain-narrowing effect on the recompressed pulse duration.
+
 ## [Unreleased] — `three-photon-absorption` branch
 
 ### Added

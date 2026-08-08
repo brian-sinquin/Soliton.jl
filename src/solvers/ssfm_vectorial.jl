@@ -4,16 +4,20 @@ using LinearAlgebra: mul!
 using ProgressMeter: Progress, update!
 
 import ..build_physics_model, ..PhysicsModel
-import ..SSFM, ..propagate, ..VectorialPulse, ..SimParams
+import ..SSFM, ..propagate, ..CoupledPulse, ..SimParams
 
 """
-    propagate(model::PhysicsModel, pulse::VectorialPulse, params::SimParams, solver::SSFM, progress::Bool)
+    propagate(model::PhysicsModel, pulse::CoupledPulse, params::SimParams, solver::SSFM, progress::Bool)
 
-Propagate a `VectorialPulse` using the fixed-step Symmetric Split-Step Fourier Method (SSFM) for Coupled GNLSE.
+Propagate any two-field [`CoupledPulse`](@ref) (`VectorialPulse` or
+`SecondOrderPulse`) using the fixed-step Symmetric Split-Step Fourier Method
+(SSFM). The nonlinear coupling itself is entirely determined by
+`model.nonlinear_function` (`_vectorial_spm_fwm`, `_second_order_spm`, ...); this
+propagator is generic over any `N × 2` coupled-field system.
 """
 function propagate(
     model::PhysicsModel,
-    pulse::VectorialPulse,
+    pulse::CoupledPulse,
     params::SimParams,
     solver::SSFM,
     progress::Bool,
@@ -41,7 +45,7 @@ function propagate(
 
     # Progress bar setup
     prog =
-        progress ? Progress(n_saves - 1; desc="Vectorial SSFM... ", color=:blue) : nothing
+        progress ? Progress(n_saves - 1; desc="Coupled SSFM... ", color=:blue) : nothing
 
     # Target save points
     save_points = range(0.0, z_end; length=n_saves)

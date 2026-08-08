@@ -324,7 +324,7 @@ kept in mind when comparing quantitatively against an experiment:
     self-steepening correction is physically tied to the frequency dependence of the
     bound-electron (χ⁽³⁾/χ⁽⁵⁾) polarization response near ω₀. Free-carrier plasma
     effects (FCA, FCR) are a separate, slowly-varying process and are propagated
-    without shock weighting (see [`_semiconductor_spm`](@ref)).
+    without shock weighting (see `_semiconductor_spm` in `src/nonlinearity.jl`).
   - **Partial independent package cross-validation**: TPA *is* validated against an
     external package — `gnlse-python`'s Kerr-only nonlinear step accepts a complex
     `nonlinearity` value (`γ_r + i·α₂/(2·Aeff)`), which reproduces the TPA field equation
@@ -634,6 +634,18 @@ end
 Abstract base type for optical pulses.
 """
 abstract type AbstractPulse end
+
+"""
+    CoupledPulse
+
+Abstract base type for pulses carrying two coupled envelope components as an
+`N × 2` matrix (`At`/`AW`) on a shared time-frequency grid — e.g.
+[`VectorialPulse`](@ref) (orthogonal polarizations) or [`SecondOrderPulse`](@ref)
+(fundamental + second harmonic). Solvers that operate generically on any
+two-field coupled system (currently `SSFM`; see `src/solvers/ssfm_vectorial.jl`)
+dispatch on this type rather than the two concrete subtypes individually.
+"""
+abstract type CoupledPulse <: AbstractPulse end
 
 """
     Pulse{T<:Complex}
@@ -974,7 +986,7 @@ Two-component (orthogonal polarization) optical pulse envelope in time and frequ
   - `AW::Matrix{ComplexF64}`: Frequency domain envelope matrix of size `N × 2` [√W·s]
   - `grid::Grid`: Associated time-frequency grid
 """
-struct VectorialPulse <: AbstractPulse
+struct VectorialPulse <: CoupledPulse
     At::Matrix{ComplexF64} # N x 2
     AW::Matrix{ComplexF64} # N x 2
     grid::Grid
@@ -1057,6 +1069,269 @@ function Base.show(io::IO, s::VectorialSolution)
     print(
         io,
         "VectorialSolution(",
+        length(s.Z),
+        " saves over ",
+        round(s.Z[end]; sigdigits=4),
+        " m, N=",
+        size(s.At, 1),
+        ")",
+    )
+end
+
+# ===========================================================================
+# Second-Order (χ⁽²⁾) Nonlinearity Support
+# ===========================================================================
+
+"""
+    SecondOrderMedium(; length, kappa, betas_fund, betas_sh, deltak0, poling_period=0.0,
+                     loss_fund=0.0, loss_sh=0.0, lambda0)
+
+Coupled-envelope χ⁽²⁾ (second-order) nonlinear medium for second-harmonic
+generation (SHG), sum-/difference-frequency generation, and (degenerate) optical
+parametric amplification. Propagates two envelopes on the same time grid: the
+fundamental `A₁` at ω₀ and the second harmonic `A₂` at 2ω₀ (Phase 1 of the
+second-order-nonlinearity roadmap — see `ROADMAP.md`; this is the classical
+two-envelope coupled-mode model, not the unified broadband χ⁽²⁾+χ⁽³⁾ model of
+T. Voumard et al., *APL Photonics* **8**, 036114 (2023), planned for Phase 2).
+
+# Fields
+
+  - `length::T`: Waveguide length [m]
+  - `kappa::T`: Normalized χ⁽²⁾ coupling coefficient κ [1/(√W·m)]. This is the
+    standard normalized SHG/SFG coupling constant (see e.g. Suhara & Fujimura,
+    *Waveguide Nonlinear-Optic Devices*): `κ = (ω₀·d_eff)/(n·c) · √(2/(ε₀·c·n·Aeff))`
+    up to the convention-dependent prefactor of the source formula — pass the
+    value directly rather than re-deriving `d_eff`/`Aeff`/`n` internally, exactly
+    as `gamma` is a direct lumped coefficient for Kerr media.
+  - `dispersion_fund::DispersionModel`: Dispersion model for the fundamental
+    branch, expanded around ω₀ (its own `β₁, β₂, …`, no `β₀` term — see `deltak0`).
+  - `dispersion_sh::DispersionModel`: Dispersion model for the second-harmonic
+    branch, expanded around 2ω₀.
+  - `deltak0::T`: Phase mismatch Δk₀ = β₀(2ω₀) − 2β₀(ω₀) [1/m]. Not derivable from
+    `dispersion_fund`/`dispersion_sh` (which intentionally omit β₀, following the
+    rest of the package's interaction-picture convention) — supply it directly,
+    exactly as `BirefringentMedium`'s `deltabeta0` is supplied directly.
+  - `poling_period::T`: Periodic-poling (QPM) period [m]. `0.0` (default) disables
+    poling (uniform `κ`, appropriate for birefringent- or naturally-phase-matched
+    devices); a positive value applies a period-`poling_period` sign-flipping
+    square-wave modulation to `κ(z)`.
+  - `loss_fund::T`, `loss_sh::T`: Linear attenuation [dB/m] for each branch.
+  - `lambda0::T`: Fundamental center wavelength [m] (the second harmonic is at
+    `lambda0/2`).
+
+# Physics
+
+```math
+\\frac{\\partial A_1}{\\partial z} = i\\hat D_1 A_1 + i\\kappa(z)\\, A_2 A_1^{*}\\, e^{-i\\Delta k_0 z}
+```
+```math
+\\frac{\\partial A_2}{\\partial z} = i\\hat D_2 A_2 + i\\kappa(z)\\, A_1^{2}\\, e^{+i\\Delta k_0 z}
+```
+
+with `κ` real and identical in both equations, which by construction conserves
+total power `P₁+P₂` exactly for `loss_fund=loss_sh=0` (Manley-Rowe / photon-number
+conservation — 2 photons at ω₀ convert to 1 photon at 2ω₀, so no factor of 2 needed
+between the two equations). At perfect phase matching (`Δk₀=0`, undepleted-pump
+regime `|A₂| ≪ |A₁|`), this reduces to the classic `sinc²` SHG conversion curve;
+in the fully depleted regime it reduces to the exact `tanh²(κ√P₁(0)·z)` SHG
+conversion efficiency.
+
+# Known Limitations (Phase 1)
+
+  - χ⁽³⁾ (Kerr/Raman) is not modeled simultaneously on either branch — pure χ⁽²⁾
+    only. Simultaneous χ⁽²⁾+χ⁽³⁾ (needed for cascaded-nonlinearity supercontinuum)
+    is deferred to Phase 2.
+  - Self-steepening is not applied to the χ⁽²⁾ coupling term.
+  - QPM is modeled as an idealized square-wave `κ(z)`, not first-order-Fourier-
+    reduced (i.e. no `2/π` QPM efficiency derating is applied — pass an
+    already-derated `kappa` if that correction is desired).
+"""
+struct SecondOrderMedium{T <: Real} <: AbstractMedium
+    length::T
+    kappa::T
+    dispersion_fund::DispersionModel
+    dispersion_sh::DispersionModel
+    deltak0::T
+    poling_period::T
+    loss_fund::T
+    loss_sh::T
+    lambda0::T
+
+    function SecondOrderMedium(
+        length::T,
+        kappa::T,
+        dispersion_fund::DispersionModel,
+        dispersion_sh::DispersionModel,
+        deltak0::T,
+        poling_period::T,
+        loss_fund::T,
+        loss_sh::T,
+        lambda0::T,
+    ) where {T <: Real}
+        length > 0 || throw(ArgumentError("Waveguide length must be positive"))
+        poling_period >= 0 ||
+            throw(ArgumentError("poling_period must be non-negative (0 disables QPM)"))
+        loss_fund >= 0 || throw(ArgumentError("loss_fund must be non-negative"))
+        loss_sh >= 0 || throw(ArgumentError("loss_sh must be non-negative"))
+        lambda0 > 0 || throw(ArgumentError("Center wavelength must be positive"))
+        new{T}(
+            length,
+            kappa,
+            dispersion_fund,
+            dispersion_sh,
+            deltak0,
+            poling_period,
+            loss_fund,
+            loss_sh,
+            lambda0,
+        )
+    end
+end
+
+function SecondOrderMedium(;
+    length::Real,
+    kappa::Real,
+    betas_fund::Union{AbstractVector{<:Real}, Nothing}=nothing,
+    dispersion_fund::Union{DispersionModel, Nothing}=nothing,
+    beta1_fund::Real=0.0,
+    betas_sh::Union{AbstractVector{<:Real}, Nothing}=nothing,
+    dispersion_sh::Union{DispersionModel, Nothing}=nothing,
+    beta1_sh::Real=0.0,
+    deltak0::Real,
+    poling_period::Real=0.0,
+    loss_fund::Real=0.0,
+    loss_sh::Real=0.0,
+    lambda0::Real,
+)
+    (betas_fund === nothing) ⊻ (dispersion_fund === nothing) ||
+        throw(ArgumentError("provide exactly one of `betas_fund` or `dispersion_fund`"))
+    (betas_sh === nothing) ⊻ (dispersion_sh === nothing) ||
+        throw(ArgumentError("provide exactly one of `betas_sh` or `dispersion_sh`"))
+    disp_fund =
+        dispersion_fund === nothing ? TaylorDispersion(betas_fund, beta1_fund) :
+        dispersion_fund
+    disp_sh =
+        dispersion_sh === nothing ? TaylorDispersion(betas_sh, beta1_sh) : dispersion_sh
+    T = promote_type(
+        typeof(length),
+        typeof(kappa),
+        typeof(deltak0),
+        typeof(poling_period),
+        typeof(loss_fund),
+        typeof(loss_sh),
+        typeof(lambda0),
+        Float64,
+    )
+    return SecondOrderMedium(
+        T(length),
+        T(kappa),
+        disp_fund,
+        disp_sh,
+        T(deltak0),
+        T(poling_period),
+        T(loss_fund),
+        T(loss_sh),
+        T(lambda0),
+    )
+end
+
+"""
+    SecondOrderPulse(At, grid)
+    SecondOrderPulse(At_fund, At_sh, grid)
+
+Two-component (fundamental + second-harmonic) optical pulse envelope in time and
+frequency domains, for use with [`SecondOrderMedium`](@ref).
+
+# Fields
+
+  - `At::Matrix{ComplexF64}`: Time domain envelope matrix of size `N × 2` [√W]
+    (`At[:,1]` = fundamental, `At[:,2]` = second harmonic)
+  - `AW::Matrix{ComplexF64}`: Frequency domain envelope matrix of size `N × 2` [√W·s]
+  - `grid::Grid`: Associated time-frequency grid (defined at the fundamental
+    wavelength; `grid.omega0` must equal the fundamental's ω₀)
+"""
+struct SecondOrderPulse <: CoupledPulse
+    At::Matrix{ComplexF64} # N x 2: [:,1]=fundamental, [:,2]=second harmonic
+    AW::Matrix{ComplexF64}
+    grid::Grid
+
+    function SecondOrderPulse(At::Matrix{<:Complex}, AW::Matrix{<:Complex}, grid::Grid)
+        size(At, 1) == grid.N ||
+            throw(ArgumentError("Pulse dimensions must match grid resolution"))
+        size(At, 2) == 2 ||
+            throw(ArgumentError("SecondOrderPulse must have exactly 2 components (fundamental and SH)"))
+        size(AW) == size(At) ||
+            throw(ArgumentError("AW dimensions must match At dimensions"))
+        new(Matrix{ComplexF64}(At), Matrix{ComplexF64}(AW), grid)
+    end
+
+    function SecondOrderPulse(At::Matrix{<:Complex}, grid::Grid)
+        size(At, 1) == grid.N ||
+            throw(ArgumentError("Pulse dimensions must match grid resolution"))
+        size(At, 2) == 2 ||
+            throw(ArgumentError("SecondOrderPulse must have exactly 2 components (fundamental and SH)"))
+        AW = similar(At)
+        AW[:, 1] .= ifft(At[:, 1])
+        AW[:, 2] .= ifft(At[:, 2])
+        new(Matrix{ComplexF64}(At), AW, grid)
+    end
+end
+
+function SecondOrderPulse(
+    At_fund::AbstractVector{<:Number}, At_sh::AbstractVector{<:Number}, grid::Grid
+)
+    length(At_fund) == grid.N ||
+        throw(ArgumentError("fundamental component length must match grid resolution"))
+    length(At_sh) == grid.N ||
+        throw(ArgumentError("second-harmonic component length must match grid resolution"))
+    At = Matrix{ComplexF64}(undef, grid.N, 2)
+    At[:, 1] .= At_fund
+    At[:, 2] .= At_sh
+    return SecondOrderPulse(At, grid)
+end
+
+"""
+    SecondOrderSolution{T<:Complex}
+
+Solution to coupled χ⁽²⁾ (fundamental + second-harmonic) propagation.
+
+# Fields
+
+  - `t::Vector{Float64}`: Time domain grid [s]
+  - `W::Vector{Float64}`: Absolute angular frequency grid [rad/s]
+  - `omega0::Float64`: Central (fundamental) angular frequency [rad/s]
+  - `Z::Vector{Float64}`: Propagation distances [m]
+  - `At::Array{T, 3}`: Time domain solution array of size `N × 2 × z_saves`
+  - `AW::Array{T, 3}`: Frequency domain solution array of size `N × 2 × z_saves`
+"""
+struct SecondOrderSolution{T <: Complex}
+    t::Vector{Float64}
+    W::Vector{Float64}
+    omega0::Float64
+    Z::Vector{Float64}
+    At::Array{T, 3} # N x 2 x z_saves
+    AW::Array{T, 3} # N x 2 x z_saves
+end
+
+function Base.show(io::IO, p::SecondOrderPulse)
+    Pmax_fund = maximum(abs2, p.At[:, 1])
+    Pmax_sh = maximum(abs2, p.At[:, 2])
+    print(
+        io,
+        "SecondOrderPulse(N=",
+        p.grid.N,
+        ", peak_fund=",
+        round(Pmax_fund; sigdigits=4),
+        " W, peak_sh=",
+        round(Pmax_sh; sigdigits=4),
+        " W)",
+    )
+end
+
+function Base.show(io::IO, s::SecondOrderSolution)
+    print(
+        io,
+        "SecondOrderSolution(",
         length(s.Z),
         " saves over ",
         round(s.Z[end]; sigdigits=4),

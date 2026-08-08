@@ -28,6 +28,7 @@ makedocs(;
             "Amplifying Fibers (EDFA)" => "guide/edfa.md",
             "Hollow-Core PCF" => "guide/hollowcore.md",
             "Silicon & Semiconductors" => "guide/semiconductor.md",
+            "Second-Order Nonlinearity (χ⁽²⁾)" => "guide/second_order.md",
             "Noise Modeling" => "guide/noise.md",
         ],
         "Examples" => [
@@ -44,6 +45,8 @@ makedocs(;
             "10 — Multithreaded Sweep" => "examples/ex10_parallel_sweep.md",
             "11 — Mid-IR 3PA Scaling" => "examples/ex11_silicon_3pa.md",
             "12 — Free-Carrier Lifetime" => "examples/ex12_freecarrier_decay.md",
+            "13 — PPLN Waveguide SHG" => "examples/ex13_ppln_shg.md",
+            "14 — OPCPA" => "examples/ex14_opcpa.md",
         ],
         "API Reference" => [
             "Medium" => "api/medium.md",

@@ -109,6 +109,7 @@ export DispersionModel, TaylorDispersion, TabulatedDispersion, SellmeierDispersi
 export GNLSESolver, ERK4IP, SSFM, AdaptiveSSFM
 export VectorialPulse,
     BirefringentMedium, VectorialSolution, AmplifyingMedium, SemiconductorMedium
+export SecondOrderMedium, SecondOrderPulse, SecondOrderSolution
 export LumpedElement, Amplifier, Attenuator, Filter, PMDElement, apply
 export NonlinearityModel,
     ConstantNonlinearity, FrequencyDependentNonlinearity, NonlinearityFromEffectiveArea

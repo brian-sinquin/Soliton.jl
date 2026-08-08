@@ -10,4 +10,5 @@ Medium
 BirefringentMedium
 AmplifyingMedium
 SemiconductorMedium
+SecondOrderMedium
 ```

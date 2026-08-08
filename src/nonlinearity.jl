@@ -835,3 +835,117 @@ function build_physics_model(
         (deltabeta0=Float64(medium.deltabeta0),), # Auxiliary data
     )
 end
+
+# ===========================================================================
+# Second-Order (χ⁽²⁾) Nonlinearity Support
+# ===========================================================================
+
+"""
+    _second_order_spm(u, model::PhysicsModel, z)
+
+Coupled χ⁽²⁾ nonlinear operator for [`SecondOrderMedium`](@ref): SHG/SFG/DFG
+coupling between the fundamental (`u[:,1]`) and second-harmonic (`u[:,2]`)
+envelopes.
+
+```math
+\\left.\\frac{\\partial A_1}{\\partial z}\\right|_{NL} = i\\kappa(z)\\, A_2 A_1^{*}\\, e^{-i\\Delta k_0 z}
+\\qquad
+\\left.\\frac{\\partial A_2}{\\partial z}\\right|_{NL} = i\\kappa(z)\\, A_1^{2}\\, e^{+i\\Delta k_0 z}
+```
+
+Using the *same* real `κ(z)` in both equations makes this exactly power-conserving
+(`d(P₁+P₂)/dz = 0`) in the lossless case — see the `SecondOrderMedium` docstring for
+the derivation. `κ(z)` is a period-`poling_period` sign-flipping square wave when
+quasi-phase-matching is enabled (`poling_period > 0`), else constant.
+"""
+function _second_order_spm(u::AbstractMatrix{ComplexF64}, model::PhysicsModel, z::Real)
+    A1 = @view u[:, 1]
+    A2 = @view u[:, 2]
+
+    aux = model.aux_data
+    kappa0 = aux.kappa
+    deltak0 = aux.deltak0
+    poling_period = aux.poling_period
+
+    kappa_z = if poling_period > 0
+        m = mod(z, poling_period)
+        m < poling_period / 2 ? kappa0 : -kappa0
+    else
+        kappa0
+    end
+
+    ph = cis(-deltak0 * z)  # exp(-i*deltak0*z)
+
+    @views @. model.buf_t1[:, 1] = 1.0im * kappa_z * A2 * conj(A1) * ph
+    @views @. model.buf_t1[:, 2] = 1.0im * kappa_z * A1^2 * conj(ph)
+
+    mul!(model.buf_f1, model.to_freq, model.buf_t1)
+    return model.buf_f1
+end
+
+"""
+    build_physics_model(grid::Grid, params::SimParams{S, <:SecondOrderMedium}, [template::AbstractMatrix])
+
+Construct PhysicsModel for coupled χ⁽²⁾ (fundamental + second-harmonic) propagation.
+
+The fundamental branch dispersion is evaluated on `grid.V` (`= ω - ω₀`) directly;
+the second-harmonic branch dispersion is evaluated on `grid.V .- grid.omega0`
+(`= ω - 2ω₀`), since `dispersion_sh`'s Taylor coefficients are defined relative to
+the second harmonic's own carrier `2ω₀`, not the grid's fundamental-referenced
+`ω₀`. Both use the shared package convention that `TaylorDispersion` excludes β₀
+(see [`SecondOrderMedium`](@ref)'s `deltak0` field for why that's supplied
+separately).
+"""
+function build_physics_model(
+    grid::Grid,
+    params::SimParams{S, M},
+    template::AbstractMatrix=zeros(ComplexF64, grid.N, 2),
+) where {S, M <: SecondOrderMedium}
+    medium = params.medium
+    N = grid.N
+
+    tmp = similar(template)
+    to_freq = plan_ifft(tmp, 1; flags=FFTW.MEASURE)
+    to_time = plan_fft(tmp, 1; flags=FFTW.MEASURE)
+
+    med_fund = Medium(medium.length, 0.0, medium.loss_fund, medium.dispersion_fund, medium.lambda0)
+    med_sh = Medium(
+        medium.length, 0.0, medium.loss_sh, medium.dispersion_sh, medium.lambda0 / 2
+    )
+
+    D_fund = fftshift(dispersion_operator(grid.V, med_fund, 0.0))
+    D_sh = fftshift(dispersion_operator(grid.V .- grid.omega0, med_sh, 0.0))
+
+    D_host = hcat(D_fund, D_sh)
+    D = _to_device(template, D_host)
+
+    buf_t1 = similar(template)
+    buf_t2 = similar(template)
+    buf_f1 = similar(template)
+    buf_f2 = similar(template)
+
+    W_host = fill(grid.omega0, N)
+    W = _to_device(template, W_host)
+    gamma_W = _to_device(template, W_host)
+
+    return PhysicsModel(
+        to_freq,
+        to_time,
+        D,
+        0.0,           # gamma unused by _second_order_spm
+        grid.omega0,
+        gamma_W,
+        W,
+        grid.dt,
+        N,
+        0.0,
+        nothing,
+        _second_order_spm,
+        buf_t1,
+        buf_t2,
+        buf_f1,
+        buf_f2,
+        (kappa=Float64(medium.kappa), deltak0=Float64(medium.deltak0),
+            poling_period=Float64(medium.poling_period)),
+    )
+end

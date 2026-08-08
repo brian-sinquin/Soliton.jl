@@ -12,6 +12,7 @@ AdaptiveSSFM
 SimParams
 Solution
 VectorialSolution
+SecondOrderSolution
 solve
 solve_sweep
 ```

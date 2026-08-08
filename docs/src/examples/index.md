@@ -20,6 +20,8 @@ Each example in **Soliton.jl** reproduces a key result from the nonlinear optics
 | **10** | [Multithreaded Parameter Sweep](ex10_parallel_sweep.md) | ZDW Boundary & Dispersive Wave Trapping | 2D Spectral Heatmap across ZDW | `solve_sweep`, `Threads` |
 | **11** | [Mid-IR Three-Photon Absorption](ex11_silicon_3pa.md) | Opt. Express **21**, 32192 (2013) | TPA (∝P) vs 3PA (∝P²) fractional-loss scaling | `SemiconductorMedium` (`alpha3`) |
 | **12** | [Free-Carrier Lifetime Pump-Probe](ex12_freecarrier_decay.md) | Turner-Foster et al., *Opt. Express* **18**, 3582 (2010) | Carrier recombination decay via delayed probe | `SemiconductorMedium`, `Pulse` |
+| **13** | [PPLN Waveguide SHG & QPM](ex13_ppln_shg.md) | Fejer et al., *IEEE JQE* **28**, 2631 (1992); Parameswaran et al., *Opt. Lett.* **27**, 43 (2002) | Quasi-phase-matching, depleted-pump `tanh²` SHG, `sinc²` acceptance bandwidth | `SecondOrderMedium`, `SecondOrderPulse` |
+| **14** | [Optical Parametric Chirped-Pulse Amplification](ex14_opcpa.md) | Dubietis et al., *Opt. Commun.* **88**, 437 (1992); Cerullo & De Silvestri, *Rev. Sci. Instrum.* **74**, 1 (2003) | Degenerate OPA `cosh²` gain, stretch/amplify/recompress, gain narrowing | `SecondOrderMedium`, `SecondOrderPulse` |
 
 ---
 

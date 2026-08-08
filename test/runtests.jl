@@ -7,6 +7,7 @@ using Soliton
     include("test_solvers.jl")
     include("test_physics.jl")
     include("test_vectorial.jl")
+    include("test_second_order.jl")
     include("test_fibers.jl")
     include("test_edfa.jl")
     include("test_hollowcore.jl")

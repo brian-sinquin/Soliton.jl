@@ -133,7 +133,13 @@ function solve(pulse::AbstractPulse, stages::AbstractVector; progress::Bool=true
             sol = solve(current_pulse, stage; progress=progress)
             push!(results, sol)
             # Use final state of the fiber propagation for the next stage
-            current_pulse = sol isa VectorialSolution ? VectorialPulse(sol) : Pulse(sol)
+            current_pulse = if sol isa VectorialSolution
+                VectorialPulse(sol)
+            elseif sol isa SecondOrderSolution
+                SecondOrderPulse(sol)
+            else
+                Pulse(sol)
+            end
         elseif stage isa LumpedElement
             # Lumped element stage (returns a Pulse)
             current_pulse = apply(current_pulse, stage)
@@ -204,6 +210,43 @@ end
 (params::SimParams)(pulse::VectorialPulse) = solve(pulse, params; progress=false)
 (params::SimParams)(sol::VectorialSolution) =
     solve(VectorialPulse(sol), params; progress=false)
+
+# Second-order (χ⁽²⁾) coupled fundamental/second-harmonic solver implementations
+function propagate(
+    pulse::SecondOrderPulse, params::SimParams, solver::GNLSESolver; progress::Bool=true
+)
+    model = build_physics_model(pulse.grid, params, pulse.At)
+    return propagate(model, pulse, params, solver, progress)
+end
+
+"""
+    solve(pulse::SecondOrderPulse, params::SimParams; progress=true)
+
+Propagate a `SecondOrderPulse` through a `SecondOrderMedium` according to `SimParams`.
+"""
+function solve(pulse::SecondOrderPulse, params::SimParams; progress::Bool=true)
+    z, At, AW = propagate(pulse, params, params.solver; progress=progress)
+    return SecondOrderSolution(pulse.grid.t, pulse.grid.W, pulse.grid.omega0, z, At, AW)
+end
+
+"""
+    SecondOrderPulse(sol::SecondOrderSolution)
+
+Extract the final state from a `SecondOrderSolution` as a new `SecondOrderPulse` object.
+"""
+function SecondOrderPulse(sol::SecondOrderSolution)
+    N = length(sol.t)
+    dt = sol.t[2] - sol.t[1]
+    V = sol.W .- sol.omega0
+    lambda0 = 2π * c / sol.omega0
+    grid = Grid(N, sol.t, V, sol.W, dt, sol.omega0, lambda0)
+    return SecondOrderPulse(sol.At[:, :, end], grid)
+end
+
+# Make SimParams callable for quadratic piping support
+(params::SimParams)(pulse::SecondOrderPulse) = solve(pulse, params; progress=false)
+(params::SimParams)(sol::SecondOrderSolution) =
+    solve(SecondOrderPulse(sol), params; progress=false)
 
 """
     solve_sweep(setup_fn::Function, param_space::AbstractArray; progress::Bool=true)
