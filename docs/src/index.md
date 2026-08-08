@@ -27,7 +27,7 @@ It implements the **Generalized Nonlinear Schrödinger Equation (GNLSE)** in nat
 | **Commercial Fiber Catalog** | Built-in presets (`Corning_SMF28`, `NKT_NL_PM_750`, `Thorlabs_PM780`, etc.) | `commercial_fiber` |
 | **Active Amplifiers (EDFA/YDFA)** | Dynamic gain saturation $g(z)$ & quantum ASE noise seeding ($F_{\text{dB}}$) | `AmplifyingMedium` |
 | **Gas Hollow-Core PCF** | Marcatili-Schmeltzer capillary model, noble & molecular gas Raman ($\text{H}_2, \text{N}_2$) | `HollowCoreFiber`, `MolecularRamanGas` |
-| **Silicon Photonics (PICs)** | Two-Photon Absorption (TPA $\alpha_2$), Free-Carrier Absorption (FCA), & Refraction (FCR) | `SemiconductorMedium` |
+| **Silicon Photonics (PICs)** | Two- & Three-Photon Absorption (TPA $\alpha_2$, 3PA $\alpha_3$), Free-Carrier Absorption (FCA), & Refraction (FCR) | `SemiconductorMedium` |
 | **Birefringence / Vectorial** | Coupled GNLSE: SPM + XPM + coherent FWM across fast and slow axes | `BirefringentMedium`, `VectorialPulse` |
 | **Cascaded System Dynamics** | Multi-stage propagation & lumped element processing (`Amplifier`, `Attenuator`, `Filter`) | `LumpedElement`, `solve` |
 

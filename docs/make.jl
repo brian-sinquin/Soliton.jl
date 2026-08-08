@@ -39,9 +39,11 @@ makedocs(;
             "5 — HOSoliton Compression" => "examples/ex5_soliton_compression.md",
             "6 — Stable N=3 Soliton" => "examples/ex6_stable_n3_soliton.md",
             "7 — Hollow-Core Gas Fiber" => "examples/ex7_hollowcore_gas.md",
-            "8 — Silicon Photonics (TPA)" => "examples/ex8_silicon_tpa.md",
+            "8 — Silicon TPA Limiter" => "examples/ex8_silicon_tpa.md",
             "9 — EDFA Pulse Amplifier" => "examples/ex9_edfa_amplifier.md",
             "10 — Multithreaded Sweep" => "examples/ex10_parallel_sweep.md",
+            "11 — Mid-IR 3PA Scaling" => "examples/ex11_silicon_3pa.md",
+            "12 — Free-Carrier Lifetime" => "examples/ex12_freecarrier_decay.md",
         ],
         "API Reference" => [
             "Medium" => "api/medium.md",
