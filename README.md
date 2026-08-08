@@ -14,7 +14,7 @@ Soliton.jl is the successor to [FiberNlse.jl](https://github.com/brian-sinquin/F
 - Commercial fiber & glass presets (Corning, NKT, Thorlabs) and custom/tabulated dispersion
 - Active amplifying fibers (EDFA/YDFA) with gain saturation and ASE noise
 - Gas-filled hollow-core PCF with pressure-tunable dispersion and molecular Raman response
-- Silicon photonics: two-photon absorption and free-carrier dynamics
+- Silicon photonics: two-photon and three-photon absorption, and free-carrier dynamics
 - Coupled vectorial/birefringent GNLSE solver (SPM + XPM + FWM)
 - Cascaded multi-stage pipelines (fibers, amplifiers, filters) via `|>` piping
 - Adaptive (`ERK4IP`, `AdaptiveSSFM`) and fixed-step (`SSFM`) solvers, multi-threaded parameter sweeps

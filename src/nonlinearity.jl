@@ -27,7 +27,11 @@ Pre-computed operators and FFT plans for GNLSE propagation.
   - `fr`: Raman fraction
   - `RW`: Raman response in frequency domain (if enabled)
   - `buf_t1`, `buf_t2`: Pre-allocated time-domain buffers
-  - `buf_f1`: Pre-allocated frequency-domain buffer
+  - `buf_f1`, `buf_f2`: Pre-allocated frequency-domain buffers. Most nonlinear
+    functions only use `buf_f1`; `buf_f2` exists so `_semiconductor_spm` can
+    FFT the shock-weighted (Kerr/TPA/3PA) and non-shocked (FCA/FCR) nonlinear
+    contributions separately before summing them in frequency domain (see
+    [`_semiconductor_spm`](@ref)).
 """
 struct PhysicsModel{
     TF, TT, NL, TG, TA <: AbstractArray{ComplexF64}, TVR <: AbstractVector{Float64}, TRW
@@ -48,6 +52,7 @@ struct PhysicsModel{
     buf_t1::TA
     buf_t2::TA
     buf_f1::TA
+    buf_f2::TA
     aux_data::NamedTuple
 end
 
@@ -333,6 +338,7 @@ function build_physics_model(
     buf_t1 = similar(D)
     buf_t2 = similar(D)
     buf_f1 = similar(D)
+    buf_f2 = similar(D)
 
     # Construct model
     PhysicsModel(
@@ -351,6 +357,7 @@ function build_physics_model(
         buf_t1,
         buf_t2,
         buf_f1,
+        buf_f2,
         NamedTuple(),
     )
 end
@@ -449,6 +456,7 @@ function build_physics_model(
     buf_t1 = similar(D)
     buf_t2 = similar(D)
     buf_f1 = similar(D)
+    buf_f2 = similar(D)
 
     aux = (
         g0=medium.g0,
@@ -473,6 +481,7 @@ function build_physics_model(
         buf_t1,
         buf_t2,
         buf_f1,
+        buf_f2,
         aux,
     )
 end
@@ -572,7 +581,18 @@ end
 """
     _semiconductor_spm(u, model::PhysicsModel, z)
 
-Non-linear step for semiconductor waveguides (SOI, Ge, GaAs) with TPA, FCA, and FCR.
+Non-linear step for semiconductor waveguides (SOI, Ge, GaAs) with TPA, 3PA, FCA, and FCR.
+
+TPA and 3PA free-carrier generation add (two- and three-photon transitions are
+independent absorption channels): `dN/dt = [α₂|A|⁴/(2Aeff²) + α₃|A|⁶/(3Aeff³)] / (ħω₀) − N/τc`.
+Setting `alpha3 = 0` recovers pure-TPA behavior.
+
+Self-steepening (the `gamma_W/ω₀` shock weighting) is applied only to the Kerr/TPA/3PA
+term, not to FCA/FCR: shock arises from the frequency dependence of the χ⁽³⁾/χ⁽⁵⁾
+polarization response near ω₀, whereas free-carrier plasma effects are a separate,
+slowly-varying (ps–ns) process with no such frequency dependence near the optical
+carrier. The two contributions are therefore FFT'd separately (`buf_t2`→`buf_f1` with
+shock weighting, `buf_t1`→`buf_f2` without) and summed in frequency domain.
 """
 function _semiconductor_spm(u, model::PhysicsModel, z)
     dt = model.dt
@@ -582,42 +602,51 @@ function _semiconductor_spm(u, model::PhysicsModel, z)
     sigma_fca = aux.sigma_fca
     k_fcr = aux.k_fcr
     tau_c = aux.tau_c
+    alpha3 = aux.alpha3
     Nc = aux.Nc
     omega0 = model.omega0
     hbar = 1.054571817e-34
 
     A = u # u is ALREADY in time domain!
 
-    c_gen = alpha2 / (2.0 * hbar * omega0 * Aeff^2)
+    c_gen2 = alpha2 / (2.0 * hbar * omega0 * Aeff^2)
+    c_gen3 = alpha3 / (3.0 * hbar * omega0 * Aeff^3)
     N_curr = 0.0
     decay = exp(-dt / tau_c)
     gain_factor = tau_c * (1.0 - decay)
     @inbounds for i in 1:length(A)
         P_t = abs2(A[i])
-        rate = c_gen * (P_t^2)
+        rate = c_gen2 * (P_t^2) + c_gen3 * (P_t^3)
         N_curr = N_curr * decay + rate * gain_factor
         Nc[i] = N_curr
     end
 
     gamma_val = _semiconductor_gamma_at_z(model.gamma, z)
     tpa_loss = alpha2 / (2.0 * Aeff)
+    tpa3_loss = alpha3 / (2.0 * Aeff^2)
     fcr_phase = (omega0 / 2.99792458e8) * k_fcr
 
+    # Kerr + TPA + 3PA: bound-electron polarization response near ω₀ -> gets the
+    # shock/self-steepening weighting.
     @. model.buf_t2 =
         A * (
-            im * (gamma_val * abs2(A) - fcr_phase * Nc) -
-            (tpa_loss * abs2(A) + 0.5 * sigma_fca * Nc)
+            im * gamma_val * abs2(A) - (tpa_loss * abs2(A) + tpa3_loss * abs2(A)^2)
         )
-
     mul!(model.buf_f1, model.to_freq, model.buf_t2)
     @. model.buf_f1 = model.buf_f1 * (model.gamma_W / omega0)
+
+    # FCA + FCR: free-carrier plasma response, no shock weighting.
+    @. model.buf_t1 = A * (-im * fcr_phase * Nc - 0.5 * sigma_fca * Nc)
+    mul!(model.buf_f2, model.to_freq, model.buf_t1)
+
+    @. model.buf_f1 = model.buf_f1 + model.buf_f2
     return model.buf_f1
 end
 
 """
     build_physics_model(grid::Grid, params::SimParams{S, <:SemiconductorMedium}, [template])
 
-Construct PhysicsModel for semiconductor waveguides (TPA & Free-Carrier Dynamics).
+Construct PhysicsModel for semiconductor waveguides (TPA, 3PA & Free-Carrier Dynamics).
 """
 function build_physics_model(
     grid::Grid, params::SimParams{S, M}, template::AbstractVector=zeros(ComplexF64, grid.N)
@@ -647,6 +676,7 @@ function build_physics_model(
     buf_t1 = similar(D)
     buf_t2 = similar(D)
     buf_f1 = similar(D)
+    buf_f2 = similar(D)
 
     aux = (
         alpha2=medium.alpha2,
@@ -654,6 +684,7 @@ function build_physics_model(
         sigma_fca=medium.sigma_fca,
         k_fcr=medium.k_fcr,
         tau_c=medium.tau_c,
+        alpha3=medium.alpha3,
         Nc=zeros(Float64, N),
     )
 
@@ -673,6 +704,7 @@ function build_physics_model(
         buf_t1,
         buf_t2,
         buf_f1,
+        buf_f2,
         aux,
     )
 end
@@ -778,6 +810,7 @@ function build_physics_model(
     buf_t1 = similar(template)
     buf_t2 = similar(template)
     buf_f1 = similar(template)
+    buf_f2 = similar(template)
 
     W_host = enable_shock ? ifftshift(grid.W) : fill(grid.omega0, N)
     W = _to_device(template, W_host)
@@ -798,6 +831,7 @@ function build_physics_model(
         buf_t1,
         buf_t2,
         buf_f1,
+        buf_f2,
         (deltabeta0=Float64(medium.deltabeta0),), # Auxiliary data
     )
 end

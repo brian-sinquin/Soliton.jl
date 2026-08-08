@@ -275,9 +275,15 @@ function AmplifyingMedium(;
 end
 
 """
-    SemiconductorMedium(; length, gamma, alpha2, Aeff, sigma_fca, k_fcr, tau_c, loss, dispersion, lambda0)
+    SemiconductorMedium(; length, gamma, alpha2, Aeff, sigma_fca, k_fcr, tau_c, alpha3, loss, dispersion, lambda0)
 
-Semiconductor waveguide medium (Silicon-on-Insulator SOI, Germanium, GaAs) with Two-Photon Absorption (TPA) and Free-Carrier Dynamics (FCA, FCR, lifetime τ_c).
+Semiconductor waveguide medium (Silicon-on-Insulator SOI, Germanium, GaAs) with Two-Photon Absorption (TPA), Three-Photon Absorption (3PA), and Free-Carrier Dynamics (FCA, FCR, lifetime τ_c).
+
+3PA becomes the dominant nonlinear-absorption channel in the mid-infrared, where the
+photon energy falls below half the bandgap (so TPA is forbidden) but three-photon
+transitions remain allowed (e.g. Si/Ge/SiGe beyond ≈2.2 µm). TPA and 3PA free-carrier
+generation are additive, so both may be enabled simultaneously; set `alpha3=0` (default)
+to recover pure-TPA behavior.
 
 # Fields
 
@@ -288,9 +294,64 @@ Semiconductor waveguide medium (Silicon-on-Insulator SOI, Germanium, GaAs) with 
   - `sigma_fca::T`: Free-carrier absorption cross section σ_FCA [m²] (default: 1.45e-21 m² for Si at 1550 nm)
   - `k_fcr::T`: Free-carrier refraction coefficient k_FCR [m³] (default: 5.3e-27 m³ for Si at 1550 nm)
   - `tau_c::T`: Free-carrier recombination lifetime τ_c [s] (default: 1.0e-9 s)
+  - `alpha3::T`: Three-photon absorption coefficient α₃ [m³/W²] (default: 0.0, i.e. disabled)
   - `loss::T`: Linear background attenuation α₀ [dB/m]
   - `dispersion::DispersionModel`: Chromatic dispersion model
   - `lambda0::T`: Center wavelength [m]
+
+# Known Limitations
+
+This model follows the standard 1D lumped-parameter formalism (Lin, Painter & Agrawal
+2007) and its usual simplifications. These are not bugs — they are the same
+approximations essentially every published GNLSE-TPA/3PA model makes — but should be
+kept in mind when comparing quantitatively against an experiment:
+
+  - **Shared `Aeff` across nonlinear orders**: the Kerr, TPA, and 3PA terms all reuse
+    the same modal effective area, i.e. `∫f²dA`, `∫f³dA/Aeff`, and `∫f⁴dA/Aeff²` are all
+    approximated as `≈ Aeff`, rather than using their true (generally different)
+    mode-overlap integrals. This approximation degrades faster for the higher-order 3PA
+    term than for TPA, especially in narrow or highly multimode mid-IR waveguides.
+  - **Linear recombination only**: carrier decay is purely `-N_c/τ_c`. Auger
+    recombination (`∝ N_c³`) is not modeled, and can become significant above
+    ~10¹⁸ cm⁻³ carrier densities — a regime that high-intensity mid-IR 3PA pumping can
+    reach. Carrier diffusion out of the mode is also not modeled.
+  - **No 3PA-associated nonlinear refraction**: by Kramers-Kronig, a nonzero `alpha3`
+    implies an accompanying intensity-dependent real refractive-index correction
+    (a five-wave-mixing-type term), which is not included here — consistent with how
+    the TPA-associated refractive correction is also omitted, i.e. both are dropped at
+    the same order.
+  - **Self-steepening applies to Kerr/TPA/3PA only, not FCA/FCR**: the shock/
+    self-steepening correction is physically tied to the frequency dependence of the
+    bound-electron (χ⁽³⁾/χ⁽⁵⁾) polarization response near ω₀. Free-carrier plasma
+    effects (FCA, FCR) are a separate, slowly-varying process and are propagated
+    without shock weighting (see [`_semiconductor_spm`](@ref)).
+  - **Partial independent package cross-validation**: TPA *is* validated against an
+    external package — `gnlse-python`'s Kerr-only nonlinear step accepts a complex
+    `nonlinearity` value (`γ_r + i·α₂/(2·Aeff)`), which reproduces the TPA field equation
+    exactly (the standard "complex γ = Kerr + i·TPA" convention), letting its own
+    independent adaptive solver (`scipy.solve_ivp`, not Soliton's ERK4IP/SSFM) serve as
+    ground truth (`test/test_adversarial.jl`, Scenario 7). 3PA and FCA/FCR have no such
+    trick available — 3PA needs a quintic field term (`|A|⁴A`) that `gnlse-python`'s
+    cubic-only Kerr/Raman step cannot express, and FCA/FCR need an auxiliary
+    carrier-density ODE it has no concept of. No other open package implementing this
+    physics was found (searched: PyNLO, MEEP — no complex-χ³ support, unresolved since
+    [GitHub issue #1099](https://github.com/NanoComp/meep/issues/1099) — and Tidy3D FDTD,
+    which ships a `TwoPhotonAbsorption` model but no ≥3-photon or free-carrier model and
+    is a paid cloud service, unsuitable for a local test suite). 3PA and FCA/FCR remain
+    validated only via the dedicated ODE ground-truth integrator
+    (`test/test_semiconductor.jl`).
+
+# References
+
+  - Q. Lin, J. Zhang, G. Piestun, R. Boyraz & G. P. Agrawal, "Nonlinear optical
+    phenomena in silicon waveguides: modeling and applications," Opt. Express
+    **15**, 16604 (2007) — TPA/FCA/FCR formalism this type extends.
+  - Multi-photon absorption and third-order nonlinearity in silicon at
+    mid-infrared wavelengths, Opt. Express **21**, 32192 (2013) — α₃
+    coefficient for Si (≈2×10⁻³ cm³/GW² near 2.6 µm).
+  - Impact of third-order dispersion and three-photon absorption on
+    mid-infrared time magnification via four-wave mixing in Si₀.₈Ge₀.₂
+    waveguides, Appl. Opt. **59**, 1187 (2020).
 """
 struct SemiconductorMedium{T <: Real, TG} <: AbstractMedium
     length::T
@@ -300,6 +361,7 @@ struct SemiconductorMedium{T <: Real, TG} <: AbstractMedium
     sigma_fca::T
     k_fcr::T
     tau_c::T
+    alpha3::T
     loss::T
     dispersion::DispersionModel
     lambda0::T
@@ -312,6 +374,7 @@ struct SemiconductorMedium{T <: Real, TG} <: AbstractMedium
         sigma_fca::T,
         k_fcr::T,
         tau_c::T,
+        alpha3::T,
         loss::T,
         dispersion::DispersionModel,
         lambda0::T,
@@ -320,10 +383,21 @@ struct SemiconductorMedium{T <: Real, TG} <: AbstractMedium
         alpha2 >= 0 || throw(ArgumentError("TPA coefficient alpha2 must be non-negative"))
         Aeff > 0 || throw(ArgumentError("Effective area Aeff must be positive"))
         tau_c > 0 || throw(ArgumentError("Carrier lifetime tau_c must be positive"))
+        alpha3 >= 0 || throw(ArgumentError("3PA coefficient alpha3 must be non-negative"))
         loss >= 0 || throw(ArgumentError("Loss must be non-negative"))
         lambda0 > 0 || throw(ArgumentError("Center wavelength must be positive"))
         new{T, TG}(
-            length, gamma, alpha2, Aeff, sigma_fca, k_fcr, tau_c, loss, dispersion, lambda0
+            length,
+            gamma,
+            alpha2,
+            Aeff,
+            sigma_fca,
+            k_fcr,
+            tau_c,
+            alpha3,
+            loss,
+            dispersion,
+            lambda0,
         )
     end
 end
@@ -336,6 +410,7 @@ function SemiconductorMedium(;
     sigma_fca::Real=1.45e-21,
     k_fcr::Real=5.3e-27,
     tau_c::Real=1.0e-9,
+    alpha3::Real=0.0,
     loss::Real=0.0,
     betas::Union{AbstractVector{<:Real}, Nothing}=nothing,
     dispersion::Union{DispersionModel, Nothing}=nothing,
@@ -351,6 +426,7 @@ function SemiconductorMedium(;
         typeof(sigma_fca),
         typeof(k_fcr),
         typeof(tau_c),
+        typeof(alpha3),
         typeof(loss),
         typeof(lambda0),
         Float64,
@@ -363,6 +439,7 @@ function SemiconductorMedium(;
         T(sigma_fca),
         T(k_fcr),
         T(tau_c),
+        T(alpha3),
         T(loss),
         disp,
         T(lambda0),
