@@ -16,6 +16,32 @@ Concrete models: [`TaylorDispersion`](@ref), [`TabulatedDispersion`](@ref).
 abstract type DispersionModel end
 
 """
+    @strict_ctor function Name{T}(field1::Vector{T}, field2::Vector{T}, ...) where {T <: Real}
+        <validation statements, referring to field1, field2, ...>
+    end
+
+Defines a struct's inner constructor from just its validation body, appending
+the `new{T}(field1, field2, ...)` call for you. Defining *any* inner
+constructor suppresses Julia's auto-generated default one — which, for a
+parametric struct, would otherwise dispatch ahead of a validating outer
+constructor for same-element-type vector arguments and silently skip the
+checks. Use this on every parametric `DispersionModel`/`AbstractMedium` field
+struct that needs argument validation, instead of hand-writing `new{T}(...)`
+each time.
+"""
+macro strict_ctor(funcdef)
+    funcdef.head === :function ||
+        throw(ArgumentError("@strict_ctor expects a `function Name{T}(...) where {...} ... end`"))
+    sig, body = funcdef.args[1], funcdef.args[2]
+    sig.head === :where || throw(ArgumentError("@strict_ctor expects a `where` clause"))
+    callexpr = sig.args[1]
+    tparam = callexpr.args[1].args[2]
+    argnames = [a isa Expr ? a.args[1] : a for a in callexpr.args[2:end]]
+    new_call = Expr(:call, Expr(:curly, :new, tparam), argnames...)
+    esc(Expr(:function, sig, Expr(:block, body.args..., new_call)))
+end
+
+"""
     TaylorDispersion(betas)
 
 Dispersion from a Taylor expansion of the propagation constant about ω₀:
@@ -57,17 +83,13 @@ struct TabulatedDispersion{T <: Real} <: DispersionModel
     detuning::Vector{T}
     beta::Vector{T}
 
-    # Explicit inner constructor: defining one here suppresses Julia's
-    # auto-generated default `TabulatedDispersion(::Vector{T}, ::Vector{T}) where T`,
-    # which would otherwise be more specific than the validating outer
-    # constructor below for same-typed vector arguments and silently skip
-    # these checks.
-    function TabulatedDispersion{T}(detuning::Vector{T}, beta::Vector{T}) where {T <: Real}
+    @strict_ctor function TabulatedDispersion{T}(
+        detuning::Vector{T}, beta::Vector{T}
+    ) where {T <: Real}
         length(detuning) == length(beta) ||
             throw(ArgumentError("detuning and beta must have equal length"))
         length(detuning) >= 2 || throw(ArgumentError("need at least two tabulated samples"))
         issorted(detuning) || throw(ArgumentError("detuning must be sorted ascending"))
-        new{T}(detuning, beta)
     end
 end
 
@@ -101,12 +123,8 @@ struct SellmeierDispersion{T <: Real} <: DispersionModel
     B::Vector{T}
     C::Vector{T}
 
-    # Explicit inner constructor: see the note on TabulatedDispersion above —
-    # this suppresses the auto-generated default that would otherwise bypass
-    # the length check for same-typed vector arguments.
-    function SellmeierDispersion{T}(B::Vector{T}, C::Vector{T}) where {T <: Real}
+    @strict_ctor function SellmeierDispersion{T}(B::Vector{T}, C::Vector{T}) where {T <: Real}
         length(B) == length(C) || throw(ArgumentError("B and C must have equal length"))
-        new{T}(B, C)
     end
 end
 
