@@ -199,6 +199,129 @@ function soliton_number(beta2::Real, gamma::Real, T0::Real, P0::Real)
 end
 
 """
+    _gamma_at(gamma_input, z::Real, omega0::Real) -> Float64
+
+Resolve a medium's `gamma` field (see [`NonlinearityModel`](@ref)) to the
+physical nonlinear coefficient ``\\gamma(z)`` [1/(W·m)] used by the
+B-integral. Mirrors the dispatch of `_resolve_gamma`/`eval_gamma` in
+`solver.jl`, but returns the raw physical γ (the solver instead stores γ
+pre-divided by ω₀ for its own internal bookkeeping). Frequency-dependent
+models (`FrequencyDependentNonlinearity`, `NonlinearityFromEffectiveArea`)
+are evaluated at the carrier `omega0`, matching the degenerate,
+single-frequency definition of the B-integral used in [`b_integral`](@ref).
+"""
+_gamma_at(gamma_input::Real, ::Real, ::Real) = Float64(gamma_input)
+_gamma_at(gamma_input::Function, z::Real, ::Real) = Float64(gamma_input(z))
+_gamma_at(gamma_input::ConstantNonlinearity, ::Real, ::Real) = gamma_input.gamma
+_gamma_at(gamma_input::FrequencyDependentNonlinearity, ::Real, omega0::Real) =
+    Float64(gamma_input.gamma_function(omega0))
+function _gamma_at(gamma_input::NonlinearityFromEffectiveArea, ::Real, omega0::Real)
+    return gamma_input.n2 * omega0 / (c * gamma_input.Aeff_function(omega0))
+end
+
+# Cumulative trapezoidal integral of `integrand` sampled at `Z`; B[1] = 0.
+function _cumtrapz(Z::AbstractVector{<:Real}, integrand::AbstractVector{<:Real})
+    n = length(Z)
+    B = zeros(Float64, n)
+    @inbounds for j in 2:n
+        B[j] = B[j - 1] + 0.5 * (integrand[j] + integrand[j - 1]) * (Z[j] - Z[j - 1])
+    end
+    return B
+end
+
+"""
+    b_integral_profile(sol::Solution, medium::AbstractMedium) -> Vector{Float64}
+    b_integral_profile(sol::VectorialSolution, medium::AbstractMedium) -> Vector{Float64}
+    b_integral_profile(sol, params::SimParams) -> Vector{Float64}
+
+Cumulative B-integral
+
+```math
+B(z) = \\int_0^z \\gamma(z')\\, P_{\\rm peak}(z')\\, {\\rm d}z'
+```
+
+evaluated at each saved propagation distance `sol.Z`, where
+``P_{\\rm peak}(z) = \\max_t |A(z,t)|^2`` [W] is the instantaneous peak power
+of the saved pulse envelope and ``\\gamma(z)`` [1/(W·m)] is the medium's
+nonlinear coefficient (evaluated at the carrier frequency ω₀ for
+frequency-dependent [`NonlinearityModel`](@ref)s). The integral is
+accumulated with the trapezoidal rule over the non-uniformly spaced `sol.Z`
+grid.
+
+# Physics
+
+The B-integral is the accumulated nonlinear (Kerr) phase seen by the pulse
+peak as it propagates. Although it is dimensionless in radians, it is
+conventionally quoted as a bare number and used as the standard design-rule
+diagnostic for the risk of catastrophic self-focusing and beam breakup in
+high-peak-power laser chains (CPA amplifiers, fiber amplifiers, multi-pass
+cells): keeping the accumulated B below roughly 3–4 rad over the full chain
+is the widely used rule of thumb (larger, but still moderate, values may be
+tolerable for filamentation-free guided propagation in a well-confined
+single mode, e.g. inside a fiber core).
+
+For a [`VectorialSolution`](@ref), `P_peak(z)` uses the combined intensity
+`|A_x(z,t)|² + |A_y(z,t)|²` of both polarization components.
+
+Use [`b_integral`](@ref) to get just the end-of-propagation total.
+
+# References
+
+  - M. D. Perry & G. Mourou, "Terawatt to Petawatt Subpicosecond Lasers,"
+    Science 264, 917 (1994).
+  - G. P. Agrawal, "Nonlinear Fiber Optics," 6th ed. (Academic Press, 2019), Ch. 4.
+"""
+function b_integral_profile(sol::Solution, medium::AbstractMedium)
+    Z = sol.Z
+    integrand = Vector{Float64}(undef, length(Z))
+    @inbounds for j in eachindex(Z)
+        Pz = maximum(abs2, @view(sol.At[:, j]))
+        integrand[j] = _gamma_at(medium.gamma, Z[j], sol.omega0) * Pz
+    end
+    return _cumtrapz(Z, integrand)
+end
+
+function b_integral_profile(sol::VectorialSolution, medium::AbstractMedium)
+    Z = sol.Z
+    integrand = Vector{Float64}(undef, length(Z))
+    @inbounds for j in eachindex(Z)
+        Pz = maximum(abs2.(@view(sol.At[:, 1, j])) .+ abs2.(@view(sol.At[:, 2, j])))
+        integrand[j] = _gamma_at(medium.gamma, Z[j], sol.omega0) * Pz
+    end
+    return _cumtrapz(Z, integrand)
+end
+
+b_integral_profile(sol::Union{Solution, VectorialSolution}, params::SimParams) =
+    b_integral_profile(sol, params.medium)
+
+"""
+    b_integral(sol::Solution, medium::AbstractMedium) -> Float64
+    b_integral(sol::VectorialSolution, medium::AbstractMedium) -> Float64
+    b_integral(sol, params::SimParams) -> Float64
+
+Total accumulated B-integral (nonlinear phase) [rad] over the full saved
+propagation, i.e. `b_integral_profile(sol, medium)[end]`. See
+[`b_integral_profile`](@ref) for the full definition, physical
+interpretation, and design-rule guidance on self-focusing risk.
+
+# Example
+
+```julia
+medium = Medium(0.2, 0.11, 0.0, [-1.2e-26], 1030e-9)
+pulse = gaussian_pulse(grid, 5e6, 300e-15)   # 5 MW peak, 300 fs
+params = SimParams(; medium=medium, z_saves=50, raman_model=nothing)
+sol = solve(pulse, params)
+
+B = b_integral(sol, params)
+B < 3.0 || @warn "B-integral \$B rad exceeds the usual self-focusing guideline"
+```
+"""
+b_integral(sol::Union{Solution, VectorialSolution}, medium::AbstractMedium) =
+    last(b_integral_profile(sol, medium))
+b_integral(sol::Union{Solution, VectorialSolution}, params::SimParams) =
+    b_integral(sol, params.medium)
+
+"""
     rin_rms(psd_dbc_hz, bandwidth) -> Float64
 
 RMS relative intensity fluctuation σ_P/P obtained by integrating a (flat)

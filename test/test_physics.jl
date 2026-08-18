@@ -369,4 +369,70 @@ end
         @test E_out / E_in <= 10.0 + 1e-12
         @test E_out > E_in
     end
+
+    @testset "B-integral: pure SPM matches the analytic γ·P₀·L" begin
+        # With no dispersion, no Raman, and self-steepening off, SPM only imprints
+        # phase: the peak power P₀ is conserved exactly along z, so the B-integral
+        # reduces to the textbook closed form B = γ P₀ L (Agrawal, Ch. 4).
+        gam = 0.1
+        P0 = 50.0
+        L = 1.0
+
+        grid = create_grid(2^11, 20e-12, 835e-9)
+        medium = Medium(L, gam, 0.0, [0.0], 835e-9)   # β₂ = 0 ⇒ pure SPM
+        pulse = gaussian_pulse(grid, P0, 200e-15)
+        sol = solve(
+            pulse,
+            SimParams(; medium=medium, z_saves=25, raman_model=nothing);
+            progress=false,
+        )
+
+        # rtol=3e-3: grid-discretization of the continuous Gaussian peak (see
+        # the analogous `peak_power(pulse) ≈ 5.0 rtol = 2e-3` note in test_unit.jl).
+        @test b_integral(sol, medium) ≈ gam * P0 * L rtol = 3e-3
+
+        # The profile is the running integral: it starts at zero, ends at the
+        # total, and is monotonically non-decreasing (γ, P ≥ 0 everywhere).
+        profile = b_integral_profile(sol, medium)
+        @test profile[1] == 0.0
+        @test profile[end] ≈ b_integral(sol, medium)
+        @test issorted(profile)
+
+        # Convenience overload taking `SimParams` directly must agree.
+        params = SimParams(; medium=medium, z_saves=25, raman_model=nothing)
+        sol2 = solve(pulse, params; progress=false)
+        @test b_integral(sol2, params) ≈ b_integral(sol2, medium)
+        @test b_integral_profile(sol2, params) ≈ b_integral_profile(sol2, medium)
+
+        # Halving γ halves the accumulated nonlinear phase (linearity in γ).
+        medium_half = Medium(L, gam / 2, 0.0, [0.0], 835e-9)
+        sol_half = solve(
+            pulse,
+            SimParams(; medium=medium_half, z_saves=25, raman_model=nothing);
+            progress=false,
+        )
+        @test b_integral(sol_half, medium_half) ≈ b_integral(sol, medium) / 2 rtol = 3e-3
+    end
+
+    @testset "B-integral: tapered γ(z) matches the analytic linear-ramp integral" begin
+        # γ(z) = γ₀·(1 - z/L) is a linear taper; with pure SPM (no dispersion) the
+        # peak power is again constant, so B(z) = γ₀·P₀·(z - z²/(2L)) in closed form.
+        gam0 = 0.2
+        P0 = 30.0
+        L = 0.5
+        gamma_func = z -> gam0 * (1 - z / L)
+
+        grid = create_grid(2^11, 20e-12, 835e-9)
+        medium = Medium(L, gamma_func, 0.0, [0.0], 835e-9)
+        pulse = gaussian_pulse(grid, P0, 200e-15)
+        sol = solve(
+            pulse,
+            SimParams(; medium=medium, z_saves=40, raman_model=nothing);
+            progress=false,
+        )
+
+        profile = b_integral_profile(sol, medium)
+        analytic = @. gam0 * P0 * (sol.Z - sol.Z^2 / (2L))
+        @test profile ≈ analytic rtol = 3e-3
+    end
 end

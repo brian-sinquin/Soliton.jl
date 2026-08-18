@@ -62,6 +62,8 @@ solution = solve(pulse, params)
 
 **Physics**: `dispersion_operator`, `raman_response`, `build_physics_model`
 
+**Quantitative indicators**: `soliton_number`, `dispersion_length`, `nonlinear_length`, `b_integral`, `b_integral_profile`
+
 # References
 
 Adapted from gnlse-python (https://github.com/WUST-FOG/gnlse-python)
@@ -149,6 +151,7 @@ export build_physics_model
 export pulse_energy, peak_power, fwhm, spectral_bandwidth, time_bandwidth_product
 export photon_number, spectral_centroid
 export dispersion_length, nonlinear_length, soliton_number
+export b_integral, b_integral_profile
 export add_noise, rin_rms, spectral_coherence
 export spectrogram, shg_frog_trace, track_solitons, dispersive_wave_wavelength
 
