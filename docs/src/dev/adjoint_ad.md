@@ -8,10 +8,13 @@ fiber length, loss, pulse shape, ...) for gradient-based optimization
 (dispersion engineering, pulse-shaping inverse design, parameter fitting).
 
 It is **not** a user guide to a working feature: as of this writing, Soliton.jl
-does **not** support AD through `solve`/`propagate`. The sections below
-document *why*, and what a compatible implementation would require, so the
-work can be scoped and picked up deliberately rather than discovered
-piecemeal.
+does **not** support AD through `solve`/`propagate` — the FFTW adjoint rule
+(roadmap step 1) is implemented and tested for the underlying `mul!`/nonlinear-
+step building blocks, but no solver (`SSFM`/`AdaptiveSSFM`/`ERK4IP`) has been
+differentiated end-to-end yet (roadmap steps 2–4). The sections below
+document *why*, what's done, and what a full implementation would still
+require, so the remaining work can be scoped and picked up deliberately
+rather than discovered piecemeal.
 
 ## Summary
 
@@ -20,7 +23,7 @@ piecemeal.
 | Forward-mode on dispersion/loss/gain math only (`propagation_constant`, `dispersion_operator`, `loss_vector`/`gain_vector`) | **Works today** | These are pure arithmetic, no FFTW involved. `Grid`, `TaylorDispersion`/`TabulatedDispersion`/`SellmeierDispersion`, and these functions' signatures are now generic over `<:Real` — see [Architecture audit](#architecture-audit), points 1–2. |
 | Forward-mode through full pulse propagation (ForwardDiff.jl, `Dual` numbers) | **Blocked** | FFTW only accepts `Float32`/`Float64`/`ComplexF32`/`ComplexF64` buffers; `Dual`-typed arrays cannot be passed to `plan_fft`/`plan_ifft` at all, regardless of how generic the surrounding types are. |
 | Reverse-mode via array overloading (Zygote.jl) | **Blocked** | The propagation loop is written as in-place mutation (`@.`, `mul!`, `copyto!` into pre-allocated buffers) for zero-allocation performance; Zygote does not differentiate through mutating array updates without a full rewrite to `Zygote.Buffer`/non-mutating style, which would defeat the current performance design. |
-| Reverse-mode via source transformation (Enzyme.jl) | **Feasible, not yet implemented** | Enzyme differentiates the compiled, concretely-typed, mutating code directly (no `Dual` overloading needed), so it is not affected by the FFTW or mutation blockers above. It *does* need a hand-written adjoint rule for the FFTW `ccall` boundary, since Enzyme cannot see through opaque C calls automatically. |
+| Reverse-mode via source transformation (Enzyme.jl) | **FFTW boundary + single nonlinear step done; full solver not yet done** | Enzyme differentiates the compiled, concretely-typed, mutating code directly (no `Dual` overloading needed), so it is not affected by the FFTW or mutation blockers above. The hand-written `EnzymeRules` adjoint for the FFTW `ccall` boundary (`ext/SolitonEnzymeExt.jl`, a weak-dependency extension) is implemented and validated against finite differences on `to_freq`/`to_time` and on the full `_spm` nonlinear step; differentiating an entire `SSFM`/`ERK4IP` propagation loop is roadmap steps 2–4, not yet done. |
 | Gradient-free (`solve_sweep` + Optim.jl/BlackBoxOptim.jl/surrogate optimization) | **Works today** | No code changes needed; recommended near-term path for optimizing over full propagation until adjoint support lands. |
 
 **Recommendation:** target **Enzyme.jl** as the AD backend for adjoint
@@ -187,20 +190,27 @@ Enzyme v0.13 available, where the original assessment above had none):
    from concrete `ComplexF64`/`Float64` to `<:Complex`/`<:Real`. This was
    done without a Julia toolchain available to run the test suite — see
    [Open work](#open-work-not-done-here).
-1. **Investigation done, rule not yet written.** Confirmed with a real
-   Enzyme install exactly where the FFTW ccall boundary breaks (see above):
-   the error surfaces at `FFTW.assert_applicable`'s `alignment_of` check
-   inside `mul!(y, plan, x)`. Remaining work: add `Enzyme` as a `test`-only
-   (or weak) dependency; write the `EnzymeRules.augmented_primal`/
-   `EnzymeRules.reverse` pair for
-   `LinearAlgebra.mul!(::AbstractVecOrMat, ::FFTW.FFTWPlan, ::AbstractVecOrMat)`;
-   validate against finite differences on a tiny grid (`N=32`). Must also
-   confirm the rule resolves the `EnzymeRuntimeActivityError` seen when
-   differentiating through a full `PhysicsModel`-based nonlinear step
-   (`_spm`) — that error is about `model`'s `Const`-marked scratch buffers,
-   a separate issue from the FFTW rule and may need `Enzyme.Duplicated`
-   applied to `model` (with zeroed shadow buffers) instead of `Const`,
-   rather than blanket `set_runtime_activity`.
+1. **Done.** Added `Enzyme` as a weak dependency and
+   [`ext/SolitonEnzymeExt.jl`](https://github.com/brian-sinquin/Soliton.jl/blob/master/ext/SolitonEnzymeExt.jl),
+   registering the `EnzymeRules.augmented_primal`/`EnzymeRules.reverse` pair
+   for `LinearAlgebra.mul!(y, plan::AbstractFFTs.Plan, x)`. The adjoint is
+   `N * inv(plan)` for an unnormalized transform (`to_time`/`plan_fft`) and
+   `inv(plan) / N` for an already-normalized one
+   (`to_freq`/`plan_ifft`/`ScaledPlan`) — see the math derivation in the
+   extension's docstring. Validated in
+   [`test/test_enzyme.jl`](https://github.com/brian-sinquin/Soliton.jl/blob/master/test/test_enzyme.jl)
+   against finite differences: matches to ~1e-6/1e-7 relative error on both
+   `to_time` and `to_freq` in isolation, and on the full `_spm` nonlinear
+   step (FFT + Kerr term) end-to-end. Confirms the `EnzymeRuntimeActivityError`
+   from differentiating a full `PhysicsModel`-based step is fixed by calling
+   `Enzyme.autodiff` with `Enzyme.Duplicated(model, Enzyme.make_zero(model))`
+   instead of `Enzyme.Const(model)` — not by `set_runtime_activity`, which
+   (as documented above) silently produces a wrong zero gradient instead.
+   This runs as its own CI job (`enzyme` in `.github/workflows/CI.yml`), kept
+   separate from the main test matrix rather than added to every cell, since
+   Enzyme's large LLVM-based artifact and its `i686`/nightly-Julia support
+   are less exercised than the package's existing dependencies; the job
+   covers Julia 1.12 on `ubuntu-latest`/`x64` only.
 2. Differentiate a single **fixed-step** `SSFM` propagation end-to-end
    (`SSFM`, not `ERK4IP`) for a scalar loss such as
    `sum(abs2, At_out[:, end])`, with respect to `medium.gamma` and
@@ -264,19 +274,34 @@ were previously just claims:
   error is worked around with `set_runtime_activity` instead of a real
   `EnzymeRules` pair. See [Recommended path](#recommended-path-enzymejl) for
   the full writeup; this used a temporary scratch environment (`Pkg.develop`
-  + `Pkg.add("Enzyme")` outside this package's own `Project.toml`), so
-  `Enzyme` is not yet an actual dependency of Soliton.jl.
+  + `Pkg.add("Enzyme")` outside this package's own `Project.toml`).
+- **Wrote and landed the `EnzymeRules` pair as a real weak-dependency
+  extension.** `Enzyme` is now in `[weakdeps]`/`[extensions]` in
+  `Project.toml`, `ext/SolitonEnzymeExt.jl` implements
+  `augmented_primal`/`reverse` for `mul!(y, plan::AbstractFFTs.Plan, x)`, and
+  `test/test_enzyme.jl` validates it end-to-end against finite differences
+  (isolated `to_time`, isolated `to_freq`, and the full `_spm` step). Also
+  confirmed the `EnzymeRuntimeActivityError`/silent-zero-gradient case is
+  resolved by using `Enzyme.Duplicated(model, Enzyme.make_zero(model))`
+  rather than `Enzyme.Const(model)` — this is a caller-side concern (how you
+  invoke `Enzyme.autodiff`), not something the extension itself can paper
+  over. Added as its own CI job (`enzyme` in `.github/workflows/CI.yml`,
+  Julia 1.12/`ubuntu-latest`/`x64` only) rather than folded into the main
+  test matrix, since Enzyme's LLVM-based artifact is large and its
+  `i686`/nightly-Julia support is comparatively untested next to the
+  package's existing dependencies.
 
 Still not done:
 
-- Writing and testing the proposed `EnzymeRules` pair for `mul!` with an FFTW
-  plan (now that the exact failure point is known), and confirming it also
-  resolves the `EnzymeRuntimeActivityError`/silent-zero-gradient case on a
-  full `PhysicsModel`.
-- Adding `Enzyme` as an actual (test-only or weak) dependency in
-  `Project.toml`, rather than probing it from an ad hoc external environment.
+- Differentiating an entire propagation loop (`SSFM`, then `AdaptiveSSFM`/
+  `ERK4IP`) end-to-end for a realistic loss function — roadmap steps 2–4.
+  What's validated so far is the `mul!` rule and a single nonlinear-step
+  function in isolation, not a multi-step solve.
 - Benchmarking the memory/performance cost of reverse-mode checkpointing
   through the adaptive step controllers.
+- The convenience `soliton_gradient(loss_fn, pulse, params)` wrapper
+  (roadmap step 4) that would make this usable without hand-rolling
+  `Enzyme.autodiff`/`Duplicated`/`make_zero` calls.
 
 Anyone picking this up should start by writing the `mul!` `EnzymeRules` pair
 described above and re-running the `_spm`/finite-difference comparison from
