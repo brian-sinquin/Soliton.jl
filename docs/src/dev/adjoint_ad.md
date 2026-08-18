@@ -185,22 +185,32 @@ while gradient support is built out.
 
 ## Open work not done here
 
-This assessment — and the type-parameterization change from roadmap step 0 —
-were done by reading the source only, with no Julia toolchain available in
-the environment to run `] test` or the doctests. None of the following were
-actually executed:
+The initial assessment and roadmap step 0 were done by reading the source
+only, with no Julia toolchain available in that environment. A follow-up
+session had a working Julia 1.12 toolchain and validated the two items that
+were previously just claims:
 
-- **Running the existing test suite** (`test/test_api.jl`'s dispersion/
-  Sellmeier/loss-gain tests especially) against the relaxed `Grid`/
-  `TaylorDispersion`/`TabulatedDispersion`/`SellmeierDispersion`/
-  `PhysicsModel` signatures, to confirm the default `Float64`/`ComplexF64`
-  path is genuinely unchanged (it was designed to be bit-identical — see the
-  reasoning inline in each diff — but this needs to actually run to be
-  trusted).
-- **Confirming step 0's forward-mode claim** by actually running
-  `ForwardDiff.gradient` through `propagation_constant`/`dispersion_operator`
-  with a `Dual`-valued `TaylorDispersion` or `Medium.loss`, on a machine with
-  ForwardDiff installed.
+- **Ran the existing test suite.** `] test` initially reported 3 failures,
+  all pre-existing `@test_throws ArgumentError` checks on `TabulatedDispersion`
+  (too-few-samples, unsorted `detuning`) and `SellmeierDispersion`
+  (mismatched `B`/`C` length) that silently stopped throwing. Root cause:
+  parameterizing these structs over `{T<:Real}` made Julia auto-generate a
+  default inner constructor (`TabulatedDispersion(::Vector{T}, ::Vector{T})
+  where T`) that is *more specific* than the validating outer constructor for
+  same-element-type vector arguments, so same-typed calls silently dispatched
+  around the validation. Fixed in `src/types.jl` by moving each check into an
+  explicit `TabulatedDispersion{T}(...)`/`SellmeierDispersion{T}(...)` inner
+  constructor — defining any inner constructor suppresses Julia's default
+  one. `Medium`'s existing inner-constructor pattern was already immune to
+  this and needed no change. All 371 tests now pass, confirming the default
+  `Float64`/`ComplexF64` path is unchanged.
+- **Confirmed the forward-mode claim.** `ForwardDiff.gradient` through
+  `propagation_constant` succeeds for both `TaylorDispersion.betas` and
+  `SellmeierDispersion.B`, producing finite non-zero gradients, on a small
+  grid with no code changes beyond the constructor fix above.
+
+Still not done:
+
 - Installing Enzyme and confirming which FFTW calls it errors on today
   (`Enzyme.autodiff` on `_propagate_erk4ip!` or `_spm`/`_spm_raman` directly,
   to get the exact "unsupported ccall" error/stack rather than inferring it).
@@ -209,7 +219,7 @@ actually executed:
 - Benchmarking the memory/performance cost of reverse-mode checkpointing
   through the adaptive step controllers.
 
-Anyone picking this up should start by running the test suite to validate
-step 0, then reproducing step 1 of the roadmap above on a machine with a
-working Julia + Enzyme install, since the exact Enzyme error surface is the
-fastest way to confirm (or correct) the analysis here.
+Anyone picking this up should start with step 1 of the roadmap above (Enzyme
++ the FFTW `EnzymeRules` pair) on a machine with a working Julia + Enzyme
+install, since the exact Enzyme error surface is the fastest way to confirm
+(or correct) the analysis here.

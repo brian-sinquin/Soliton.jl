@@ -56,13 +56,22 @@ dispersion curve.
 struct TabulatedDispersion{T <: Real} <: DispersionModel
     detuning::Vector{T}
     beta::Vector{T}
+
+    # Explicit inner constructor: defining one here suppresses Julia's
+    # auto-generated default `TabulatedDispersion(::Vector{T}, ::Vector{T}) where T`,
+    # which would otherwise be more specific than the validating outer
+    # constructor below for same-typed vector arguments and silently skip
+    # these checks.
+    function TabulatedDispersion{T}(detuning::Vector{T}, beta::Vector{T}) where {T <: Real}
+        length(detuning) == length(beta) ||
+            throw(ArgumentError("detuning and beta must have equal length"))
+        length(detuning) >= 2 || throw(ArgumentError("need at least two tabulated samples"))
+        issorted(detuning) || throw(ArgumentError("detuning must be sorted ascending"))
+        new{T}(detuning, beta)
+    end
 end
 
 function TabulatedDispersion(detuning::AbstractVector{<:Real}, beta::AbstractVector{<:Real})
-    length(detuning) == length(beta) ||
-        throw(ArgumentError("detuning and beta must have equal length"))
-    length(detuning) >= 2 || throw(ArgumentError("need at least two tabulated samples"))
-    issorted(detuning) || throw(ArgumentError("detuning must be sorted ascending"))
     T = promote_type(eltype(detuning), eltype(beta), Float64)
     TabulatedDispersion{T}(collect(T, detuning), collect(T, beta))
 end
@@ -91,12 +100,19 @@ fitting.
 struct SellmeierDispersion{T <: Real} <: DispersionModel
     B::Vector{T}
     C::Vector{T}
+
+    # Explicit inner constructor: see the note on TabulatedDispersion above —
+    # this suppresses the auto-generated default that would otherwise bypass
+    # the length check for same-typed vector arguments.
+    function SellmeierDispersion{T}(B::Vector{T}, C::Vector{T}) where {T <: Real}
+        length(B) == length(C) || throw(ArgumentError("B and C must have equal length"))
+        new{T}(B, C)
+    end
 end
 
 function SellmeierDispersion(
     B::AbstractVector{<:Real}, C::AbstractVector{<:Real}; microns::Bool=true
 )
-    length(B) == length(C) || throw(ArgumentError("B and C must have equal length"))
     T = promote_type(eltype(B), eltype(C), Float64)
     C_val = microns ? collect(T, C) .* T(1e-12) : collect(T, C) # 1 μm² = 1e-12 m²
     SellmeierDispersion{T}(collect(T, B), C_val)
