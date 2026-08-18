@@ -63,7 +63,7 @@ solution = solve(pulse, params)
 **Physics**: `dispersion_operator`, `raman_response`, `build_physics_model`
 
 **Analysis**: `pulse_energy`, `peak_power`, `fwhm`, `spectral_bandwidth`,
-`soliton_number`, `soliton_period`, `modulation_instability_gain`,
+`soliton_number`, `soliton_period`, `b_integral`, `modulation_instability_gain`,
 `instantaneous_frequency`
 
 **Conversions**: `dispersion_D_to_beta2`, `wavelength_to_omega`,
@@ -160,6 +160,7 @@ export build_physics_model
 export pulse_energy, peak_power, fwhm, spectral_bandwidth, time_bandwidth_product
 export photon_number, spectral_centroid
 export dispersion_length, nonlinear_length, soliton_number, soliton_period
+export b_integral, b_integral_profile
 export modulation_instability_gain, mi_peak_frequency, mi_bandwidth
 export pulse_energy_estimate, peak_power_estimate
 export average_power, pulse_energy_from_average, peak_power_from_average

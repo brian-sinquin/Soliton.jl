@@ -16,6 +16,8 @@ dispersion_length
 nonlinear_length
 soliton_number
 soliton_period
+b_integral
+b_integral_profile
 modulation_instability_gain
 mi_peak_frequency
 mi_bandwidth
