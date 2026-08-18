@@ -145,6 +145,39 @@ written and tested against finite differences on a small grid, this single
 rule covers every solver and every physics model in the package (they all
 route through the same `to_freq`/`to_time` plans).
 
+**Confirmed with a working Enzyme install** (a later session had Julia 1.12 +
+Enzyme v0.13 available, where the original assessment above had none):
+
+- `Enzyme.autodiff(Reverse, ...)` on the pure elementwise nonlinearity
+  (`u .* abs2.(u)`, no FFT) differentiates correctly — matches blocker 4's
+  prediction that mutation/buffer-reuse alone is not a problem for Enzyme.
+- Isolating just `mul!(y, model.to_freq, u)` and differentiating through it
+  throws `Enzyme.Compiler.EnzymeNoDerivativeError`, not a silent wrong
+  answer, with a precise origin: `No augmented forward pass found for
+  ejlstr$fftw_alignment_of$...libfftw3-3.dll`, from
+  `FFTW.assert_applicable`'s pointer-alignment sanity check (`fft.jl`'s
+  `alignment_of`) that runs *before* the actual transform ccall. So the rule
+  needs to be registered at the `mul!`/`LinearAlgebra.mul!` level (as
+  planned above), not by trying to patch through FFTW's internal alignment
+  check.
+- Running `Enzyme.autodiff` on the real `_spm(u, model, z)` (the full
+  nonlinear step, FFT included) does **not** throw this error at all — by
+  default it hits a *different*, earlier error
+  (`EnzymeRuntimeActivityError`, because `model`'s pre-allocated buffers are
+  marked `Const` while being used as scratch for active/differentiable
+  values) that recommends `set_runtime_activity`. Turning that on makes the
+  call "succeed" with **no error and a gradient that is silently all
+  zero** — verified wrong against a finite-difference check at the pulse
+  peak (finite difference: non-zero; Enzyme: exactly `0.0 + 0.0im`
+  everywhere). This is a materially worse failure mode than the isolated-FFT
+  case: an unregistered FFTW rule at the boundary of a larger call doesn't
+  always surface as `EnzymeNoDerivativeError` — it can silently drop the
+  gradient contribution through the ccall instead. **Any gradient obtained
+  from Enzyme on code touching `to_freq`/`to_time` before the `mul!` rule
+  below exists must be checked against finite differences before being
+  trusted; a successful, error-free `autodiff` call is not evidence of a
+  correct one.**
+
 ### Proposed staged roadmap
 
 0. **Done.** Parameterize the pure-math layer (`Grid`, `TaylorDispersion`/
@@ -154,9 +187,20 @@ route through the same `to_freq`/`to_time` plans).
    from concrete `ComplexF64`/`Float64` to `<:Complex`/`<:Real`. This was
    done without a Julia toolchain available to run the test suite — see
    [Open work](#open-work-not-done-here).
-1. Add `Enzyme` as a `test`-only (or weak) dependency; write and validate the
-   `EnzymeRules` pair for `mul!` with `plan_fft`/`plan_ifft`, checked against
-   finite differences on a tiny grid (`N=32`).
+1. **Investigation done, rule not yet written.** Confirmed with a real
+   Enzyme install exactly where the FFTW ccall boundary breaks (see above):
+   the error surfaces at `FFTW.assert_applicable`'s `alignment_of` check
+   inside `mul!(y, plan, x)`. Remaining work: add `Enzyme` as a `test`-only
+   (or weak) dependency; write the `EnzymeRules.augmented_primal`/
+   `EnzymeRules.reverse` pair for
+   `LinearAlgebra.mul!(::AbstractVecOrMat, ::FFTW.FFTWPlan, ::AbstractVecOrMat)`;
+   validate against finite differences on a tiny grid (`N=32`). Must also
+   confirm the rule resolves the `EnzymeRuntimeActivityError` seen when
+   differentiating through a full `PhysicsModel`-based nonlinear step
+   (`_spm`) — that error is about `model`'s `Const`-marked scratch buffers,
+   a separate issue from the FFTW rule and may need `Enzyme.Duplicated`
+   applied to `model` (with zeroed shadow buffers) instead of `Const`,
+   rather than blanket `set_runtime_activity`.
 2. Differentiate a single **fixed-step** `SSFM` propagation end-to-end
    (`SSFM`, not `ERK4IP`) for a scalar loss such as
    `sum(abs2, At_out[:, end])`, with respect to `medium.gamma` and
@@ -208,18 +252,33 @@ were previously just claims:
   `propagation_constant` succeeds for both `TaylorDispersion.betas` and
   `SellmeierDispersion.B`, producing finite non-zero gradients, on a small
   grid with no code changes beyond the constructor fix above.
+- **Installed Enzyme and confirmed the exact FFTW error surface** (step 1's
+  first open item above): isolating `mul!(y, model.to_freq, u)` and
+  differentiating it throws `EnzymeNoDerivativeError` at
+  `FFTW.assert_applicable`'s `alignment_of` ccall — not at the transform
+  itself, but at a pointer-alignment check that runs first. Differentiating
+  the full `_spm` nonlinear step (FFT included) instead hits a *different*
+  error first (`EnzymeRuntimeActivityError`, from `model`'s buffers being
+  `Const` while used as active scratch space), and — this is the important
+  part — silently returns an all-zero, verifiably wrong gradient once that
+  error is worked around with `set_runtime_activity` instead of a real
+  `EnzymeRules` pair. See [Recommended path](#recommended-path-enzymejl) for
+  the full writeup; this used a temporary scratch environment (`Pkg.develop`
+  + `Pkg.add("Enzyme")` outside this package's own `Project.toml`), so
+  `Enzyme` is not yet an actual dependency of Soliton.jl.
 
 Still not done:
 
-- Installing Enzyme and confirming which FFTW calls it errors on today
-  (`Enzyme.autodiff` on `_propagate_erk4ip!` or `_spm`/`_spm_raman` directly,
-  to get the exact "unsupported ccall" error/stack rather than inferring it).
 - Writing and testing the proposed `EnzymeRules` pair for `mul!` with an FFTW
-  plan.
+  plan (now that the exact failure point is known), and confirming it also
+  resolves the `EnzymeRuntimeActivityError`/silent-zero-gradient case on a
+  full `PhysicsModel`.
+- Adding `Enzyme` as an actual (test-only or weak) dependency in
+  `Project.toml`, rather than probing it from an ad hoc external environment.
 - Benchmarking the memory/performance cost of reverse-mode checkpointing
   through the adaptive step controllers.
 
-Anyone picking this up should start with step 1 of the roadmap above (Enzyme
-+ the FFTW `EnzymeRules` pair) on a machine with a working Julia + Enzyme
-install, since the exact Enzyme error surface is the fastest way to confirm
-(or correct) the analysis here.
+Anyone picking this up should start by writing the `mul!` `EnzymeRules` pair
+described above and re-running the `_spm`/finite-difference comparison from
+this session to confirm it fixes both the isolated-FFT error and the
+full-model silent-zero-gradient case.
