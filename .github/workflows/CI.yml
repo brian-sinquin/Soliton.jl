@@ -64,7 +64,11 @@ jobs:
         run: |
           import Pkg
           Pkg.add("Enzyme")
-          include("test/test_enzyme.jl")
+          # `include` resolves relative paths against the including file's
+          # directory, not `pwd()` — and this script itself is written to a
+          # runner temp dir by `shell:`, not the checkout, so a bare relative
+          # path here silently looks in the wrong place.
+          include(joinpath(pwd(), "test", "test_enzyme.jl"))
   docs:
     name: Documentation
     runs-on: ubuntu-latest
