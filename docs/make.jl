@@ -55,6 +55,8 @@ makedocs(;
             "Analysis" => "api/analysis.md",
             "Unit Conversions" => "api/conversions.md",
         ],
+        "Developer Notes" =>
+            ["Automatic Differentiation & Adjoint Propagation" => "dev/adjoint_ad.md"],
     ],
     # Keep style/completeness issues non-fatal, but let `@example`/`@eval`/`@setup`
     # block execution failures fail the build — a silently-broken example (missing
