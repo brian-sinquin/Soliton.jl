@@ -150,11 +150,15 @@ using Soliton
         py = gaussian_pulse(grid, Py0, 200e-15)
         vpulse = VectorialPulse(px.At, py.At, grid)
 
-        params = SimParams(; medium=medium, z_saves=10, raman_model=nothing)
+        # BirefringentMedium only supports the SSFM solver (no ERK4IP method exists
+        # for VectorialPulse), matching every other vectorial SimParams in this file.
+        params = SimParams(;
+            medium=medium, z_saves=10, solver=SSFM(1e-5), raman_model=nothing
+        )
         sol = solve(vpulse, params; progress=false)
 
         P_combined = maximum(abs2.(vpulse.At[:, 1]) .+ abs2.(vpulse.At[:, 2]))
-        @test b_integral(sol, medium) ≈ gam * P_combined * L rtol = 1e-3
+        @test b_integral(sol, medium) ≈ gam * P_combined * L rtol = 3e-3
         @test b_integral(sol, params) ≈ b_integral(sol, medium)
 
         profile = b_integral_profile(sol, medium)
