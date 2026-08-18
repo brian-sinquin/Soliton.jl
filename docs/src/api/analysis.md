@@ -15,6 +15,8 @@ photon_number
 dispersion_length
 nonlinear_length
 soliton_number
+b_integral
+b_integral_profile
 spectral_coherence
 spectrogram
 shg_frog_trace
