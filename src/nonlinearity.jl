@@ -28,9 +28,39 @@ Pre-computed operators and FFT plans for GNLSE propagation.
   - `RW`: Raman response in frequency domain (if enabled)
   - `buf_t1`, `buf_t2`: Pre-allocated time-domain buffers
   - `buf_f1`: Pre-allocated frequency-domain buffer
+
+# Element type
+
+`TA`/`TVR` are bounded by `AbstractArray{<:Complex}`/`AbstractVector{<:Real}`
+rather than the concrete `ComplexF64`/`Float64` — the field buffers and `D`
+are typed by whatever array `build_physics_model`'s `template`/`Grid`/
+`Medium` pipeline actually produces (any GPU array type, or `ComplexF32` if
+the whole `Grid`/`DispersionModel` chain feeding it is instantiated in
+`Float32`), rather than being force-converted to `ComplexF64`. `omega0`,
+`dt`, and `fr` remain plain `Float64` scalar fields regardless — mixing
+`Float32` buffers with these is numerically harmless (they only ever
+widen a `Float32` product transiently before it's stored back), but it means
+a `Float32` `PhysicsModel` is not yet *purely* single precision end to end.
+
+The nonlinear-step functions themselves (`_spm`, `_spm_raman`,
+`_amplifying_spm`, `_amplifying_spm_raman`, `_semiconductor_spm`) and the
+dispersion pipeline feeding `D` follow this bound — none of them hard-code
+`ComplexF64` on `model`'s own buffers. Two call sites elsewhere still do:
+`inject_ase_noise!` (the `AmplifyingMedium` ASE-noise step, called from the
+`ERK4IP` loop) and `_vectorial_spm_fwm`'s `u::AbstractMatrix{ComplexF64}`
+argument (`BirefringentMedium`) — they weren't touched by this pass, so a
+non-`ComplexF64` `TA` only round-trips end to end for the plain `Medium`/
+`AmplifyingMedium`/`SemiconductorMedium` solver paths today, not
+`BirefringentMedium`, and not `AmplifyingMedium` once ASE noise is actually
+injected.
+
+This does **not** by itself enable AD dual numbers here: FFTW's
+`plan_fft`/`plan_ifft` only support `Float32`/`Float64` (and their complex
+counterparts), so `to_freq`/`to_time` construction is the actual wall for any
+non-hardware-float element type — see `docs/src/dev/adjoint_ad.md`.
 """
 struct PhysicsModel{
-    TF, TT, NL, TG, TA <: AbstractArray{ComplexF64}, TVR <: AbstractVector{Float64}, TRW
+    TF, TT, NL, TG, TA <: AbstractArray{<:Complex}, TVR <: AbstractVector{<:Real}, TRW
 }
     to_freq::TF
     to_time::TT
@@ -161,7 +191,7 @@ function _spm_raman(u, model::PhysicsModel, z::Real)
     # `_spm_raman` is only selected when Raman is enabled, so RW is a Vector.
     # The assertion narrows the Union{Nothing,Vector} field type, keeping the
     # broadcast below type-stable and allocation-free.
-    RW = model.RW::Vector{ComplexF64}
+    RW = model.RW::AbstractVector{<:Complex}
 
     # Intensity |u|²
     @. model.buf_t1 = abs2(u)
@@ -385,7 +415,7 @@ function _amplifying_spm_raman(u, model::PhysicsModel, z::Real)
     E_pulse = sum(abs2, u) * dt
     delta_g = -0.5 * g0_val * (E_pulse / (Esat + E_pulse))
 
-    RW = model.RW::Vector{ComplexF64}
+    RW = model.RW::AbstractVector{<:Complex}
 
     @. model.buf_t1 = abs2(u)
     mul!(model.buf_f1, model.to_freq, model.buf_t1)

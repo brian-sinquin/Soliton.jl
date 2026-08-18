@@ -24,9 +24,12 @@ dispersion curve onto the simulation grid, then uses constant extrapolation beyo
 the tabulated frequency range. This is more accurate for complex materials (PCF,
 highly dispersive windows) but requires tabulated data.
 """
-function propagation_constant(V::AbstractVector{Float64}, model::TaylorDispersion)
+function propagation_constant(V::AbstractVector{<:Real}, model::TaylorDispersion)
     # Taylor series: B = β₁ · V + Σ βₙ/n! · Vⁿ, n ≥ 2
-    B = model.beta1 .* V
+    # The result eltype promotes V with the model's own coefficient type, so
+    # AD dual numbers held by either side (grid detuning or βₙ) propagate.
+    T = promote_type(eltype(V), eltype(model.betas), typeof(model.beta1))
+    B = Vector{T}(model.beta1 .* V)
     for (i, beta) in enumerate(model.betas)
         n = i + 1  # betas[1]=β₂ → n=2, betas[2]=β₃ → n=3, etc.
         B .+= beta ./ factorial(n) .* (V .^ n)
@@ -34,10 +37,11 @@ function propagation_constant(V::AbstractVector{Float64}, model::TaylorDispersio
     return B
 end
 
-function propagation_constant(V::AbstractVector{Float64}, model::TabulatedDispersion)
+function propagation_constant(V::AbstractVector{<:Real}, model::TabulatedDispersion)
     # Linear interpolation onto V, flat extrapolation outside the tabulated range
     xs, ys = model.detuning, model.beta
-    B = similar(V)
+    T = promote_type(eltype(V), eltype(xs), eltype(ys))
+    B = Vector{T}(undef, length(V))
     @inbounds for k in eachindex(V, B)
         x = V[k]
         if x <= xs[1]
@@ -54,84 +58,101 @@ function propagation_constant(V::AbstractVector{Float64}, model::TabulatedDisper
 end
 
 """
-    loss_vector(V, medium, z=0.0) -> Vector{Float64}
+    loss_vector(V, medium, z=0.0) -> Vector{<:Real}
 
 Compute linear attenuation vector α [Np/m] across relative angular frequencies V at position z.
 Supports scalar loss [dB/m], vector spectrum loss [dB/m], and function loss(z), loss(ω), or loss(ω, z).
 """
 function loss_vector!(
-    res::AbstractVector{Float64},
-    V::AbstractVector{Float64},
+    res::AbstractVector{<:Real},
+    V::AbstractVector{<:Real},
     medium::AbstractMedium,
-    z::Float64=0.0,
+    z::Real=0.0,
 )
     loss_val = hasproperty(medium, :loss) ? medium.loss : 0.0
     return _eval_loss_or_gain!(res, V, medium, loss_val, z, true)
 end
 
+# Result element type for the non-mutating `loss_vector`/`gain_vector`
+# wrappers below: promotes the grid type with the loss/gain value's own type
+# so a `Real` or `AbstractVector{<:Real}` loss/gain (the common, AD-relevant
+# cases) can carry dual numbers through. A `Function`-valued loss/gain keeps
+# the historical `Float64` result, since its return type isn't known without
+# calling it — pass a pre-typed buffer to `loss_vector!`/`gain_vector!`
+# directly if a differentiable function-valued loss/gain is needed.
+_loss_gain_eltype(V::AbstractVector{<:Real}, val::Real) =
+    promote_type(eltype(V), typeof(val), Float64)
+_loss_gain_eltype(V::AbstractVector{<:Real}, val::AbstractVector{<:Real}) =
+    promote_type(eltype(V), eltype(val), Float64)
+_loss_gain_eltype(V::AbstractVector{<:Real}, ::Any) = promote_type(eltype(V), Float64)
+
 """
-    loss_vector(V, medium, z=0.0) -> Vector{Float64}
+    loss_vector(V, medium, z=0.0) -> Vector{<:Real}
 
 Non-mutating version of [`loss_vector!`](@ref).
 """
-loss_vector(V::AbstractVector{Float64}, medium::AbstractMedium, z::Float64=0.0) =
-    loss_vector!(zeros(Float64, length(V)), V, medium, z)
+function loss_vector(V::AbstractVector{<:Real}, medium::AbstractMedium, z::Real=0.0)
+    loss_val = hasproperty(medium, :loss) ? medium.loss : 0.0
+    T = _loss_gain_eltype(V, loss_val)
+    return loss_vector!(zeros(T, length(V)), V, medium, z)
+end
 
-loss_vector(grid::Grid, medium::AbstractMedium, z::Float64=0.0) =
+loss_vector(grid::Grid, medium::AbstractMedium, z::Real=0.0) =
     loss_vector(grid.V, medium, z)
-loss_vector!(
-    res::AbstractVector{Float64}, grid::Grid, medium::AbstractMedium, z::Float64=0.0
-) = loss_vector!(res, grid.V, medium, z)
+loss_vector!(res::AbstractVector{<:Real}, grid::Grid, medium::AbstractMedium, z::Real=0.0) =
+    loss_vector!(res, grid.V, medium, z)
 
 """
-    gain_vector(V, medium, z=0.0) -> Vector{Float64}
-    gain_vector!(res, V, medium, z=0.0) -> Vector{Float64}
+    gain_vector(V, medium, z=0.0) -> Vector{<:Real}
+    gain_vector!(res, V, medium, z=0.0) -> Vector{<:Real}
 
 Compute small-signal gain vector g₀ [Np/m] across relative angular frequencies V at position z.
 Supports scalar gain [Np/m], vector gain spectrum g₀(ω), and function g₀(z), g₀(ω), or g₀(ω, z).
 """
 function gain_vector!(
-    res::AbstractVector{Float64},
-    V::AbstractVector{Float64},
+    res::AbstractVector{<:Real},
+    V::AbstractVector{<:Real},
     medium::AbstractMedium,
-    z::Float64=0.0,
+    z::Real=0.0,
 )
     if hasproperty(medium, :g0)
         return _eval_loss_or_gain!(res, V, medium, medium.g0, z, false)
     else
-        fill!(res, 0.0)
+        fill!(res, 0)
         return res
     end
 end
 
 """
-    gain_vector(V, medium, z=0.0) -> Vector{Float64}
+    gain_vector(V, medium, z=0.0) -> Vector{<:Real}
 
 Non-mutating version of [`gain_vector!`](@ref).
 """
-gain_vector(V::AbstractVector{Float64}, medium::AbstractMedium, z::Float64=0.0) =
-    gain_vector!(zeros(Float64, length(V)), V, medium, z)
+function gain_vector(V::AbstractVector{<:Real}, medium::AbstractMedium, z::Real=0.0)
+    T = hasproperty(medium, :g0) ? _loss_gain_eltype(V, medium.g0) : promote_type(eltype(V), Float64)
+    return gain_vector!(zeros(T, length(V)), V, medium, z)
+end
 
-gain_vector(grid::Grid, medium::AbstractMedium, z::Float64=0.0) =
+gain_vector(grid::Grid, medium::AbstractMedium, z::Real=0.0) =
     gain_vector(grid.V, medium, z)
-gain_vector!(
-    res::AbstractVector{Float64}, grid::Grid, medium::AbstractMedium, z::Float64=0.0
-) = gain_vector!(res, grid.V, medium, z)
+gain_vector!(res::AbstractVector{<:Real}, grid::Grid, medium::AbstractMedium, z::Real=0.0) =
+    gain_vector!(res, grid.V, medium, z)
 
 function _eval_loss_or_gain!(
-    res::AbstractVector{Float64},
-    V::AbstractVector{Float64},
+    res::AbstractVector{<:Real},
+    V::AbstractVector{<:Real},
     medium::AbstractMedium,
     val::Any,
-    z::Float64,
+    z::Real,
     is_loss::Bool,
 )
     N = length(V)
     length(res) == N ||
         throw(ArgumentError("Buffer length $(length(res)) does not match grid size $N"))
+    T = eltype(res)
     factor = log(10.0) / 10.0
     if val isa Real
-        alpha_Np = is_loss ? Float64(val) * factor : Float64(val)
+        alpha_Np = is_loss ? T(val) * factor : T(val)
         fill!(res, alpha_Np)
         return res
     elseif val isa AbstractVector
@@ -139,7 +160,7 @@ function _eval_loss_or_gain!(
             ArgumentError("Spectrum length $(length(val)) does not match grid size $N")
         )
         if is_loss
-            @. res = Float64(val) * factor
+            @. res = T(val) * factor
         else
             copyto!(res, val)
         end
@@ -157,11 +178,11 @@ function _eval_loss_or_gain!(
             else
                 val(z)
             end
-            res[i] = is_loss ? Float64(out) * factor : Float64(out)
+            res[i] = is_loss ? T(out) * factor : T(out)
         end
         return res
     else
-        fill!(res, 0.0)
+        fill!(res, 0)
         return res
     end
 end
@@ -217,12 +238,12 @@ function (s::SilicaLossSpectrum)(omega::Real, z::Real=0.0)
 end
 
 """
-    dispersion_operator(V::AbstractVector{Float64}, medium::AbstractMedium, z::Float64=0.0)
+    dispersion_operator(V::AbstractVector{<:Real}, medium::AbstractMedium, z::Real=0.0)
 
 Construct the linear dispersion & gain/loss operator `D(V, z) = i·B(V) + (g(V, z) - α(V, z))/2` [1/m].
 """
 function dispersion_operator(
-    V::AbstractVector{Float64}, medium::AbstractMedium, z::Float64=0.0
+    V::AbstractVector{<:Real}, medium::AbstractMedium, z::Real=0.0
 )
     omega0 = 2π * c / medium.lambda0
     disp_model = if hasproperty(medium, :dispersion)
@@ -241,30 +262,31 @@ function dispersion_operator(
 end
 
 """
-    dispersion_operator(grid::Grid, medium::AbstractMedium, z::Float64=0.0)
+    dispersion_operator(grid::Grid, medium::AbstractMedium, z::Real=0.0)
 
 Convenience wrapper that extracts `V` from `grid`.
 """
-dispersion_operator(grid::Grid, medium::AbstractMedium, z::Float64=0.0) =
+dispersion_operator(grid::Grid, medium::AbstractMedium, z::Real=0.0) =
     dispersion_operator(grid.V, medium, z)
 
 # 3-argument compatibility fallback
-propagation_constant(V::AbstractVector{Float64}, model::DispersionModel, omega0::Float64) =
+propagation_constant(V::AbstractVector{<:Real}, model::DispersionModel, omega0::Real) =
     propagation_constant(V, model)
 
 """
-    propagation_constant(V::AbstractVector{Float64}, model::SellmeierDispersion, omega0::Float64)
+    propagation_constant(V::AbstractVector{<:Real}, model::SellmeierDispersion, omega0::Real)
 
 Compute the propagation constant deviation B(V) using the Sellmeier dispersion equation.
 """
 function propagation_constant(
-    V::AbstractVector{Float64}, model::SellmeierDispersion, omega0::Float64
+    V::AbstractVector{<:Real}, model::SellmeierDispersion, omega0::Real
 )
+    T = promote_type(eltype(V), eltype(model.B), eltype(model.C), typeof(omega0))
     lambda0 = 2π * c / omega0
 
     # Calculate refractive index and derivative at central frequency
-    n2_0 = 1.0
-    sum_deriv_0 = 0.0
+    n2_0 = one(T)
+    sum_deriv_0 = zero(T)
     for i in 1:length(model.B)
         Bi = model.B[i]
         Ci = model.C[i]
@@ -276,7 +298,7 @@ function propagation_constant(
     beta1_0 = n_0 / c + (lambda0^2 / (c * n_0)) * sum_deriv_0
 
     # Calculate propagation constant deviation for each frequency bin
-    B = similar(V)
+    B = Vector{T}(undef, length(V))
     @inbounds for k in eachindex(V)
         omega = omega0 + V[k]
         if omega <= 0
@@ -288,7 +310,7 @@ function propagation_constant(
         end
         lk = 2π * c / omega
 
-        n2 = 1.0
+        n2 = one(T)
         for i in 1:length(model.B)
             n2 += model.B[i] * lk^2 / (lk^2 - model.C[i])
         end

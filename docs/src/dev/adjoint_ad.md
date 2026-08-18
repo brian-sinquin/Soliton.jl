@@ -17,10 +17,11 @@ piecemeal.
 
 | AD approach | Status | Blocker |
 |---|---|---|
-| Forward-mode (ForwardDiff.jl, `Dual` numbers) | **Blocked** | FFTW only accepts `Float32`/`Float64`/`ComplexF32`/`ComplexF64` buffers; `Dual`-typed arrays cannot be passed to `plan_fft`/`plan_ifft` at all. |
+| Forward-mode on dispersion/loss/gain math only (`propagation_constant`, `dispersion_operator`, `loss_vector`/`gain_vector`) | **Works today** | These are pure arithmetic, no FFTW involved. `Grid`, `TaylorDispersion`/`TabulatedDispersion`/`SellmeierDispersion`, and these functions' signatures are now generic over `<:Real` — see [Architecture audit](#architecture-audit), points 1–2. |
+| Forward-mode through full pulse propagation (ForwardDiff.jl, `Dual` numbers) | **Blocked** | FFTW only accepts `Float32`/`Float64`/`ComplexF32`/`ComplexF64` buffers; `Dual`-typed arrays cannot be passed to `plan_fft`/`plan_ifft` at all, regardless of how generic the surrounding types are. |
 | Reverse-mode via array overloading (Zygote.jl) | **Blocked** | The propagation loop is written as in-place mutation (`@.`, `mul!`, `copyto!` into pre-allocated buffers) for zero-allocation performance; Zygote does not differentiate through mutating array updates without a full rewrite to `Zygote.Buffer`/non-mutating style, which would defeat the current performance design. |
 | Reverse-mode via source transformation (Enzyme.jl) | **Feasible, not yet implemented** | Enzyme differentiates the compiled, concretely-typed, mutating code directly (no `Dual` overloading needed), so it is not affected by the FFTW or mutation blockers above. It *does* need a hand-written adjoint rule for the FFTW `ccall` boundary, since Enzyme cannot see through opaque C calls automatically. |
-| Gradient-free (`solve_sweep` + Optim.jl/BlackBoxOptim.jl/surrogate optimization) | **Works today** | No code changes needed; recommended near-term path for optimization until adjoint support lands. |
+| Gradient-free (`solve_sweep` + Optim.jl/BlackBoxOptim.jl/surrogate optimization) | **Works today** | No code changes needed; recommended near-term path for optimizing over full propagation until adjoint support lands. |
 
 **Recommendation:** target **Enzyme.jl** as the AD backend for adjoint
 propagation, not Zygote or ForwardDiff. See [Recommended path](#recommended-path-enzymejl).
@@ -32,48 +33,49 @@ different way. All four were confirmed by reading the source directly (no
 running Julia session was available in this environment, so no numerical
 verification was performed — see [Open work](#open-work-not-done-here)).
 
-### 1. `PhysicsModel` is hard-typed to `Float64`/`ComplexF64`
+### 1. `PhysicsModel` was hard-typed to `Float64`/`ComplexF64` — **now relaxed**
 
-`src/nonlinearity.jl`:
+`src/nonlinearity.jl`'s `PhysicsModel` used to constrain its buffers to the
+concrete `TA <: AbstractArray{ComplexF64}`/`TVR <: AbstractVector{Float64}`.
+It is now `TA <: AbstractArray{<:Complex}`/`TVR <: AbstractVector{<:Real}`,
+so the container honestly reflects whatever element type the `Grid`/
+`Medium`/dispersion pipeline feeding `build_physics_model` actually produces
+(GPU array types, or `ComplexF32` if that whole pipeline is instantiated in
+`Float32`), instead of force-converting to `ComplexF64`. `_spm`, `_spm_raman`,
+`_amplifying_spm`, `_amplifying_spm_raman`, and `_semiconductor_spm` all
+already worked generically on `model`'s own buffers and needed no change;
+the only spot that had silently assumed `ComplexF64` on a field with this
+relaxed bound (`model.RW::Vector{ComplexF64}` in the two Raman nonlinear
+steps) was loosened to `model.RW::AbstractVector{<:Complex}` to match.
 
-```julia
-struct PhysicsModel{
-    TF, TT, NL, TG, TA <: AbstractArray{ComplexF64}, TVR <: AbstractVector{Float64}, TRW
-}
-    ...
-    D::TA
-    ...
-    buf_t1::TA
-    buf_t2::TA
-    buf_f1::TA
-    ...
-end
-```
+Two things this does **not** do: it does not make `omega0`/`dt`/`fr` (still
+plain `Float64` scalar fields) generic, and it does not touch
+`inject_ase_noise!` (`AmplifyingMedium`'s ASE step) or `_vectorial_spm_fwm`
+(`BirefringentMedium`), which still hard-require `ComplexF64` buffers. A
+`Dual`-typed template still can't construct a working `PhysicsModel` either
+way — that's blocker 3 below, which this change doesn't touch.
 
-`TA` is constrained to `AbstractArray{ComplexF64}` and `TVR` to
-`AbstractVector{Float64}` — concrete element types, not `<:Complex`/`<:Real`.
-Even though `_to_device`/`similar(template, eltype(host_array), ...)` is
-written generically (with GPU arrays in mind), the default `template` is
-`zeros(ComplexF64, grid.N)`, and the struct's type parameters reject any
-other element type outright. A `Dual`-typed template would fail to construct
-a `PhysicsModel` at all.
+### 2. `Grid` was unconditionally `Float64` — **now relaxed**
 
-### 2. `Grid` is unconditionally `Float64`
-
-`src/grid.jl`:
-
-```julia
-function create_grid(resolution::Int, time_window::Real, wavelength::Real)
-    ...
-    Grid{Float64}(N, t, V, W, dt, omega0, wavelength)
-end
-```
-
-Regardless of the element type of `time_window`/`wavelength` passed in, the
-grid is always materialized as `Grid{Float64}`. Differentiating with respect
-to grid-defining parameters (e.g. center wavelength) would need this
-relaxed to `Grid{T}` — though per point 3 below, this alone would not be
-sufficient for forward-mode.
+`create_grid` used to always materialize `Grid{Float64}(...)` regardless of
+the element type of `time_window`/`wavelength`. It now computes
+`T = promote_type(typeof(time_window), typeof(wavelength), Float64)` and
+builds a `Grid{T}` — plain `Float64` arguments (the overwhelmingly common
+case) still produce exactly `Grid{Float64}` with bit-identical values, while
+AD dual numbers passed for either argument now propagate through `t`, `V`,
+`W`, `dt`, `omega0`. The `DispersionModel` family (`TaylorDispersion`,
+`TabulatedDispersion`, `SellmeierDispersion`) was hard-typed to `Float64` the
+same way and got the same treatment — each is now `{T<:Real}` over its own
+coefficient vectors, and `propagation_constant`/`dispersion_operator`/
+`loss_vector!`/`gain_vector!` were relaxed from `AbstractVector{Float64}` to
+`AbstractVector{<:Real}` to match. This is the part of the pipeline that
+**does** work end-to-end today: none of it touches FFTW, so
+`propagation_constant`/`dispersion_operator` are now differentiable
+(ForwardDiff or Enzyme) with respect to `β_n`, Sellmeier `B`/`C`, tabulated
+`beta`, `medium.loss`, or `medium.g0` right now, with no further work. This
+is the "dispersion engineering" half of the optimization use case; getting a
+gradient through actual pulse *propagation* still needs the Enzyme work
+below, because of blocker 3.
 
 ### 3. FFTW cannot transform generic-typed arrays
 
@@ -122,10 +124,11 @@ Enzyme differentiates LLVM IR of the actual compiled, concretely-typed
 program — it does not need generic/`Dual`-compatible element types (so
 blocker 3 above is irrelevant to it) and it natively supports mutating,
 buffer-reusing code via shadow memory (so blocker 4 is exactly its intended
-use case). This means blockers 1 and 2 (the hard-coded `Float64`/`ComplexF64`
-type parameters) also do not need to be relaxed for Enzyme to work — they
-only matter for a `Dual`-overloading approach like ForwardDiff, which is
-independently blocked by FFTW itself.
+use case). Blockers 1 and 2 never needed relaxing for Enzyme specifically —
+that only mattered for a `Dual`-overloading approach like ForwardDiff, which
+is independently blocked by FFTW itself — but relaxing them anyway (done
+above) is what makes the dispersion/loss/gain math differentiable today, and
+doesn't cost Enzyme anything either way.
 
 The one piece of real work is the FFTW boundary: `mul!(y, plan, x)` for an
 FFTW plan is a `ccall` into a C library, which Enzyme cannot look inside of.
@@ -144,6 +147,13 @@ route through the same `to_freq`/`to_time` plans).
 
 ### Proposed staged roadmap
 
+0. **Done.** Parameterize the pure-math layer (`Grid`, `TaylorDispersion`/
+   `TabulatedDispersion`/`SellmeierDispersion`, `propagation_constant`,
+   `dispersion_operator`, `loss_vector!`/`gain_vector!`) over `<:Real`
+   instead of hard-coded `Float64`, and relax `PhysicsModel`'s buffer bounds
+   from concrete `ComplexF64`/`Float64` to `<:Complex`/`<:Real`. This was
+   done without a Julia toolchain available to run the test suite — see
+   [Open work](#open-work-not-done-here).
 1. Add `Enzyme` as a `test`-only (or weak) dependency; write and validate the
    `EnzymeRules` pair for `mul!` with `plan_fft`/`plan_ifft`, checked against
    finite differences on a tiny grid (`N=32`).
@@ -175,10 +185,22 @@ while gradient support is built out.
 
 ## Open work not done here
 
-This assessment is based on static code reading only — no Julia toolchain
-was available in the environment it was written in, so none of the following
-were actually run:
+This assessment — and the type-parameterization change from roadmap step 0 —
+were done by reading the source only, with no Julia toolchain available in
+the environment to run `] test` or the doctests. None of the following were
+actually executed:
 
+- **Running the existing test suite** (`test/test_api.jl`'s dispersion/
+  Sellmeier/loss-gain tests especially) against the relaxed `Grid`/
+  `TaylorDispersion`/`TabulatedDispersion`/`SellmeierDispersion`/
+  `PhysicsModel` signatures, to confirm the default `Float64`/`ComplexF64`
+  path is genuinely unchanged (it was designed to be bit-identical — see the
+  reasoning inline in each diff — but this needs to actually run to be
+  trusted).
+- **Confirming step 0's forward-mode claim** by actually running
+  `ForwardDiff.gradient` through `propagation_constant`/`dispersion_operator`
+  with a `Dual`-valued `TaylorDispersion` or `Medium.loss`, on a machine with
+  ForwardDiff installed.
 - Installing Enzyme and confirming which FFTW calls it errors on today
   (`Enzyme.autodiff` on `_propagate_erk4ip!` or `_spm`/`_spm_raman` directly,
   to get the exact "unsupported ccall" error/stack rather than inferring it).
@@ -187,7 +209,7 @@ were actually run:
 - Benchmarking the memory/performance cost of reverse-mode checkpointing
   through the adaptive step controllers.
 
-Anyone picking this up should start by reproducing step 1 of the roadmap
-above on a machine with a working Julia + Enzyme install, since the exact
-Enzyme error surface is the fastest way to confirm (or correct) the analysis
-here.
+Anyone picking this up should start by running the test suite to validate
+step 0, then reproducing step 1 of the roadmap above on a machine with a
+working Julia + Enzyme install, since the exact Enzyme error surface is the
+fastest way to confirm (or correct) the analysis here.
