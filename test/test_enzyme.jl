@@ -558,5 +558,78 @@ end
             )
             @test isapprox(dtheta[i], g_fd; rtol=1e-3, atol=1e-6)
         end
+
+        @testset "full SSFM, Duplicated model, loss references theta twice (propagated + direct)" begin
+            # Every isolated test above uses a loss of the form
+            # `sum(abs2, At[:, end])` -- theta enters only once, indirectly,
+            # via `pulse.At`/`pulse.AW`. ad_soliton_shape_recovery.jl's real
+            # loss is `sum(abs2, abs.(At[:, end]) .- abs.(theta))`: theta is
+            # used a *second* time, directly, in the same expression (the
+            # shape-invariance target). That dual-usage pattern was never
+            # isolated -- this tests exactly that, still single-step/linear
+            # so it stays fast, changing only the loss shape from the
+            # already-passing "full linear SSFM (Duplicated model)" test
+            # above.
+            L = 0.01
+            medium = Medium(L, 0.0, 0.0, [-1.0e-26], 1550e-9)
+            params = SimParams(;
+                medium=medium,
+                z_saves=2,
+                raman_model=nothing,
+                self_steepening=false,
+                solver=SSFM(L),
+                save_freq=false,
+            )
+            template = zeros(ComplexF64, grid.N)
+            model = Soliton.build_physics_model(grid, params, template)
+            pulse = Pulse(zeros(ComplexF64, grid.N), zeros(ComplexF64, grid.N), grid)
+
+            function dualuse_loss(
+                theta::AbstractVector{<:Real},
+                model::Soliton.PhysicsModel,
+                pulse::Pulse,
+                params::SimParams,
+            )
+                @. pulse.At = complex(theta, 0.0)
+                mul!(pulse.AW, model.to_freq, pulse.At)
+                _, At, _ = Soliton.propagate(model, pulse, params, params.solver, false)
+                return sum(abs2, abs.(At[:, end]) .- abs.(theta))
+            end
+
+            theta0 = Vector{Float64}(exp.(-grid.t .^ 2 ./ (2 * (1e-12)^2)))
+            i = argmax(theta0)
+
+            function loss_fd_dualuse(theta_vec)
+                p = Pulse(zeros(ComplexF64, grid.N), zeros(ComplexF64, grid.N), grid)
+                @. p.At = complex(theta_vec, 0.0)
+                mul!(p.AW, model.to_freq, p.At)
+                _, At, _ = Soliton.propagate(model, p, params, params.solver, false)
+                return sum(abs2, abs.(At[:, end]) .- abs.(theta_vec))
+            end
+            h = 1e-7
+            thp = copy(theta0)
+            thp[i] += h
+            thm = copy(theta0)
+            thm[i] -= h
+            g_fd = (loss_fd_dualuse(thp) - loss_fd_dualuse(thm)) / (2h)
+
+            dtheta = zero(theta0)
+            shadow = Enzyme.make_zero(pulse)
+            model_shadow = Enzyme.make_zero(model)
+            Enzyme.autodiff(
+                Enzyme.set_runtime_activity(Enzyme.Reverse),
+                dualuse_loss,
+                Enzyme.Active,
+                Enzyme.Duplicated(theta0, dtheta),
+                Enzyme.Duplicated(model, model_shadow),
+                Enzyme.Duplicated(pulse, shadow),
+                Enzyme.Const(params),
+            )
+            println(
+                "  [diag] dual-usage loss (Duplicated model): Enzyme=", dtheta[i],
+                "  FD=", g_fd, "  rel.diff=", abs(dtheta[i] - g_fd) / max(abs(g_fd), 1e-300),
+            )
+            @test isapprox(dtheta[i], g_fd; rtol=1e-3, atol=1e-6)
+        end
     end
 end
