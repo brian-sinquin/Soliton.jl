@@ -11,6 +11,13 @@ name: "Example (manual): AD dispersion design + supercontinuum run"
 # to check out and run.
 on:
   workflow_dispatch:
+  # GitHub only lets workflow_dispatch trigger a workflow once it exists on
+  # the default branch, which this feature branch isn't yet. Push-trigger it
+  # scoped to this branch so the first run doesn't need that — remove this
+  # `push:` block (or merge to master) once workflow_dispatch is usable.
+  push:
+    branches:
+      - claude/adjoint-propagation-compatibility-ymb2a1
 
 jobs:
   run-example:
