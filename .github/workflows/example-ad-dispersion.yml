@@ -11,12 +11,11 @@ name: "Example (manual): AD dispersion design + supercontinuum run"
 # to check out and run.
 on:
   workflow_dispatch:
-  # Re-added temporarily for run 5 (the new flattening example) — same
-  # reason as runs 1-4: workflow_dispatch only works once a workflow exists
-  # on the default branch. Remove again once inspected.
-  push:
-    branches:
-      - claude/adjoint-propagation-compatibility-ymb2a1
+  # Push-triggered 7 times so far while developing/debugging both example
+  # scripts (workflow_dispatch only works once a workflow exists on the
+  # default branch); removed again after run 7 confirmed the flattening
+  # example converges correctly (18x flatter). Re-add a scoped `push:`
+  # block for one more run if needed; otherwise manual-only until merged.
 
 jobs:
   run-example:
