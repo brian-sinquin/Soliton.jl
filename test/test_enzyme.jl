@@ -82,4 +82,108 @@ end
         )
         @test isapprox(du[i], g_fd; rtol=1e-4, atol=1e-6)
     end
+
+    @testset "full SSFM propagation end-to-end (roadmap step 2)" begin
+        # Roadmap step 2 in docs/src/dev/adjoint_ad.md: differentiate a whole
+        # fixed-step SSFM `propagate` loop (not just one isolated nonlinear
+        # step) for a scalar loss, w.r.t. `medium.gamma` and
+        # `TaylorDispersion.betas`. `Medium`/`SimParams`/`PhysicsModel` are all
+        # rebuilt from the active parameters *inside* the differentiated
+        # function — unlike ForwardDiff, Enzyme differentiates the compiled
+        # program directly rather than needing `Dual`-typed containers, so
+        # this (including the `plan_fft`/`plan_ifft` construction, which
+        # doesn't depend on gamma/betas and so is simply treated as inactive)
+        # is not a problem the way it would be for forward-mode.
+        #
+        # `dz == L` (a single physical step) keeps this fast while still
+        # exercising the full step machinery: the initial linear half-step,
+        # the nonlinear-operator evaluation, the Euler update, the (no-op for
+        # a plain `Medium`) ASE-noise hook, and the final half-step/output copy.
+        grid = create_grid(2^6, 10e-12, 1550e-9)
+        pulse0 = sech_pulse(grid, 100.0, 1e-12)
+        At0 = copy(pulse0.At)
+        AW0 = copy(pulse0.AW)
+        L = 0.01
+        lambda0 = 1550e-9
+        dz = L
+        z_saves = 2
+
+        function ssfm_energy_loss(
+            gamma::Real,
+            betas::AbstractVector{<:Real},
+            grid::Grid,
+            At0::AbstractVector,
+            AW0::AbstractVector,
+            L::Real,
+            lambda0::Real,
+            dz::Real,
+            z_saves::Int,
+        )
+            medium = Medium(L, gamma, 0.0, betas, lambda0)
+            params = SimParams(;
+                medium=medium,
+                z_saves=z_saves,
+                raman_model=nothing,
+                self_steepening=false,
+                solver=SSFM(dz),
+                save_freq=false,
+            )
+            model = Soliton.build_physics_model(grid, params, At0)
+            pulse = Pulse(copy(At0), copy(AW0), grid)
+            _, At, _ = Soliton.propagate(model, pulse, params, params.solver, false)
+            return sum(abs2, At[:, end])
+        end
+
+        gamma0 = 0.11
+        betas0 = [-1.0e-26]
+
+        @testset "gradient w.r.t. gamma" begin
+            loss_of_gamma(g) =
+                ssfm_energy_loss(g, betas0, grid, At0, AW0, L, lambda0, dz, z_saves)
+            h = 1e-4 * gamma0
+            g_fd = (loss_of_gamma(gamma0 + h) - loss_of_gamma(gamma0 - h)) / (2h)
+
+            dgamma = Enzyme.autodiff(
+                Enzyme.Reverse,
+                ssfm_energy_loss,
+                Enzyme.Active,
+                Enzyme.Active(gamma0),
+                Enzyme.Const(betas0),
+                Enzyme.Const(grid),
+                Enzyme.Const(At0),
+                Enzyme.Const(AW0),
+                Enzyme.Const(L),
+                Enzyme.Const(lambda0),
+                Enzyme.Const(dz),
+                Enzyme.Const(z_saves),
+            )[1][1]
+
+            @test isapprox(dgamma, g_fd; rtol=1e-3)
+        end
+
+        @testset "gradient w.r.t. betas (beta2)" begin
+            loss_of_beta2(b2) =
+                ssfm_energy_loss(gamma0, [b2], grid, At0, AW0, L, lambda0, dz, z_saves)
+            h = 1e-4 * abs(betas0[1])
+            g_fd = (loss_of_beta2(betas0[1] + h) - loss_of_beta2(betas0[1] - h)) / (2h)
+
+            dbetas = zero(betas0)
+            Enzyme.autodiff(
+                Enzyme.Reverse,
+                ssfm_energy_loss,
+                Enzyme.Active,
+                Enzyme.Const(gamma0),
+                Enzyme.Duplicated(betas0, dbetas),
+                Enzyme.Const(grid),
+                Enzyme.Const(At0),
+                Enzyme.Const(AW0),
+                Enzyme.Const(L),
+                Enzyme.Const(lambda0),
+                Enzyme.Const(dz),
+                Enzyme.Const(z_saves),
+            )
+
+            @test isapprox(dbetas[1], g_fd; rtol=1e-3)
+        end
+    end
 end
