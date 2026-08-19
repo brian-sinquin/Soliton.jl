@@ -11,12 +11,10 @@ name: "Example (manual): AD dispersion design + supercontinuum run"
 # to check out and run.
 on:
   workflow_dispatch:
-  # Re-added temporarily for run 4 (the log-space-reparametrized Sellmeier
-  # fit) — same reason as runs 1-3: workflow_dispatch only works once a
-  # workflow exists on the default branch. Remove again once inspected.
-  push:
-    branches:
-      - claude/adjoint-propagation-compatibility-ymb2a1
+  # Push-triggered 4 times so far (runs 1-4), each time removed again after
+  # inspecting results — workflow_dispatch only works once a workflow exists
+  # on the default branch. Re-add a scoped `push:` block for one more run if
+  # needed; otherwise this stays manual-only until merged.
 
 jobs:
   run-example:
