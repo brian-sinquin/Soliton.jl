@@ -1,0 +1,44 @@
+name: "Example (manual): AD dispersion design + supercontinuum run"
+
+# Manual, one-off demonstration job — NOT part of the regular push/PR CI
+# matrix. Runs the AD-driven Sellmeier inverse-design example (ForwardDiff,
+# not a project dependency) plus the full-resolution Dudley et al. (2006)
+# supercontinuum reproduction, and uploads the resulting plots/log as a
+# workflow artifact so results can be inspected without a local Julia
+# install. See examples/README.md for the local-run instructions this
+# mirrors; the script itself lives in .github/scripts/ (tracked) rather than
+# examples/ (git-ignored, local-only) purely so this workflow has something
+# to check out and run.
+on:
+  workflow_dispatch:
+
+jobs:
+  run-example:
+    name: Run AD dispersion example (Julia 1.12 - ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.12"
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/julia-buildpkg@v1
+      - name: Add example-only dependencies (ForwardDiff, Plots)
+        shell: julia --project=. --color=yes {0}
+        run: |
+          import Pkg
+          Pkg.add(["ForwardDiff", "Plots"])
+      - name: Run example
+        shell: julia --project=. --color=yes {0}
+        run: |
+          include(joinpath(pwd(), ".github", "scripts", "ad_dispersion_inverse_design.jl"))
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ad-dispersion-example-results
+          path: .github/scripts/output/*.png
+          if-no-files-found: warn
