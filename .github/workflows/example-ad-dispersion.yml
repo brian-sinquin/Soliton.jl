@@ -1,20 +1,22 @@
 name: "Example (manual): AD dispersion design + supercontinuum run"
 
 # Manual, one-off demonstration job — NOT part of the regular push/PR CI
-# matrix. Runs the AD-driven Sellmeier inverse-design example (ForwardDiff,
-# not a project dependency) plus the full-resolution Dudley et al. (2006)
+# matrix. Runs two AD-driven dispersion-design examples (ForwardDiff, not a
+# project dependency) plus the full-resolution Dudley et al. (2006)
 # supercontinuum reproduction, and uploads the resulting plots/log as a
 # workflow artifact so results can be inspected without a local Julia
 # install. See examples/README.md for the local-run instructions this
-# mirrors; the script itself lives in .github/scripts/ (tracked) rather than
+# mirrors; the scripts live in .github/scripts/ (tracked) rather than
 # examples/ (git-ignored, local-only) purely so this workflow has something
 # to check out and run.
 on:
   workflow_dispatch:
-  # Push-triggered 4 times so far (runs 1-4), each time removed again after
-  # inspecting results — workflow_dispatch only works once a workflow exists
-  # on the default branch. Re-add a scoped `push:` block for one more run if
-  # needed; otherwise this stays manual-only until merged.
+  # Re-added temporarily for run 5 (the new flattening example) — same
+  # reason as runs 1-4: workflow_dispatch only works once a workflow exists
+  # on the default branch. Remove again once inspected.
+  push:
+    branches:
+      - claude/adjoint-propagation-compatibility-ymb2a1
 
 jobs:
   run-example:
@@ -35,10 +37,14 @@ jobs:
         run: |
           import Pkg
           Pkg.add(["ForwardDiff", "Plots"])
-      - name: Run example
+      - name: Run Sellmeier inverse-design example
         shell: julia --project=. --color=yes {0}
         run: |
           include(joinpath(pwd(), ".github", "scripts", "ad_dispersion_inverse_design.jl"))
+      - name: Run dispersion-flattening example
+        shell: julia --project=. --color=yes {0}
+        run: |
+          include(joinpath(pwd(), ".github", "scripts", "ad_dispersion_flattening.jl"))
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@v7
