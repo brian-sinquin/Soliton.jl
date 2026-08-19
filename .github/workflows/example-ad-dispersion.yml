@@ -1,32 +1,40 @@
-name: "Example (manual): AD dispersion design + supercontinuum run"
+name: "Examples: AD dispersion design + supercontinuum run"
 
-# Manual, one-off demonstration job — NOT part of the regular push/PR CI
-# matrix. Runs three AD-driven dispersion-design examples (ForwardDiff, not
-# a project dependency) plus the full-resolution Dudley et al. (2006)
-# supercontinuum reproduction, and uploads the resulting plots/log as a
-# workflow artifact so results can be inspected without a local Julia
-# install. See examples/README.md for the local-run instructions this
+# Each AD-driven example is its own job/CI check here, so a regression in
+# any one of them shows up as its own named status on a PR rather than
+# being buried inside one big job. Runs automatically on every PR (like the
+# `test`/`enzyme`/`docs` jobs in CI.yml) plus on manual dispatch; it is a
+# separate workflow file from CI.yml and shares nothing with its (slow)
+# `docs` job, so nothing here ever triggers a documentation build.
+#
+# On `pull_request` runs, jobs only verify the script succeeds and upload
+# the resulting plots as a build artifact — they do NOT commit anything
+# back to the branch, since four jobs now run in parallel (no `needs:`
+# ordering) and pushing from all of them would race. `workflow_dispatch`
+# runs still commit the plots back (guarded by `github.event_name`) so a
+# one-off manual run's results can be inspected without downloading the
+# artifact ZIP. See examples/README.md for the local-run instructions this
 # mirrors; the scripts live in .github/scripts/ (tracked) rather than
 # examples/ (git-ignored, local-only) purely so this workflow has something
 # to check out and run.
 on:
+  pull_request:
   workflow_dispatch:
-  # TEMPORARY: fire once on push so the brand-new Enzyme job below gets its
-  # first real CI run without waiting on a manual dispatch. Remove this
-  # `push:` trigger once that run is confirmed green.
-  push:
-    branches:
-      - claude/adjoint-propagation-compatibility-ymb2a1
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
 
 jobs:
-  run-example:
-    name: Run AD dispersion example (Julia 1.12 - ubuntu-latest)
+  run-sellmeier-example:
+    name: Example - Sellmeier inverse design (Julia 1.12 - ubuntu-latest)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref }}
       - uses: julia-actions/setup-julia@v2
         with:
           version: "1.12"
@@ -41,10 +49,99 @@ jobs:
         shell: julia --project=. --color=yes {0}
         run: |
           include(joinpath(pwd(), ".github", "scripts", "ad_dispersion_inverse_design.jl"))
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ad-sellmeier-example-results
+          path: .github/scripts/output/*.png
+          if-no-files-found: warn
+      - name: Commit result plots back to the branch
+        if: always() && github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f .github/scripts/output/*.png
+          git diff --cached --quiet && exit 0
+          git commit -m "ci: attach Sellmeier inverse-design example output plots"
+          # These four jobs run in parallel with no `needs:` ordering between
+          # them, so their pushes (each touching disjoint files) can race;
+          # retry with a rebase onto the latest tip rather than serializing.
+          for attempt in 1 2 3 4 5; do
+            git push && exit 0
+            git fetch origin "$GITHUB_REF_NAME"
+            git rebase "origin/$GITHUB_REF_NAME"
+            sleep $((attempt * 3))
+          done
+          echo "::error::Failed to push result plots after retries." && exit 1
+
+  run-flattening-example:
+    name: Example - Dispersion flattening (Julia 1.12 - ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref }}
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.12"
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/julia-buildpkg@v1
+      - name: Add example-only dependencies (ForwardDiff, Plots)
+        shell: julia --project=. --color=yes {0}
+        run: |
+          import Pkg
+          Pkg.add(["ForwardDiff", "Plots"])
       - name: Run dispersion-flattening example
         shell: julia --project=. --color=yes {0}
         run: |
           include(joinpath(pwd(), ".github", "scripts", "ad_dispersion_flattening.jl"))
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ad-flattening-example-results
+          path: .github/scripts/output/*.png
+          if-no-files-found: warn
+      - name: Commit result plots back to the branch
+        if: always() && github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f .github/scripts/output/*.png
+          git diff --cached --quiet && exit 0
+          git commit -m "ci: attach dispersion-flattening example output plots"
+          for attempt in 1 2 3 4 5; do
+            git push && exit 0
+            git fetch origin "$GITHUB_REF_NAME"
+            git rebase "origin/$GITHUB_REF_NAME"
+            sleep $((attempt * 3))
+          done
+          echo "::error::Failed to push result plots after retries." && exit 1
+
+  run-dispersive-wave-example:
+    name: Example - Dispersive-wave design + verification (Julia 1.12 - ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref }}
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.12"
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/julia-buildpkg@v1
+      - name: Add example-only dependencies (ForwardDiff, Plots)
+        shell: julia --project=. --color=yes {0}
+        run: |
+          import Pkg
+          Pkg.add(["ForwardDiff", "Plots"])
       - name: Run dispersive-wave design + verification example
         shell: julia --project=. --color=yes {0}
         run: |
@@ -53,38 +150,28 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: ad-dispersion-example-results
+          name: ad-dispersive-wave-example-results
           path: .github/scripts/output/*.png
           if-no-files-found: warn
-      # `*.png` is normally repo-gitignored (generated figures); force-add
-      # just these result plots so they can be fetched via the GitHub API
-      # (the Actions artifact ZIP lives on blob storage this session's
-      # network policy doesn't allow reaching directly).
       - name: Commit result plots back to the branch
-        if: always()
+        if: always() && github.event_name == 'workflow_dispatch'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -f .github/scripts/output/*.png
-          git diff --cached --quiet || git commit -m "ci: attach AD dispersion example output plots"
-          git push
+          git diff --cached --quiet && exit 0
+          git commit -m "ci: attach dispersive-wave design example output plots"
+          for attempt in 1 2 3 4 5; do
+            git push && exit 0
+            git fetch origin "$GITHUB_REF_NAME"
+            git rebase "origin/$GITHUB_REF_NAME"
+            sleep $((attempt * 3))
+          done
+          echo "::error::Failed to push result plots after retries." && exit 1
 
   run-enzyme-example:
-    name: Run Enzyme-through-SSFM example (Julia 1.12 - ubuntu-latest)
+    name: Example - Enzyme-through-SSFM compression design (Julia 1.12 - ubuntu-latest)
     runs-on: ubuntu-latest
-    # Runs as its own job (separate from run-example above) so Enzyme's
-    # ~130s precompile isn't serialized after the already-long ForwardDiff/
-    # Dudley-reproduction steps; `needs:` orders it *after* that job so the
-    # two jobs' "commit result plots back" steps don't race to push to the
-    # same branch from independent checkouts.
-    #
-    # CI run 32236352351 still hit a rejected push here even with `needs:`:
-    # actions/checkout defaults to the fixed `github.sha` that triggered the
-    # whole workflow run, not the branch's live tip, so this job's checkout
-    # missed the commit run-example had *already* pushed on top of that SHA
-    # by the time this job started. `ref: ${{ github.ref }}` checks out the
-    # branch's current tip instead, picking up that commit.
-    needs: run-example
     timeout-minutes: 30
     permissions:
       contents: write
@@ -114,10 +201,17 @@ jobs:
           path: .github/scripts/output/*.png
           if-no-files-found: warn
       - name: Commit result plots back to the branch
-        if: always()
+        if: always() && github.event_name == 'workflow_dispatch'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -f .github/scripts/output/*.png
-          git diff --cached --quiet || git commit -m "ci: attach Enzyme-through-SSFM example output plots"
-          git push
+          git diff --cached --quiet && exit 0
+          git commit -m "ci: attach Enzyme-through-SSFM example output plots"
+          for attempt in 1 2 3 4 5; do
+            git push && exit 0
+            git fetch origin "$GITHUB_REF_NAME"
+            git rebase "origin/$GITHUB_REF_NAME"
+            sleep $((attempt * 3))
+          done
+          echo "::error::Failed to push result plots after retries." && exit 1
