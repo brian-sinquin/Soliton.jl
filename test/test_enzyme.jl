@@ -180,8 +180,19 @@ end
 
             dbetas = zero(betas0)
             shadow = Enzyme.make_zero(model)
+            # `Soliton.propagate` (SSFM) allocates its `At_out` output matrix
+            # via `zeros(...)`, writes the (Const-derived) initial condition
+            # `pulse.At` into column 1, then writes (Active, betas-derived)
+            # computed columns into the rest — a *genuinely* conditionally
+            # active buffer (unlike the `_spm`-only test above, where
+            # `set_runtime_activity` was confirmed to silently zero the
+            # gradient because that case was a Const/Active *misclassification*,
+            # not real mixed activity). `set_runtime_activity` is Enzyme's own
+            # documented fix for this pattern; here it can't silently drop
+            # anything unnoticed since the result is checked against an
+            # independent finite-difference gradient below.
             Enzyme.autodiff(
-                Enzyme.Reverse,
+                Enzyme.set_runtime_activity(Enzyme.Reverse),
                 ssfm_energy_loss_betas,
                 Enzyme.Active,
                 Enzyme.Duplicated(betas0, dbetas),
