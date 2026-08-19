@@ -7,11 +7,15 @@ differentiates a *loss* through the SSFM solver with respect to a handful of
 *fiber* parameters (Sellmeier coefficients, β₂, ...) while the input pulse
 shape stays fixed. This example instead treats the pulse's own temporal
 amplitude profile as the optimization variable — a `Enzyme.Duplicated`
-`Pulse` (grid.N-dimensional) rather than `Duplicated` fiber parameters — and
-holds the fiber (`PhysicsModel`) entirely `Const`. This is a different
-differentiation surface than roadmap step 2 exercised, so it re-validates
-against finite differences from scratch rather than assuming the earlier
-result carries over.
+`Pulse` (grid.N-dimensional) rather than `Duplicated` fiber parameters. The
+fiber (`PhysicsModel`) is never itself optimized, but — as this script's own
+gradient check first discovered the hard way — it still needs to be marked
+`Duplicated` (with a throwaway zero shadow) rather than `Const`, since
+`propagate()` reuses `model`'s scratch buffers for genuinely Active,
+pulse-derived data; see the comment at its construction below. This is a
+different differentiation surface than roadmap step 2 exercised, so it
+re-validates against finite differences from scratch rather than assuming
+the earlier result carries over.
 
 The defining property of the fundamental (N=1) soliton is that it does not
 change shape as it propagates (only a spatially-uniform phase accumulates).
@@ -86,12 +90,20 @@ params = SimParams(;
     save_freq=false,
 )
 
-# The fiber is entirely `Const` this time (nothing in `model` is optimized),
-# so unlike the betas-gradient example, no `Enzyme.make_zero(model)` shadow
-# is needed. `pulse` is built once and mutated in place each call — the
-# same "build once outside the closure" idiom used throughout this file's
-# sibling examples, just applied to the *optimization variable* now instead
-# of a `Const` input.
+# Nothing in `model` is optimized here, but it still needs a *shadow*:
+# `Soliton.propagate` reuses `model.buf_f1` as scratch space for values
+# that are genuinely derived from the (Duplicated) pulse -- e.g.
+# `copyto!(model.buf_f1, U)` followed by reading it back via `mul!`. If
+# `model` is marked `Const`, Enzyme allocates no shadow for that buffer, so
+# writing Active data through it silently drops the gradient (confirmed by
+# a bisecting test in test/test_enzyme.jl: Enzyme returned exactly 0.0
+# against a finite-difference gradient of 1.99 with `Const(model)`, and
+# matched to 1.5e-9 once `model` was `Duplicated` with a throwaway zero
+# shadow instead). We don't need model's own gradient, just real shadow
+# memory for the buffers it lends out. `pulse` is built once and mutated in
+# place each call -- the same "build once outside the closure" idiom used
+# throughout this file's sibling examples, just applied to the
+# *optimization variable* now instead of a `Const` input.
 At0 = zeros(ComplexF64, grid.N)
 model = Soliton.build_physics_model(grid, params, At0)
 pulse = Pulse(zeros(ComplexF64, grid.N), zeros(ComplexF64, grid.N), grid)
@@ -126,12 +138,13 @@ end
 
 dtheta_check = zero(theta0)
 shadow_check = Enzyme.make_zero(pulse)
+model_shadow_check = Enzyme.make_zero(model)
 Enzyme.autodiff(
     Enzyme.set_runtime_activity(Enzyme.Reverse),
     shape_invariance_loss,
     Enzyme.Active,
     Enzyme.Duplicated(theta0, dtheta_check),
-    Enzyme.Const(model),
+    Enzyme.Duplicated(model, model_shadow_check),
     Enzyme.Duplicated(pulse, shadow_check),
     Enzyme.Const(params),
 )
@@ -162,12 +175,13 @@ println("Recovering the soliton shape via Enzyme-computed gradients through the 
 for k in 1:n_iters
     dtheta = zero(theta)
     shadow = Enzyme.make_zero(pulse)
+    model_shadow = Enzyme.make_zero(model)
     _, loss_val = Enzyme.autodiff(
         Enzyme.set_runtime_activity(Enzyme.ReverseWithPrimal),
         shape_invariance_loss,
         Enzyme.Active,
         Enzyme.Duplicated(theta, dtheta),
-        Enzyme.Const(model),
+        Enzyme.Duplicated(model, model_shadow),
         Enzyme.Duplicated(pulse, shadow),
         Enzyme.Const(params),
     )
