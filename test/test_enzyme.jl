@@ -337,12 +337,29 @@ end
             @test isapprox(dtheta[i], g_fd; rtol=1e-4, atol=1e-6)
         end
 
-        @testset "full SSFM propagation, Duplicated pulse, Const model (linear-only, gamma=0)" begin
+        @testset "full SSFM propagation, Duplicated pulse, Duplicated (zero-shadow) model (linear-only, gamma=0)" begin
             # gamma=0 strips out the nonlinear step's contribution
             # mathematically (though the nonlinear function still runs,
             # contributing zero) so this isolates the *linear* SSFM
             # machinery -- the copy(pulse.AW)/At_out-partial-write pattern
             # -- from anything nonlinear-step-specific.
+            #
+            # CI run 32246872402 showed: isolated mul! into pulse.AW and
+            # isolated copy(pulse.AW) both match FD to ~3e-9, but with
+            # `model` marked `Const`, the full SSFM loop returns exactly
+            # Enzyme=0.0 against FD=1.99 -- total loss of gradient signal.
+            # `propagate()` reuses `model.buf_f1` (e.g. `copyto!(model.buf_f1,
+            # U)` then `mul!(u_temp, model.to_time, model.buf_f1)`) as
+            # scratch space for genuinely Active, pulse-derived data. With
+            # `model` Const, Enzyme allocates no shadow for those buffers,
+            # so writing Active data through them silently drops it -- the
+            # same "Const-marked buffer used as active scratch space"
+            # misclassification already documented above for the opposite
+            # (Duplicated model, Const pulse) case, now triggered from the
+            # other direction. Since we don't need model's own gradient,
+            # marking it `Duplicated` with a throwaway zero shadow (instead
+            # of `Const`) should give Enzyme real shadow memory for those
+            # buffers without changing anything else.
             L = 0.01
             medium = Medium(L, 0.0, 0.0, [-1.0e-26], 1550e-9)
             params = SimParams(;
@@ -388,17 +405,18 @@ end
 
             dtheta = zero(theta0)
             shadow = Enzyme.make_zero(pulse)
+            model_shadow = Enzyme.make_zero(model)
             Enzyme.autodiff(
                 Enzyme.set_runtime_activity(Enzyme.Reverse),
                 linear_loss,
                 Enzyme.Active,
                 Enzyme.Duplicated(theta0, dtheta),
-                Enzyme.Const(model),
+                Enzyme.Duplicated(model, model_shadow),
                 Enzyme.Duplicated(pulse, shadow),
                 Enzyme.Const(params),
             )
             println(
-                "  [diag] full linear SSFM: Enzyme=", dtheta[i], "  FD=", g_fd,
+                "  [diag] full linear SSFM (Duplicated model): Enzyme=", dtheta[i], "  FD=", g_fd,
                 "  rel.diff=", abs(dtheta[i] - g_fd) / max(abs(g_fd), 1e-300),
             )
             @test isapprox(dtheta[i], g_fd; rtol=1e-3, atol=1e-6)
