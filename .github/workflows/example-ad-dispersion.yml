@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      contents: read
+      contents: write
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v2
@@ -49,3 +49,15 @@ jobs:
           name: ad-dispersion-example-results
           path: .github/scripts/output/*.png
           if-no-files-found: warn
+      # `*.png` is normally repo-gitignored (generated figures); force-add
+      # just these result plots so they can be fetched via the GitHub API
+      # (the Actions artifact ZIP lives on blob storage this session's
+      # network policy doesn't allow reaching directly).
+      - name: Commit result plots back to the branch
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f .github/scripts/output/*.png
+          git diff --cached --quiet || git commit -m "ci: attach AD dispersion example output plots"
+          git push

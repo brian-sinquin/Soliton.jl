@@ -236,6 +236,11 @@ println("Saved: ", joinpath(output_dir, "part2_dashboard.png"))
 #    structure (soliton fission fan-out, dispersive wave) at the fiber exit.
 t_delays, V_grid, S_matrix = spectrogram(pulse_out; n_delay=300)
 lambda_grid_nm = (2π * c ./ (V_grid .+ grid.omega0)) .* 1e9
+# heatmap needs ascending y — wavelength is inversely related to V_grid's
+# (ascending) angular frequency, so it comes out descending; reorder both.
+wl_order = sortperm(lambda_grid_nm)
+lambda_grid_nm = lambda_grid_nm[wl_order]
+S_matrix = S_matrix[wl_order, :]
 plt_spectrogram = heatmap(
     t_delays .* 1e15,
     lambda_grid_nm,
