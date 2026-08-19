@@ -241,13 +241,20 @@ lambda_grid_nm = (2π * c ./ (V_grid .+ grid.omega0)) .* 1e9
 wl_order = sortperm(lambda_grid_nm)
 lambda_grid_nm = lambda_grid_nm[wl_order]
 S_matrix = S_matrix[wl_order, :]
+# `ylims` alone only clips the *displayed* range — GR still has to rasterize
+# all N=16384 rows (most of which, at extreme angular frequencies, map to
+# physically meaningless near-zero or near-infinite wavelengths), which
+# crashed the headless GR backend with "GKS: can't allocate memory" on the
+# CI runner. Subset the data itself to the physically relevant window first.
+wl_mask = 400.0 .<= lambda_grid_nm .<= 1600.0
+lambda_grid_nm = lambda_grid_nm[wl_mask]
+S_matrix = S_matrix[wl_mask, :]
 plt_spectrogram = heatmap(
     t_delays .* 1e15,
     lambda_grid_nm,
     log10.(S_matrix .+ 1e-6 * maximum(S_matrix));
     xlabel="Time delay [fs]",
     ylabel="Wavelength [nm]",
-    ylims=(400, 1600),
     title="Output spectrogram (log scale)",
     color=:turbo,
     colorbar_title="log₁₀ intensity [a.u.]",
