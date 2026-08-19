@@ -23,7 +23,7 @@ rather than discovered piecemeal.
 | Forward-mode on dispersion/loss/gain math only (`propagation_constant`, `dispersion_operator`, `loss_vector`/`gain_vector`) | **Works today** | These are pure arithmetic, no FFTW involved. `Grid`, `TaylorDispersion`/`TabulatedDispersion`/`SellmeierDispersion`, and these functions' signatures are now generic over `<:Real` — see [Architecture audit](#architecture-audit), points 1–2. |
 | Forward-mode through full pulse propagation (ForwardDiff.jl, `Dual` numbers) | **Blocked** | FFTW only accepts `Float32`/`Float64`/`ComplexF32`/`ComplexF64` buffers; `Dual`-typed arrays cannot be passed to `plan_fft`/`plan_ifft` at all, regardless of how generic the surrounding types are. |
 | Reverse-mode via array overloading (Zygote.jl) | **Blocked** | The propagation loop is written as in-place mutation (`@.`, `mul!`, `copyto!` into pre-allocated buffers) for zero-allocation performance; Zygote does not differentiate through mutating array updates without a full rewrite to `Zygote.Buffer`/non-mutating style, which would defeat the current performance design. |
-| Reverse-mode via source transformation (Enzyme.jl) | **FFTW boundary + single nonlinear step done; full solver not yet done** | Enzyme differentiates the compiled, concretely-typed, mutating code directly (no `Dual` overloading needed), so it is not affected by the FFTW or mutation blockers above. The hand-written `EnzymeRules` adjoint for the FFTW `ccall` boundary (`ext/SolitonEnzymeExt.jl`, a weak-dependency extension) is implemented and validated against finite differences on `to_freq`/`to_time` and on the full `_spm` nonlinear step; differentiating an entire `SSFM`/`ERK4IP` propagation loop is roadmap steps 2–4, not yet done. |
+| Reverse-mode via source transformation (Enzyme.jl) | **Fixed-step `SSFM` solved for `betas`; `gamma` and `ERK4IP`/`AdaptiveSSFM` still open** | Enzyme differentiates the compiled, concretely-typed, mutating code directly (no `Dual` overloading needed), so it is not affected by the FFTW or mutation blockers above. The hand-written `EnzymeRules` adjoint for the FFTW `ccall` boundary (`ext/SolitonEnzymeExt.jl`) is validated against finite differences on `to_freq`/`to_time` and the full `_spm` nonlinear step. A full **fixed-step `SSFM` propagation**, end-to-end, w.r.t. `TaylorDispersion.betas`, is now validated too (roadmap step 2) — it took five rounds of fixing distinct instances of the same "conditionally active memory" limitation, three of them real library fixes (`src/dispersion.jl`'s `propagation_constant`) or caller-side patterns (build `PhysicsModel`/`Pulse` once, mutate/reuse rather than reconstruct inside the differentiated closure), the last one `set_runtime_activity` (verified correct here against finite differences, unlike an earlier, different misclassification case where it silently zeroed a gradient). `medium.gamma`, `AdaptiveSSFM`, and `ERK4IP` (the default solver) are not yet validated — see roadmap steps 2–4. |
 | Gradient-free (`solve_sweep` + Optim.jl/BlackBoxOptim.jl/surrogate optimization) | **Works today** | No code changes needed; recommended near-term path for optimizing over full propagation until adjoint support lands. |
 
 **Recommendation:** target **Enzyme.jl** as the AD backend for adjoint
@@ -211,10 +211,70 @@ Enzyme v0.13 available, where the original assessment above had none):
    Enzyme's large LLVM-based artifact and its `i686`/nightly-Julia support
    are less exercised than the package's existing dependencies; the job
    covers Julia 1.12 on `ubuntu-latest`/`x64` only.
-2. Differentiate a single **fixed-step** `SSFM` propagation end-to-end
-   (`SSFM`, not `ERK4IP`) for a scalar loss such as
-   `sum(abs2, At_out[:, end])`, with respect to `medium.gamma` and
-   `TaylorDispersion.betas`. Validate against finite differences.
+2. **Done**, for `medium.dispersion.betas`; `medium.gamma` remains open (see
+   below). Differentiating a single **fixed-step** `SSFM` propagation
+   end-to-end (`sum(abs2, At_out[:, end])` w.r.t. `TaylorDispersion.betas`)
+   took five rounds of fixes, each a *different* instance of the same
+   underlying limitation — Enzyme's static activity analysis refusing to
+   accept a chunk of memory that is genuinely written by both `Const` and
+   `Active` data at different points in the program (its own docs call this
+   "conditionally active memory"):
+   1. `PhysicsModel` is not exported from `Soliton` — trivial `UndefVarError`,
+      fixed by qualifying `Soliton.PhysicsModel`.
+   2. Rebuilding the whole `PhysicsModel` *inside* the differentiated
+      function throws `EnzymeRuntimeActivityError` in `build_physics_model`'s
+      `_to_device` helper, which uses the same generic `similar`/`fill!`
+      code path to build both `betas`-dependent (`D`) and betas-independent
+      (`gamma_W`/`W`, constant when self-steepening is off) fields — Enzyme
+      can't separate the two call sites. Worked around by building
+      `PhysicsModel` **once**, outside the closure, and only *mutating* its
+      `D` field in place from `betas` inside the closure (the same
+      `Duplicated(model, shadow)` + in-place-mutation pattern already used
+      for the single-step `_spm` test).
+   3. `propagation_constant` itself throws the same error: it builds its
+      result by mutating (`B .+= ...`) an accumulator seeded from
+      `model.beta1 .* V`, which is entirely `Const` when `beta1 = 0.0` (the
+      default) — mutating a `Const`-seeded buffer with later `Active` `beta`
+      terms is exactly the conditionally-active pattern. Fixed in
+      `src/dispersion.jl` by rebinding (`B = B .+ ...`) instead of mutating,
+      giving each iteration's `B` an unambiguous activity — a real library
+      fix, not a test-only workaround, with identical numerical results and
+      no meaningful cost since it runs once per model build.
+   4. Constructing a fresh `Pulse` (a mutable struct) *inside* the
+      differentiated closure — even from otherwise-`Const` inputs
+      (`At0`/`AW0`/`grid`) — hits the same error once it's consumed
+      downstream alongside `model`. Same fix pattern as point 2: build the
+      `Pulse` once outside the closure and pass it in as `Const`, since
+      `propagate` never mutates its `pulse` argument.
+   5. `Soliton.propagate` (SSFM)'s own `At_out` construction hits it too:
+      `At_out = zeros(ComplexF64, N, n_saves)`, then `At_out[:, 1] .=
+      pulse.At` (writing `Const` data into the fresh allocation), then later
+      loop iterations write `Active`, `betas`-derived columns into the same
+      matrix — this one is *genuinely* conditionally active (not a
+      misclassification like point 2), which is exactly the case Enzyme's
+      own FAQ recommends `set_runtime_activity` for. Point 1's `Enzyme.jl`
+      section above found `set_runtime_activity` silently zeroing a gradient
+      that should have been nonzero — but that was a *different* failure
+      mode (a `Const`-marked `model` whose buffers were genuinely used as
+      active scratch space, i.e. a misclassification `set_runtime_activity`
+      papers over incorrectly). Here the mixed activity is real, so
+      `set_runtime_activity` is the theoretically correct tool, and this
+      was *not* taken on faith: the test independently computes a
+      finite-difference gradient and compares against it. CI run
+      `32227730469` confirms a nonzero, correct gradient (`2.545e19`)
+      matching the finite-difference estimate (`2.552e19`) to ~0.3% — well
+      inside the tolerance needed to rule out a silent-zero result, given
+      how small the finite-difference step must be in absolute terms
+      (`h ≈ 1e-30`, since `beta2 ~ 1e-26`) relative to a loss computed
+      through dozens of floating-point operations. `medium.gamma` is not
+      validated here: it is a scalar immutable field of `PhysicsModel` with
+      no in-place buffer to mutate the way `D` is mutated in point 2, so
+      varying it without rebuilding the whole model (point 2's blocker)
+      needs `PhysicsModel` to hold `gamma` in a mutable container (e.g. a
+      `Ref`/1-element `Vector`) — not done here, and a reasonable next step.
+      See [`test/test_enzyme.jl`](https://github.com/brian-sinquin/Soliton.jl/blob/master/test/test_enzyme.jl)'s
+      `"full SSFM propagation end-to-end (roadmap step 2)"` testset for the
+      working code and the full history of what was tried.
 3. Extend to `AdaptiveSSFM`, then `ERK4IP` (the default solver), once the
    fixed-step case is solid — these add data-dependent step counts on top of
    the same per-step machinery.
@@ -291,19 +351,50 @@ were previously just claims:
   `i686`/nightly-Julia support is comparatively untested next to the
   package's existing dependencies.
 
+A later session (CI runs `32223552855` through `32227730469`) validated
+roadmap step 2 for `TaylorDispersion.betas`: a full fixed-step `SSFM`
+`propagate` call, differentiated end-to-end with `Enzyme.autodiff`, matches
+an independent finite-difference gradient. Getting there took five rounds of
+CI-driven debugging, each a different instance of the same
+"conditionally active memory" `EnzymeRuntimeActivityError` class — see
+roadmap step 2 above for the full account (which errors, why, and the exact
+fix for each). Three of the five fixes are now permanent, useful-beyond-this-test
+changes: `src/dispersion.jl`'s `propagation_constant` no longer mutates a
+possibly-`Const`-seeded accumulator (rebinds instead), and the "build once,
+mutate/reuse rather than reconstruct inside the differentiated closure"
+pattern for `PhysicsModel`/`Pulse` is now a documented, reusable idiom for
+anyone extending this work. The last fix, `set_runtime_activity`, was
+cross-checked against finite differences before being trusted, per this
+document's own standing caution about that flag.
+
 Still not done:
 
-- Differentiating an entire propagation loop (`SSFM`, then `AdaptiveSSFM`/
-  `ERK4IP`) end-to-end for a realistic loss function — roadmap steps 2–4.
-  What's validated so far is the `mul!` rule and a single nonlinear-step
-  function in isolation, not a multi-step solve.
+- `medium.gamma`'s gradient, through the same fixed-step `SSFM` path.
+  `PhysicsModel.gamma` is a scalar immutable field with no in-place buffer to
+  mutate the way `D` is mutated for `betas`; varying it without rebuilding
+  the whole `PhysicsModel` inside the differentiated closure (which reopens
+  the `_to_device` "conditionally active" error from roadmap step 2, point 2)
+  needs `PhysicsModel` to hold `gamma` in a mutable container (e.g. a
+  `Ref`/1-element `Vector`) instead.
+- Differentiating `AdaptiveSSFM`, then `ERK4IP` (the default solver) —
+  roadmap steps 2–3. What's validated so far is fixed-step `SSFM` only; the
+  adaptive step controllers add data-dependent step counts on top of the
+  same per-step machinery, which may surface new activity issues of its own
+  (e.g. around the accept/reject branching or the error-estimate buffers).
 - Benchmarking the memory/performance cost of reverse-mode checkpointing
   through the adaptive step controllers.
 - The convenience `soliton_gradient(loss_fn, pulse, params)` wrapper
   (roadmap step 4) that would make this usable without hand-rolling
-  `Enzyme.autodiff`/`Duplicated`/`make_zero` calls.
+  `Enzyme.autodiff`/`Duplicated`/`make_zero`/`set_runtime_activity` calls.
 
-Anyone picking this up should start by writing the `mul!` `EnzymeRules` pair
-described above and re-running the `_spm`/finite-difference comparison from
-this session to confirm it fixes both the isolated-FFT error and the
-full-model silent-zero-gradient case.
+Anyone picking this up should start by reading
+[`test/test_enzyme.jl`](https://github.com/brian-sinquin/Soliton.jl/blob/master/test/test_enzyme.jl)'s
+`"full SSFM propagation end-to-end (roadmap step 2)"` testset and its inline
+comments, which document the working pattern and the five errors it took to
+get there — extending to `gamma`, `AdaptiveSSFM`, or `ERK4IP` will very
+likely hit the same error class again in a new location, and the fix is
+almost always one of: (a) stop reconstructing an object inside the
+differentiated closure and build it once outside instead, or (b) stop
+mutating a buffer that starts from `Const`-only data with later `Active`
+data — rebind instead, or reach for `set_runtime_activity` **and check
+against finite differences before trusting it**.

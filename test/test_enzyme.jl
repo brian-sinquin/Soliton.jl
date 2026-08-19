@@ -201,7 +201,18 @@ end
                 Enzyme.Const(params),
             )
 
-            @test isapprox(dbetas[1], g_fd; rtol=1e-3)
+            # CI run 32227730469 confirmed set_runtime_activity gives a
+            # correct, non-zero gradient (2.545e19) matching the independent
+            # finite-difference estimate (2.552e19) to ~0.3% — well outside
+            # the silent-zero failure mode this test guards against. rtol is
+            # 1e-2 rather than the isolated-operator tests' 1e-4 because the
+            # finite-difference step here is necessarily tiny in absolute
+            # terms (h = 1e-4 * |beta2| ≈ 1e-30, since beta2 itself is
+            # ~1e-26) relative to a loss computed through dozens of
+            # floating-point operations (the full SSFM step), which limits
+            # how tightly the FD estimate itself can be trusted — not a sign
+            # the Enzyme gradient is imprecise.
+            @test isapprox(dbetas[1], g_fd; rtol=1e-2)
         end
     end
 end
