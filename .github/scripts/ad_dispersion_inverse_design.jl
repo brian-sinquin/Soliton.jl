@@ -67,13 +67,17 @@ true_model = FusedSilica()
 B_true = true_model.B
 C_true_um2 = true_model.C .* 1e12
 
-# Reference wavelength for the propagation-constant frame, and 8 "measured"
+# Reference wavelength for the propagation-constant frame, and 14 "measured"
 # wavelengths spanning most of fused silica's valid Sellmeier range
-# (0.21-3.71 μm) — a sparse, unevenly-spaced set, as a real vendor
-# measurement sheet would give you.
+# (0.21-3.71 μm) — wider and denser than the first attempt (8 points,
+# 550-1600nm) specifically to better constrain the far-IR resonance (C₃,
+# whose effect only becomes visible well past 1.6 μm).
 lambda0 = 800e-9
 omega0 = 2π * c / lambda0
-sample_lambdas = [550e-9, 650e-9, 750e-9, 900e-9, 1050e-9, 1200e-9, 1400e-9, 1600e-9]
+sample_lambdas = [
+    480e-9, 550e-9, 620e-9, 700e-9, 780e-9, 900e-9, 1000e-9, 1150e-9,
+    1300e-9, 1450e-9, 1600e-9, 1800e-9, 2100e-9, 2500e-9,
+]
 V_samples = [2π * c / lam - omega0 for lam in sample_lambdas]
 
 B_measured = propagation_constant(V_samples, true_model, omega0)
@@ -84,7 +88,17 @@ B_measured = propagation_constant(V_samples, true_model, omega0)
 B0 = [0.55, 0.50, 0.70]
 C0_um2 = [0.05, 0.08, 80.0]
 
-function loss(p::AbstractVector{T}) where {T}
+# Optimize in log-space (theta = log(B, C)) rather than directly on (B, C).
+# The first attempt at this fit (with 8 samples, unconstrained (B,C))
+# converged to a *lower loss* than this one typically will, but at physically
+# meaningless negative C values — since nothing stopped Adam from crossing
+# zero into that region, and a Sellmeier resonance term is perfectly happy to
+# fit noiseless data with an imaginary resonance wavelength. C = exp(theta)
+# is positive by construction for any theta, so gradient descent can no
+# longer wander into that unphysical part of parameter space at all; B is
+# reparametrized the same way since a negative Bᵢ is equally unphysical here.
+function loss(theta::AbstractVector{T}) where {T}
+    p = exp.(theta)
     B = p[1:3]
     C_um2 = p[4:6]
     model = SellmeierDispersion(B, C_um2; microns=true)
@@ -92,30 +106,32 @@ function loss(p::AbstractVector{T}) where {T}
     return sum(abs2, B_model .- B_measured)
 end
 
-p = vcat(B0, C0_um2)
+theta = log.(vcat(B0, C0_um2))
 
 # Hand-rolled Adam — avoids pulling in an optimization package for a 6
-# parameter problem, and its per-parameter adaptive step size handles the
-# very different natural scales of B (~O(1)) and C (~O(1e-3) to O(1e2) μm²)
-# reasonably well without manual rescaling.
+# parameter problem. Its per-parameter adaptive step size, combined with the
+# log-space reparametrization above (which turns each parameter's *relative*
+# change into an additive one), handles B (~O(1)) and C (~O(1e-3) to O(1e2)
+# μm²) living on very different natural scales without manual rescaling.
 mvec = zeros(6)
 vvec = zeros(6)
 beta1, beta2, eps_adam, lr = 0.9, 0.999, 1e-8, 0.05
-n_iters = 800
+n_iters = 1500
 loss_history = zeros(n_iters)
 
 for k in 1:n_iters
-    g = ForwardDiff.gradient(loss, p)
+    g = ForwardDiff.gradient(loss, theta)
     mvec .= beta1 .* mvec .+ (1 - beta1) .* g
     vvec .= beta2 .* vvec .+ (1 - beta2) .* g .^ 2
     m_hat = mvec ./ (1 - beta1^k)
     v_hat = vvec ./ (1 - beta2^k)
-    p .-= lr .* m_hat ./ (sqrt.(v_hat) .+ eps_adam)
-    loss_history[k] = loss(p)
+    theta .-= lr .* m_hat ./ (sqrt.(v_hat) .+ eps_adam)
+    loss_history[k] = loss(theta)
 end
 
-B_fit = p[1:3]
-C_fit_um2 = p[4:6]
+p_fit = exp.(theta)
+B_fit = p_fit[1:3]
+C_fit_um2 = p_fit[4:6]
 
 @printf("Final loss: %.3e (started at %.3e)\n", loss_history[end], loss_history[1])
 println("Recovered B:       ", round.(B_fit; digits=4), "   (true: ", round.(B_true; digits=4), ")")
@@ -125,6 +141,14 @@ println(
     "   (true: ",
     round.(C_true_um2; digits=5),
     ")",
+)
+rel_err_B = maximum(abs.(B_fit .- B_true) ./ B_true)
+rel_err_C = maximum(abs.(C_fit_um2 .- C_true_um2) ./ C_true_um2)
+@printf(
+    "Max relative error: %.2f%% (B), %.2f%% (C) — recovered from a %.0f%%-ish-off initial guess\n",
+    100 * rel_err_B,
+    100 * rel_err_C,
+    100 * maximum(abs.(B0 .- B_true) ./ B_true),
 )
 
 # --- Independent sanity check: locate the zero-dispersion wavelength (ZDW) ---
