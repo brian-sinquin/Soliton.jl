@@ -570,8 +570,17 @@ end
             # so it stays fast, changing only the loss shape from the
             # already-passing "full linear SSFM (Duplicated model)" test
             # above.
-            L = 0.01
-            medium = Medium(L, 0.0, 0.0, [-1.0e-26], 1550e-9)
+            #
+            # First attempt (kept only in git history) reused L=0.01 and
+            # beta2=-1e-26 from the other isolated tests -- but at that
+            # dispersion length (~100 m for this pulse), the pulse barely
+            # reshapes over L=0.01, so |At_out|-|theta| at the peak was
+            # coincidentally ~1e-17 on both the Enzyme and FD sides. The
+            # test "passed" only because atol=1e-6 swamped values that
+            # small -- not a real check. Using much stronger dispersion and
+            # a longer propagation here instead gives an O(1) signal.
+            L = 1.0
+            medium = Medium(L, 0.0, 0.0, [-1.0e-24], 1550e-9)
             params = SimParams(;
                 medium=medium,
                 z_saves=2,
