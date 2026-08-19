@@ -169,6 +169,53 @@ jobs:
           done
           echo "::error::Failed to push result plots after retries." && exit 1
 
+  run-soliton-recovery-example:
+    name: Example - Soliton shape recovery via invariance (Julia 1.12 - ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref }}
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.12"
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/julia-buildpkg@v1
+      - name: Add example-only dependencies (Enzyme, Plots)
+        shell: julia --project=. --color=yes {0}
+        run: |
+          import Pkg
+          Pkg.add(["Enzyme", "Plots"])
+      - name: Run soliton shape recovery example
+        shell: julia --project=. --color=yes {0}
+        run: |
+          include(joinpath(pwd(), ".github", "scripts", "ad_soliton_shape_recovery.jl"))
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ad-soliton-recovery-example-results
+          path: .github/scripts/output/*.png
+          if-no-files-found: warn
+      - name: Commit result plots back to the branch
+        if: always() && github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f .github/scripts/output/*.png
+          git diff --cached --quiet && exit 0
+          git commit -m "ci: attach soliton shape recovery example output plots"
+          for attempt in 1 2 3 4 5; do
+            git push && exit 0
+            git fetch origin "$GITHUB_REF_NAME"
+            git rebase "origin/$GITHUB_REF_NAME"
+            sleep $((attempt * 3))
+          done
+          echo "::error::Failed to push result plots after retries." && exit 1
+
   run-enzyme-example:
     name: Example - Enzyme-through-SSFM compression design (Julia 1.12 - ubuntu-latest)
     runs-on: ubuntu-latest
