@@ -84,15 +84,29 @@ end
 # Pure flatness objective: minimize the variance of the local curvature
 # across the band. No target value to hit and no hidden truth to recover —
 # any theta that reduces this is a genuinely better design.
+#
+# `curv` itself is ~1e-27 in magnitude, so its *variance* is ~1e-54 — and
+# d(loss)/d(theta), computed exactly by ForwardDiff, is correspondingly
+# minuscule in absolute terms. Adam's `sqrt(v_hat) + eps_adam` denominator
+# is then dominated by eps_adam (1e-8) instead of the actual gradient RMS,
+# which strangles every step to ~lr*|g|/eps_adam ≈ 0 regardless of lr — this
+# is exactly what happened on the first attempt (theta stayed at ~1e-56,
+# betas_final ~1e-83, loss unchanged to reported precision). Normalizing
+# curv by its own natural scale before computing the variance rescales the
+# loss (and its gradient) to O(1), without changing the argmin — minimizing
+# L or c·L for a positive constant c has the same optimum, so this is a
+# conditioning fix only, not a change of objective.
+const curv_ref = 1e-27  # ~ typical |β₂|; matches the observed pre-optimization std dev
+
 function loss(theta::AbstractVector{T}) where {T}
-    curv = local_curvatures(theta)
+    curv = local_curvatures(theta) ./ curv_ref
     m = sum(curv) / length(curv)
     return sum(x -> (x - m)^2, curv) / length(curv)
 end
 
 theta0 = zeros(4)  # start with no correction: bare material dispersion
 curv_before = local_curvatures(theta0)
-var_before = loss(theta0)
+var_before = loss(theta0)  # dimensionless (units of curv_ref²)
 
 theta = copy(theta0)
 mvec = zeros(4)
@@ -113,8 +127,9 @@ end
 
 betas_final = theta .* scale
 curv_after = local_curvatures(theta)
-var_after = loss_history[end]
-std_before, std_after = sqrt(var_before), sqrt(var_after)
+var_after = loss_history[end]  # dimensionless (units of curv_ref²)
+std_before = sqrt(var_before) * curv_ref  # back to physical s²/m
+std_after = sqrt(var_after) * curv_ref
 
 @printf(
     "Local-curvature std dev: %.3e s²/m (before) -> %.3e s²/m (after), %.1fx flatter\n",
@@ -157,7 +172,7 @@ plt_loss = plot(
     loss_history;
     yscale=:log10,
     xlabel="Adam iteration",
-    ylabel="loss (variance of local curvature) [s⁴/m²]",
+    ylabel="loss (variance of curvature/curv_ref, dimensionless)",
     title="Flattening convergence",
     legend=false,
     linewidth=2,
