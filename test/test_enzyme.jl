@@ -279,6 +279,64 @@ end
             @test isapprox(dtheta[i], g_fd; rtol=1e-4, atol=1e-6)
         end
 
+        @testset "isolated copy(pulse.AW) into a local variable" begin
+            # CI run 32246119166 showed the isolated mul! test above passing
+            # (rel.diff ~3e-9) but the full linear SSFM test below failing
+            # with Enzyme returning *exactly* 0.0 -- a total loss of
+            # gradient signal, not a numerical mismatch. `propagate()`'s
+            # very first line after computing pulse.AW is `U =
+            # copy(pulse.AW)`; this isolates whether that specific `copy`
+            # of a Duplicated struct field into a fresh local variable is
+            # where the signal is lost.
+            medium = Medium(0.01, 0.11, 0.0, [-1.0e-26], 1550e-9)
+            params = SimParams(; medium=medium, solver=SSFM(1e-5))
+            template = zeros(ComplexF64, grid.N)
+            model = Soliton.build_physics_model(grid, params, template)
+            pulse = Pulse(zeros(ComplexF64, grid.N), zeros(ComplexF64, grid.N), grid)
+
+            function copy_loss(
+                theta::AbstractVector{<:Real}, model::Soliton.PhysicsModel, pulse::Pulse
+            )
+                @. pulse.At = complex(theta, 0.0)
+                mul!(pulse.AW, model.to_freq, pulse.At)
+                U = copy(pulse.AW)
+                return sum(abs2, U)
+            end
+
+            theta0 = Vector{Float64}(exp.(-grid.t .^ 2 ./ (2 * (1e-12)^2)))
+            i = argmax(theta0)
+
+            function loss_fd_copy(theta_vec)
+                p = Pulse(zeros(ComplexF64, grid.N), zeros(ComplexF64, grid.N), grid)
+                @. p.At = complex(theta_vec, 0.0)
+                mul!(p.AW, model.to_freq, p.At)
+                U = copy(p.AW)
+                return sum(abs2, U)
+            end
+            h = 1e-7
+            thp = copy(theta0)
+            thp[i] += h
+            thm = copy(theta0)
+            thm[i] -= h
+            g_fd = (loss_fd_copy(thp) - loss_fd_copy(thm)) / (2h)
+
+            dtheta = zero(theta0)
+            shadow = Enzyme.make_zero(pulse)
+            Enzyme.autodiff(
+                Enzyme.set_runtime_activity(Enzyme.Reverse),
+                copy_loss,
+                Enzyme.Active,
+                Enzyme.Duplicated(theta0, dtheta),
+                Enzyme.Const(model),
+                Enzyme.Duplicated(pulse, shadow),
+            )
+            println(
+                "  [diag] isolated copy(pulse.AW): Enzyme=", dtheta[i], "  FD=", g_fd,
+                "  rel.diff=", abs(dtheta[i] - g_fd) / max(abs(g_fd), 1e-300),
+            )
+            @test isapprox(dtheta[i], g_fd; rtol=1e-4, atol=1e-6)
+        end
+
         @testset "full SSFM propagation, Duplicated pulse, Const model (linear-only, gamma=0)" begin
             # gamma=0 strips out the nonlinear step's contribution
             # mathematically (though the nonlinear function still runs,
