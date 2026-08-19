@@ -141,18 +141,28 @@ end
             save_freq=false,
         )
         model = Soliton.build_physics_model(grid, params, At0)
+        # Built once, outside the differentiated closure, and passed in as
+        # `Const` — the same lesson as `PhysicsModel` above. `propagate`
+        # never mutates its `pulse` argument (it only reads `.grid`/`.At`/
+        # `.AW` into fresh local buffers), so one shared instance is safe to
+        # reuse across every autodiff call. Allocating a *fresh* `Pulse`
+        # inside the differentiated function — even from entirely `Const`
+        # inputs — hits a fourth instance of the same "conditionally active
+        # memory" `EnzymeRuntimeActivityError` family documented above: the
+        # mutable struct gets consumed downstream alongside genuinely active
+        # `model` data, and Enzyme's static analysis can't separate "freshly
+        # allocated, Const-derived" from "active" for a mutable struct built
+        # inside the traced region.
+        pulse_const = Pulse(copy(At0), copy(AW0), grid)
 
         function ssfm_energy_loss_betas(
             betas::AbstractVector{<:Real},
             model::Soliton.PhysicsModel,
-            grid::Grid,
-            At0::AbstractVector,
-            AW0::AbstractVector,
+            pulse::Pulse,
             params::SimParams,
         )
             m_disp = Medium(L, gamma0, 0.0, collect(betas), lambda0)
-            model.D .= fftshift(dispersion_operator(grid, m_disp))
-            pulse = Pulse(copy(At0), copy(AW0), grid)
+            model.D .= fftshift(dispersion_operator(pulse.grid, m_disp))
             _, At, _ = Soliton.propagate(model, pulse, params, params.solver, false)
             return sum(abs2, At[:, end])
         end
@@ -162,8 +172,7 @@ end
                 m = Soliton.build_physics_model(grid, params, At0)
                 m_disp = Medium(L, gamma0, 0.0, [b2], lambda0)
                 m.D .= fftshift(dispersion_operator(grid, m_disp))
-                pulse = Pulse(copy(At0), copy(AW0), grid)
-                _, At, _ = Soliton.propagate(m, pulse, params, params.solver, false)
+                _, At, _ = Soliton.propagate(m, pulse_const, params, params.solver, false)
                 return sum(abs2, At[:, end])
             end
             h = 1e-4 * abs(betas0[1])
@@ -177,9 +186,7 @@ end
                 Enzyme.Active,
                 Enzyme.Duplicated(betas0, dbetas),
                 Enzyme.Duplicated(model, shadow),
-                Enzyme.Const(grid),
-                Enzyme.Const(At0),
-                Enzyme.Const(AW0),
+                Enzyme.Const(pulse_const),
                 Enzyme.Const(params),
             )
 
