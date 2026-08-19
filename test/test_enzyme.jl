@@ -144,7 +144,7 @@ end
 
         function ssfm_energy_loss_betas(
             betas::AbstractVector{<:Real},
-            model::PhysicsModel,
+            model::Soliton.PhysicsModel,
             grid::Grid,
             At0::AbstractVector,
             AW0::AbstractVector,
