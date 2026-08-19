@@ -26,13 +26,23 @@ highly dispersive windows) but requires tabulated data.
 """
 function propagation_constant(V::AbstractVector{<:Real}, model::TaylorDispersion)
     # Taylor series: B = β₁ · V + Σ βₙ/n! · Vⁿ, n ≥ 2
-    # The result eltype promotes V with the model's own coefficient type, so
-    # AD dual numbers held by either side (grid detuning or βₙ) propagate.
-    T = promote_type(eltype(V), eltype(model.betas), typeof(model.beta1))
-    B = Vector{T}(model.beta1 .* V)
+    # Broadcasting promotes the result eltype with V and the model's own
+    # coefficient type automatically, so AD dual numbers held by either side
+    # (grid detuning or βₙ) propagate without an explicit `promote_type`.
+    #
+    # Accumulates by rebinding (`B = B .+ ...`) rather than mutating in place
+    # (`B .+= ...`) into the initial `model.beta1 .* V` allocation: with
+    # Enzyme.jl reverse-mode AD, that initial array can be entirely constant
+    # (e.g. the default `beta1 = 0.0`) while later loop iterations add an
+    # active `beta` term, and in-place-mutating a constant-seeded buffer with
+    # active data is exactly the "conditionally active memory" pattern
+    # Enzyme's static activity analysis cannot prove safe, surfacing as
+    # `EnzymeRuntimeActivityError`. Rebinding gives each iteration's `B` a
+    # fresh allocation whose activity is a clean function of its inputs.
+    B = model.beta1 .* V
     for (i, beta) in enumerate(model.betas)
         n = i + 1  # betas[1]=β₂ → n=2, betas[2]=β₃ → n=3, etc.
-        B .+= beta ./ factorial(n) .* (V .^ n)
+        B = B .+ beta ./ factorial(n) .* (V .^ n)
     end
     return B
 end
