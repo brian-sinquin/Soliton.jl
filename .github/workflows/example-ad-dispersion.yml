@@ -11,6 +11,12 @@ name: "Example (manual): AD dispersion design + supercontinuum run"
 # to check out and run.
 on:
   workflow_dispatch:
+  # TEMPORARY: fire once on push so the brand-new Enzyme job below gets its
+  # first real CI run without waiting on a manual dispatch. Remove this
+  # `push:` trigger once that run is confirmed green.
+  push:
+    branches:
+      - claude/adjoint-propagation-compatibility-ymb2a1
 
 jobs:
   run-example:
@@ -61,4 +67,48 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -f .github/scripts/output/*.png
           git diff --cached --quiet || git commit -m "ci: attach AD dispersion example output plots"
+          git push
+
+  run-enzyme-example:
+    name: Run Enzyme-through-SSFM example (Julia 1.12 - ubuntu-latest)
+    runs-on: ubuntu-latest
+    # Runs as its own job (separate from run-example above) so Enzyme's
+    # ~130s precompile isn't serialized after the already-long ForwardDiff/
+    # Dudley-reproduction steps; `needs:` still orders it *after* that job
+    # so the two jobs' "commit result plots back" steps don't race to push
+    # to the same branch from independent checkouts.
+    needs: run-example
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.12"
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/julia-buildpkg@v1
+      - name: Add example-only dependencies (Enzyme, Plots)
+        shell: julia --project=. --color=yes {0}
+        run: |
+          import Pkg
+          Pkg.add(["Enzyme", "Plots"])
+      - name: Run Enzyme-through-SSFM compression design example
+        shell: julia --project=. --color=yes {0}
+        run: |
+          include(joinpath(pwd(), ".github", "scripts", "ad_ssfm_enzyme_compression.jl"))
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ad-ssfm-enzyme-example-results
+          path: .github/scripts/output/*.png
+          if-no-files-found: warn
+      - name: Commit result plots back to the branch
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f .github/scripts/output/*.png
+          git diff --cached --quiet || git commit -m "ci: attach Enzyme-through-SSFM example output plots"
           git push
