@@ -421,5 +421,142 @@ end
             )
             @test isapprox(dtheta[i], g_fd; rtol=1e-3, atol=1e-6)
         end
+
+        @testset "full SSFM, Duplicated model, nonlinear (gamma!=0), single step" begin
+            # The Duplicated-model fix above was only verified with gamma=0
+            # (linear-only). Applying it to ad_soliton_shape_recovery.jl
+            # (gamma0=0.11, n_steps=30) did NOT fix that script's gradient
+            # check -- it still showed the same lost-gradient signature
+            # (Enzyme~0 at some indices). This isolates whether turning on
+            # the nonlinear term alone (still a single step) reintroduces
+            # the problem despite `model` being Duplicated.
+            L = 0.01
+            medium = Medium(L, 0.11, 0.0, [-1.0e-26], 1550e-9)
+            params = SimParams(;
+                medium=medium,
+                z_saves=2,
+                raman_model=nothing,
+                self_steepening=false,
+                solver=SSFM(L),
+                save_freq=false,
+            )
+            template = zeros(ComplexF64, grid.N)
+            model = Soliton.build_physics_model(grid, params, template)
+            pulse = Pulse(zeros(ComplexF64, grid.N), zeros(ComplexF64, grid.N), grid)
+
+            function nonlinear_loss(
+                theta::AbstractVector{<:Real},
+                model::Soliton.PhysicsModel,
+                pulse::Pulse,
+                params::SimParams,
+            )
+                @. pulse.At = complex(theta, 0.0)
+                mul!(pulse.AW, model.to_freq, pulse.At)
+                _, At, _ = Soliton.propagate(model, pulse, params, params.solver, false)
+                return sum(abs2, At[:, end])
+            end
+
+            theta0 = Vector{Float64}(exp.(-grid.t .^ 2 ./ (2 * (1e-12)^2)))
+            i = argmax(theta0)
+
+            function loss_fd_nonlinear(theta_vec)
+                p = Pulse(zeros(ComplexF64, grid.N), zeros(ComplexF64, grid.N), grid)
+                @. p.At = complex(theta_vec, 0.0)
+                mul!(p.AW, model.to_freq, p.At)
+                _, At, _ = Soliton.propagate(model, p, params, params.solver, false)
+                return sum(abs2, At[:, end])
+            end
+            h = 1e-7
+            thp = copy(theta0)
+            thp[i] += h
+            thm = copy(theta0)
+            thm[i] -= h
+            g_fd = (loss_fd_nonlinear(thp) - loss_fd_nonlinear(thm)) / (2h)
+
+            dtheta = zero(theta0)
+            shadow = Enzyme.make_zero(pulse)
+            model_shadow = Enzyme.make_zero(model)
+            Enzyme.autodiff(
+                Enzyme.set_runtime_activity(Enzyme.Reverse),
+                nonlinear_loss,
+                Enzyme.Active,
+                Enzyme.Duplicated(theta0, dtheta),
+                Enzyme.Duplicated(model, model_shadow),
+                Enzyme.Duplicated(pulse, shadow),
+                Enzyme.Const(params),
+            )
+            println(
+                "  [diag] full nonlinear SSFM, single step (Duplicated model): Enzyme=", dtheta[i],
+                "  FD=", g_fd, "  rel.diff=", abs(dtheta[i] - g_fd) / max(abs(g_fd), 1e-300),
+            )
+            @test isapprox(dtheta[i], g_fd; rtol=1e-3, atol=1e-6)
+        end
+
+        @testset "full SSFM, Duplicated model, linear (gamma=0), multi-step (n_steps=5)" begin
+            # Isolates whether the *loop* itself (buffers reused/overwritten
+            # across multiple SSFM steps) reintroduces the problem, holding
+            # the nonlinear term out of the picture.
+            L = 0.01
+            n_steps = 5
+            medium = Medium(L, 0.0, 0.0, [-1.0e-26], 1550e-9)
+            params = SimParams(;
+                medium=medium,
+                z_saves=2,
+                raman_model=nothing,
+                self_steepening=false,
+                solver=SSFM(L / n_steps),
+                save_freq=false,
+            )
+            template = zeros(ComplexF64, grid.N)
+            model = Soliton.build_physics_model(grid, params, template)
+            pulse = Pulse(zeros(ComplexF64, grid.N), zeros(ComplexF64, grid.N), grid)
+
+            function multistep_loss(
+                theta::AbstractVector{<:Real},
+                model::Soliton.PhysicsModel,
+                pulse::Pulse,
+                params::SimParams,
+            )
+                @. pulse.At = complex(theta, 0.0)
+                mul!(pulse.AW, model.to_freq, pulse.At)
+                _, At, _ = Soliton.propagate(model, pulse, params, params.solver, false)
+                return sum(abs2, At[:, end])
+            end
+
+            theta0 = Vector{Float64}(exp.(-grid.t .^ 2 ./ (2 * (1e-12)^2)))
+            i = argmax(theta0)
+
+            function loss_fd_multistep(theta_vec)
+                p = Pulse(zeros(ComplexF64, grid.N), zeros(ComplexF64, grid.N), grid)
+                @. p.At = complex(theta_vec, 0.0)
+                mul!(p.AW, model.to_freq, p.At)
+                _, At, _ = Soliton.propagate(model, p, params, params.solver, false)
+                return sum(abs2, At[:, end])
+            end
+            h = 1e-7
+            thp = copy(theta0)
+            thp[i] += h
+            thm = copy(theta0)
+            thm[i] -= h
+            g_fd = (loss_fd_multistep(thp) - loss_fd_multistep(thm)) / (2h)
+
+            dtheta = zero(theta0)
+            shadow = Enzyme.make_zero(pulse)
+            model_shadow = Enzyme.make_zero(model)
+            Enzyme.autodiff(
+                Enzyme.set_runtime_activity(Enzyme.Reverse),
+                multistep_loss,
+                Enzyme.Active,
+                Enzyme.Duplicated(theta0, dtheta),
+                Enzyme.Duplicated(model, model_shadow),
+                Enzyme.Duplicated(pulse, shadow),
+                Enzyme.Const(params),
+            )
+            println(
+                "  [diag] full linear SSFM, 5 steps (Duplicated model): Enzyme=", dtheta[i],
+                "  FD=", g_fd, "  rel.diff=", abs(dtheta[i] - g_fd) / max(abs(g_fd), 1e-300),
+            )
+            @test isapprox(dtheta[i], g_fd; rtol=1e-3, atol=1e-6)
+        end
     end
 end
