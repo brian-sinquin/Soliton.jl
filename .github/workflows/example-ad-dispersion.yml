@@ -11,12 +11,6 @@ name: "Example (manual): AD dispersion design + supercontinuum run"
 # to check out and run.
 on:
   workflow_dispatch:
-  # Re-added temporarily for run 8 (the new dispersive-wave-design example)
-  # — same reason as runs 1-7: workflow_dispatch only works once a workflow
-  # exists on the default branch. Remove again once inspected.
-  push:
-    branches:
-      - claude/adjoint-propagation-compatibility-ymb2a1
 
 jobs:
   run-example:
