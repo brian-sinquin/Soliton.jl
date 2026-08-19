@@ -215,4 +215,135 @@ end
             @test isapprox(dbetas[1], g_fd; rtol=1e-2)
         end
     end
+
+    @testset "gradient w.r.t. pulse shape (Duplicated pulse, Const model)" begin
+        # New differentiation surface: every test above differentiates
+        # w.r.t. *fiber* parameters (`Duplicated(model, ...)`) with the
+        # pulse held `Const`. `ad_soliton_shape_recovery.jl` instead holds
+        # the fiber `Const` and makes the *pulse* `Duplicated`, to optimize
+        # the pulse's own temporal shape. CI run 32244905929 (the example
+        # script's own gradient check) showed 29-100% relative disagreement
+        # against finite differences at several grid points -- not the
+        # ~1e-4-1e-9 agreement every surface above gets -- so this bisects
+        # the failure: does wrapping the array in a mutable struct field
+        # break Enzyme (isolated mul!), or is it the SSFM loop itself
+        # (copy/At_out pattern, same family as bug #5 above but with the
+        # Const/Duplicated roles swapped)?
+        grid = create_grid(2^6, 10e-12, 1550e-9)
+
+        @testset "isolated mul! into a Duplicated struct field (no propagate)" begin
+            medium = Medium(0.01, 0.11, 0.0, [-1.0e-26], 1550e-9)
+            params = SimParams(; medium=medium, solver=SSFM(1e-5))
+            template = zeros(ComplexF64, grid.N)
+            model = Soliton.build_physics_model(grid, params, template)
+            pulse = Pulse(zeros(ComplexF64, grid.N), zeros(ComplexF64, grid.N), grid)
+
+            function mulinto_loss(
+                theta::AbstractVector{<:Real}, model::Soliton.PhysicsModel, pulse::Pulse
+            )
+                @. pulse.At = complex(theta, 0.0)
+                mul!(pulse.AW, model.to_freq, pulse.At)
+                return sum(abs2, pulse.AW)
+            end
+
+            theta0 = Vector{Float64}(exp.(-grid.t .^ 2 ./ (2 * (1e-12)^2)))
+            i = argmax(theta0)
+
+            function loss_fd_mulinto(theta_vec)
+                p = Pulse(zeros(ComplexF64, grid.N), zeros(ComplexF64, grid.N), grid)
+                @. p.At = complex(theta_vec, 0.0)
+                mul!(p.AW, model.to_freq, p.At)
+                return sum(abs2, p.AW)
+            end
+            h = 1e-7
+            thp = copy(theta0)
+            thp[i] += h
+            thm = copy(theta0)
+            thm[i] -= h
+            g_fd = (loss_fd_mulinto(thp) - loss_fd_mulinto(thm)) / (2h)
+
+            dtheta = zero(theta0)
+            shadow = Enzyme.make_zero(pulse)
+            Enzyme.autodiff(
+                Enzyme.set_runtime_activity(Enzyme.Reverse),
+                mulinto_loss,
+                Enzyme.Active,
+                Enzyme.Duplicated(theta0, dtheta),
+                Enzyme.Const(model),
+                Enzyme.Duplicated(pulse, shadow),
+            )
+            println(
+                "  [diag] isolated mul!: Enzyme=", dtheta[i], "  FD=", g_fd,
+                "  rel.diff=", abs(dtheta[i] - g_fd) / max(abs(g_fd), 1e-300),
+            )
+            @test isapprox(dtheta[i], g_fd; rtol=1e-4, atol=1e-6)
+        end
+
+        @testset "full SSFM propagation, Duplicated pulse, Const model (linear-only, gamma=0)" begin
+            # gamma=0 strips out the nonlinear step's contribution
+            # mathematically (though the nonlinear function still runs,
+            # contributing zero) so this isolates the *linear* SSFM
+            # machinery -- the copy(pulse.AW)/At_out-partial-write pattern
+            # -- from anything nonlinear-step-specific.
+            L = 0.01
+            medium = Medium(L, 0.0, 0.0, [-1.0e-26], 1550e-9)
+            params = SimParams(;
+                medium=medium,
+                z_saves=2,
+                raman_model=nothing,
+                self_steepening=false,
+                solver=SSFM(L),
+                save_freq=false,
+            )
+            template = zeros(ComplexF64, grid.N)
+            model = Soliton.build_physics_model(grid, params, template)
+            pulse = Pulse(zeros(ComplexF64, grid.N), zeros(ComplexF64, grid.N), grid)
+
+            function linear_loss(
+                theta::AbstractVector{<:Real},
+                model::Soliton.PhysicsModel,
+                pulse::Pulse,
+                params::SimParams,
+            )
+                @. pulse.At = complex(theta, 0.0)
+                mul!(pulse.AW, model.to_freq, pulse.At)
+                _, At, _ = Soliton.propagate(model, pulse, params, params.solver, false)
+                return sum(abs2, At[:, end])
+            end
+
+            theta0 = Vector{Float64}(exp.(-grid.t .^ 2 ./ (2 * (1e-12)^2)))
+            i = argmax(theta0)
+
+            function loss_fd_linear(theta_vec)
+                p = Pulse(zeros(ComplexF64, grid.N), zeros(ComplexF64, grid.N), grid)
+                @. p.At = complex(theta_vec, 0.0)
+                mul!(p.AW, model.to_freq, p.At)
+                _, At, _ = Soliton.propagate(model, p, params, params.solver, false)
+                return sum(abs2, At[:, end])
+            end
+            h = 1e-7
+            thp = copy(theta0)
+            thp[i] += h
+            thm = copy(theta0)
+            thm[i] -= h
+            g_fd = (loss_fd_linear(thp) - loss_fd_linear(thm)) / (2h)
+
+            dtheta = zero(theta0)
+            shadow = Enzyme.make_zero(pulse)
+            Enzyme.autodiff(
+                Enzyme.set_runtime_activity(Enzyme.Reverse),
+                linear_loss,
+                Enzyme.Active,
+                Enzyme.Duplicated(theta0, dtheta),
+                Enzyme.Const(model),
+                Enzyme.Duplicated(pulse, shadow),
+                Enzyme.Const(params),
+            )
+            println(
+                "  [diag] full linear SSFM: Enzyme=", dtheta[i], "  FD=", g_fd,
+                "  rel.diff=", abs(dtheta[i] - g_fd) / max(abs(g_fd), 1e-300),
+            )
+            @test isapprox(dtheta[i], g_fd; rtol=1e-3, atol=1e-6)
+        end
+    end
 end
