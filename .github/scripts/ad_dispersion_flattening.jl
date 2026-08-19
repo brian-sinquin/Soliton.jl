@@ -62,7 +62,7 @@ dV = 1e11  # finite-difference step for the local-curvature proxy [rad/s]
 # raw SI units. `scale[i]` converts a natural-magnitude "ps^n/km"-like
 # O(1) value into the SI units TaylorDispersion expects, the same role
 # `microns=true` plays for SellmeierDispersion.C in the other example.
-scale = [1e-(12 * n + 3) for n in 2:5]
+scale = [10.0^(-(12 * n + 3)) for n in 2:5]
 
 # Local curvature (∝ β₂(λ)) of the TOTAL dispersion (material + correction),
 # via a central finite difference on propagation_constant — deliberately
