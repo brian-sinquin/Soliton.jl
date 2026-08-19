@@ -1,8 +1,8 @@
 name: "Example (manual): AD dispersion design + supercontinuum run"
 
 # Manual, one-off demonstration job — NOT part of the regular push/PR CI
-# matrix. Runs two AD-driven dispersion-design examples (ForwardDiff, not a
-# project dependency) plus the full-resolution Dudley et al. (2006)
+# matrix. Runs three AD-driven dispersion-design examples (ForwardDiff, not
+# a project dependency) plus the full-resolution Dudley et al. (2006)
 # supercontinuum reproduction, and uploads the resulting plots/log as a
 # workflow artifact so results can be inspected without a local Julia
 # install. See examples/README.md for the local-run instructions this
@@ -11,11 +11,12 @@ name: "Example (manual): AD dispersion design + supercontinuum run"
 # to check out and run.
 on:
   workflow_dispatch:
-  # Push-triggered 7 times so far while developing/debugging both example
-  # scripts (workflow_dispatch only works once a workflow exists on the
-  # default branch); removed again after run 7 confirmed the flattening
-  # example converges correctly (18x flatter). Re-add a scoped `push:`
-  # block for one more run if needed; otherwise manual-only until merged.
+  # Re-added temporarily for run 8 (the new dispersive-wave-design example)
+  # — same reason as runs 1-7: workflow_dispatch only works once a workflow
+  # exists on the default branch. Remove again once inspected.
+  push:
+    branches:
+      - claude/adjoint-propagation-compatibility-ymb2a1
 
 jobs:
   run-example:
@@ -44,6 +45,10 @@ jobs:
         shell: julia --project=. --color=yes {0}
         run: |
           include(joinpath(pwd(), ".github", "scripts", "ad_dispersion_flattening.jl"))
+      - name: Run dispersive-wave design + verification example
+        shell: julia --project=. --color=yes {0}
+        run: |
+          include(joinpath(pwd(), ".github", "scripts", "ad_dispersive_wave_design.jl"))
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@v7
