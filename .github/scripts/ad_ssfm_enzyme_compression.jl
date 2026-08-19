@@ -56,7 +56,10 @@ gamma0 = 0.11
 L = 0.05
 P0 = 500.0
 FWHM = 100e-15
-n_steps = 6
+# CI run 32236352351 showed ~70% photon-number drift with n_steps=6: the
+# nonlinear phase per step (gamma*P0*dz ~ 0.46 rad) was too large for the
+# split-step scheme at this power/length. n_steps=60 keeps it ~0.046 rad.
+n_steps = 60
 z_saves = 2
 
 grid = create_grid(N, time_window, lambda0)
@@ -94,11 +97,12 @@ function compression_loss(
     pulse::Pulse,
     params::SimParams,
     t2::AbstractVector{<:Real},
+    scale::Real,
 )
     m_disp = Medium(L, gamma0, 0.0, theta .* scale2, lambda0)
     model.D .= fftshift(dispersion_operator(pulse.grid, m_disp))
     _, At, _ = Soliton.propagate(model, pulse, params, params.solver, false)
-    return sum(abs2.(At[:, end]) .* t2)
+    return sum(abs2.(At[:, end]) .* t2) * scale
 end
 
 # --- Sanity check: Enzyme gradient vs. independent finite differences ---
@@ -124,12 +128,24 @@ Enzyme.autodiff(
     Enzyme.Const(pulse_const),
     Enzyme.Const(params),
     Enzyme.Const(t2),
+    Enzyme.Const(1.0),
 )
 @printf("Gradient check at theta0 = %.1f ps^2/km:\n", theta0[1])
 @printf("  Enzyme (reverse-mode AD):  %.6e\n", dtheta0[1])
 @printf("  Finite differences:        %.6e\n", g_fd)
 @printf("  Relative difference:       %.3e\n", abs(dtheta0[1] - g_fd) / abs(g_fd))
 println()
+
+# CI run 32236352351 showed Adam making literally zero progress over 150
+# iterations: the raw gradient (~5.4e-20) is many orders of magnitude
+# smaller than Adam's eps=1e-8, so eps dominates m_hat/(sqrt(v_hat)+eps) and
+# every step underflows to nothing. Rescale the objective (a constant
+# multiplicative factor baked into `compression_loss` itself, so Enzyme
+# differentiates the exact rescaled function used for optimization) so the
+# gradient magnitude is O(1) and well clear of eps. Calibrated from the
+# gradient check above rather than a hardcoded magic number, so it adapts
+# if the physical parameters above change.
+obj_scale = 0.1 / abs(dtheta0[1])
 
 # --- Adam optimization loop, gradient supplied entirely by Enzyme ---
 theta = copy(theta0)
@@ -156,8 +172,9 @@ for k in 1:n_iters
         Enzyme.Const(pulse_const),
         Enzyme.Const(params),
         Enzyme.Const(t2),
+        Enzyme.Const(obj_scale),
     )
-    loss_history[k] = loss_val
+    loss_history[k] = loss_val / obj_scale
 
     mvec .= adam_b1 .* mvec .+ (1 - adam_b1) .* dtheta
     vvec .= adam_b2 .* vvec .+ (1 - adam_b2) .* dtheta .^ 2
@@ -180,7 +197,7 @@ verify_params(beta2_val) = SimParams(;
     raman_model=nothing,
     self_steepening=false,
     solver=SSFM(dz),
-    save_freq=false,
+    save_freq=true,  # Pulse(::Solution) needs sol.AW; save_freq=false left it 0x0
 )
 
 pulse_in = sech_pulse(grid, P0, FWHM)

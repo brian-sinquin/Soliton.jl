@@ -74,15 +74,24 @@ jobs:
     runs-on: ubuntu-latest
     # Runs as its own job (separate from run-example above) so Enzyme's
     # ~130s precompile isn't serialized after the already-long ForwardDiff/
-    # Dudley-reproduction steps; `needs:` still orders it *after* that job
-    # so the two jobs' "commit result plots back" steps don't race to push
-    # to the same branch from independent checkouts.
+    # Dudley-reproduction steps; `needs:` orders it *after* that job so the
+    # two jobs' "commit result plots back" steps don't race to push to the
+    # same branch from independent checkouts.
+    #
+    # CI run 32236352351 still hit a rejected push here even with `needs:`:
+    # actions/checkout defaults to the fixed `github.sha` that triggered the
+    # whole workflow run, not the branch's live tip, so this job's checkout
+    # missed the commit run-example had *already* pushed on top of that SHA
+    # by the time this job started. `ref: ${{ github.ref }}` checks out the
+    # branch's current tip instead, picking up that commit.
     needs: run-example
     timeout-minutes: 30
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref }}
       - uses: julia-actions/setup-julia@v2
         with:
           version: "1.12"
