@@ -367,6 +367,28 @@ anyone extending this work. The last fix, `set_runtime_activity`, was
 cross-checked against finite differences before being trusted, per this
 document's own standing caution about that flag.
 
+A third session hit the *same* `Const`-model-with-active-scratch-buffers
+misclassification again, from the opposite direction: differentiating a loss
+w.r.t. the **pulse shape** itself (`Enzyme.Duplicated(pulse, ...)`), with
+`PhysicsModel` seemingly safe to mark `Const` since none of its own
+parameters were being optimized. It isn't safe — `Soliton.propagate` still
+writes the Active, pulse-derived data through `model.buf_f1`/`buf_f2` as
+scratch space regardless of which argument is the actual design variable, so
+a `Const` model means no shadow exists for those buffers and the gradient
+silently vanishes (`Enzyme=0.0` exactly), exactly as in roadmap step 2, point
+1 above. The fix is identical: `Enzyme.Duplicated(model,
+Enzyme.make_zero(model))` even though `model`'s own gradient is never read.
+Confirmed via six bisecting testsets in `test/test_enzyme.jl` (nested under
+`"gradient w.r.t. pulse shape (Duplicated pulse, Const model)"`) that
+isolate the failure to exactly this pattern, and validated end-to-end in
+[`ad_soliton_shape_recovery.jl`](https://github.com/brian-sinquin/Soliton.jl/blob/master/examples/ad_soliton_shape_recovery.jl)
+(gradient checks matching finite differences to `~1e-9` relative error away
+from `abs()`'s non-smooth point at zero). General lesson: `model` should be
+`Duplicated` with a zeroed shadow any time it is passed into `propagate`
+alongside another `Duplicated` argument, regardless of which argument is the
+one actually being optimized — `Const(model)` is only safe when nothing
+`Active`-derived ever flows through its buffers.
+
 Still not done:
 
 - `medium.gamma`'s gradient, through the same fixed-step `SSFM` path.
