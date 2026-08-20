@@ -94,15 +94,15 @@ function propagate(
         # Save state
         z_out[save_idx] = z
 
-        # Save U components
-        copyto!(model.buf_f1, U)
+        # Save U components. Read-only uses of `U`, so no staging copy through
+        # `model.buf_f1`.
         if params.save_freq
-            fftshift!(@view(Aw_out[:, 1, save_idx]), @view(model.buf_f1[:, 1]))
-            fftshift!(@view(Aw_out[:, 2, save_idx]), @view(model.buf_f1[:, 2]))
+            fftshift!(@view(Aw_out[:, 1, save_idx]), @view(U[:, 1]))
+            fftshift!(@view(Aw_out[:, 2, save_idx]), @view(U[:, 2]))
         end
 
         # Transform back to time domain
-        mul!(u_temp, model.to_time, model.buf_f1)
+        mul!(u_temp, model.to_time, U)
         copyto!(@view(At_out[:, 1, save_idx]), @view(u_temp[:, 1]))
         copyto!(@view(At_out[:, 2, save_idx]), @view(u_temp[:, 2]))
 

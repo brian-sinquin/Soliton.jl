@@ -94,9 +94,9 @@ function propagate(
 
         # Save state
         z_out[save_idx] = z
-        copyto!(model.buf_f1, U)
-        fftshift!(@view(Aw_out[:, save_idx]), model.buf_f1)
-        mul!(u_temp, model.to_time, model.buf_f1)
+        # Read-only uses of `U`, so no staging copy through `model.buf_f1`.
+        fftshift!(@view(Aw_out[:, save_idx]), U)
+        mul!(u_temp, model.to_time, U)
         copyto!(@view(At_out[:, save_idx]), u_temp)
 
         if !isnothing(prog)

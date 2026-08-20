@@ -389,6 +389,46 @@ alongside another `Duplicated` argument, regardless of which argument is the
 one actually being optimized — `Const(model)` is only safe when nothing
 `Active`-derived ever flows through its buffers.
 
+## Cleanup pass over the AD implementation
+
+A review of the accumulated implementation (rather than new capability) made
+four changes. None of them alter the public API or any numerical result of a
+forward simulation, so this is backward compatible with 0.2.1.
+
+- **The adjoint is now derived from the plan, not from `length(y)`.** The rule
+  previously reconstructed `Pᴴ` as `N * inv(p)` (or `inv(p) / N` for a
+  `ScaledPlan`) with `N = length(ȳ)`. That is only right when the plan
+  transforms the *whole* array. `SolitonEnzymeExt._adjoint_plan` instead
+  splits `p` into `scale * base` with `base` unnormalized, and uses
+  `pᴴ == scale * baseᴴ` where `baseᴴ` is the unnormalized opposite-direction
+  transform recovered from `inv(base)`. No `N` appears anywhere, because for
+  the unnormalized DFT matrix `F`, `Fᴴ` is exactly the unnormalized backward
+  transform.
+- **The rule now covers `AbstractVecOrMat`, not just `AbstractVector`.**
+  Together with the point above this makes the vectorial solver's
+  `plan_ifft(tmp, 1)` over an `N x 2` field differentiable — previously it
+  matched no rule at all and fell through to an `EnzymeNoDerivativeError`
+  inside FFTW, and a `length`-based normalization would have been wrong for
+  it by a factor of 2 had it matched. `test/test_enzyme.jl` checks the
+  adjoint identity `⟨Px, y⟩ == ⟨x, Pᴴy⟩` directly for all four plan shapes,
+  independently of Enzyme, so a normalization regression fails loudly and on
+  its own terms rather than as a subtly wrong gradient.
+- **One fewer allocation and one fewer pass per adjoint.** `augmented_primal`
+  now allocates the reverse pass's scratch buffer as its tape (and skips it
+  entirely for a `Const` `x`, which is known statically), so `reverse` does
+  `mul!` into that buffer and folds the rescale into the accumulation. The
+  previous `x̄ .+= adjoint_plan * ȳ` built a `ScaledPlan` wrapper per call,
+  allocated a fresh result array, scaled it in a separate `rmul!` pass, then
+  accumulated in a third.
+- **Dropped a redundant staging copy in all four solvers.** Every solver's
+  save block did `copyto!(model.buf_f1, U)` and then only ever *read*
+  `model.buf_f1` (`fftshift!` source, `mul!` source), so `U` is now used
+  directly. That removes an N-element copy per save point, and removes one of
+  the places where active pulse data flows through a model-owned scratch
+  buffer. The `Duplicated(model, ...)` requirement above still stands — the
+  nonlinear-step functions return `model.buf_f1` itself — but there is one
+  less instance of the pattern to reason about.
+
 Still not done:
 
 - `medium.gamma`'s gradient, through the same fixed-step `SSFM` path.

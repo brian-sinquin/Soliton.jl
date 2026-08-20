@@ -275,15 +275,16 @@ function _propagate_erk4ip!(
 
                 # U is already the lab-frame field (RK4IP re-centers the
                 # interaction picture each step), so no exp(D·z) is applied.
-                copyto!(model.buf_f1, U)
+                # Both uses below only read `U`, so it is passed directly
+                # rather than staged through `model.buf_f1`.
 
                 # Apply fftshift for monotonic frequency ordering in output if requested
                 if params.save_freq
-                    fftshift!(@view(Aw_out[:, save_idx]), model.buf_f1)
+                    fftshift!(@view(Aw_out[:, save_idx]), U)
                 end
 
                 # Transform to time domain (lab frame)
-                mul!(u_temp, model.to_time, model.buf_f1)
+                mul!(u_temp, model.to_time, U)
                 copyto!(@view(At_out[:, save_idx]), u_temp)
 
                 if !isnothing(prog)
