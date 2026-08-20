@@ -68,8 +68,15 @@ T0 = 100e-15               # target soliton time-width (not FWHM)
 P0 = abs(beta2) / (gamma0 * T0^2)   # N=1 fundamental soliton peak power
 E0 = 2 * P0 * T0                     # sech energy = P0 * 2T0: the fixed energy budget
 L_D = T0^2 / abs(beta2)
-L = L_D                              # propagate one dispersion length
-n_steps = 30
+# CI run 32351102419 found the shape-mismatch signal at L=L_D was nearly
+# degenerate: max|At_out|-|theta| ~ 3.5e-8, loss ~2e-13. A Gaussian barely
+# reshapes over just one dispersion length at these parameters, so both the
+# finite-difference check (self-inconsistent by 19-475% between two step
+# sizes -- clear FD noise, not a real signal) and the Adam loop (loss never
+# moved past floating-point-scale noise) had nothing real to work with.
+# Propagating several dispersion lengths gives a genuine, O(1) mismatch.
+L = 3 * L_D
+n_steps = 90                         # keep the per-step resolution from before (3x steps for 3x L)
 z_saves = 2
 
 grid = create_grid(N, time_window, lambda0)
