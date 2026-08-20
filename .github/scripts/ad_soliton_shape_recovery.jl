@@ -149,17 +149,42 @@ Enzyme.autodiff(
     Enzyme.Const(params),
 )
 
+loss0 = loss_of_theta_fd(theta0)
+At_end0 = let
+    p = Pulse(zeros(ComplexF64, grid.N), zeros(ComplexF64, grid.N), grid)
+    @. p.At = complex(theta0, 0.0)
+    mul!(p.AW, model.to_freq, p.At)
+    _, At, _ = Soliton.propagate(model, p, params, params.solver, false)
+    At[:, end]
+end
+diff0 = abs.(At_end0) .- abs.(theta0)
+@printf(
+    "Initial loss = %.6e; max|diff| = %.6e, mean|diff| = %.6e (sanity check on signal scale)\n",
+    loss0, maximum(abs.(diff0)), sum(abs.(diff0)) / length(diff0)
+)
+
 check_idx = unique([argmax(theta0), N ÷ 4, N ÷ 2 + N ÷ 8, N ÷ 2 - N ÷ 8])
-h = 1e-6 * sqrt(P0)
 println("Gradient check (Enzyme vs finite differences) at a few grid points:")
+println("(two FD step sizes shown -- if the estimate is unstable between them, that's")
+println("finite-difference floating-point noise, not necessarily an Enzyme error)")
 for i in check_idx
-    thp = copy(theta0)
-    thp[i] += h
-    thm = copy(theta0)
-    thm[i] -= h
-    g_fd = (loss_of_theta_fd(thp) - loss_of_theta_fd(thm)) / (2h)
-    reldiff = abs(dtheta_check[i] - g_fd) / max(abs(g_fd), 1e-300)
-    @printf("  idx %4d: Enzyme=%.6e  FD=%.6e  rel.diff=%.3e\n", i, dtheta_check[i], g_fd, reldiff)
+    h1 = 1e-6 * sqrt(P0)
+    h2 = 1e-4 * sqrt(P0)
+    g_fd(h) = begin
+        thp = copy(theta0)
+        thp[i] += h
+        thm = copy(theta0)
+        thm[i] -= h
+        (loss_of_theta_fd(thp) - loss_of_theta_fd(thm)) / (2h)
+    end
+    g_fd1 = g_fd(h1)
+    g_fd2 = g_fd(h2)
+    reldiff1 = abs(dtheta_check[i] - g_fd1) / max(abs(g_fd1), 1e-300)
+    fd_selfdiff = abs(g_fd1 - g_fd2) / max(abs(g_fd2), 1e-300)
+    @printf(
+        "  idx %4d: theta0=%.3e  Enzyme=%.6e  FD(h=%.1e)=%.6e  FD(h=%.1e)=%.6e  rel.diff(Enzyme,FD1)=%.3e  rel.diff(FD1,FD2)=%.3e\n",
+        i, theta0[i], dtheta_check[i], h1, g_fd1, h2, g_fd2, reldiff1, fd_selfdiff
+    )
 end
 println()
 
