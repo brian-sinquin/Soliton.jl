@@ -128,8 +128,17 @@ function shape_invariance_loss(
 end
 
 # --- Wrong initial guess: a Gaussian (not sech), scaled to the target energy ---
+# CI run 32352256563 caught a real units bug here (not an AD issue): energy
+# is E(A) = integral(|A(t)|^2 dt) ~ dt * sum(|A|^2) for a sampled field, but
+# this line normalized against the bare sum(abs2, theta0) -- missing the
+# `dt` factor. Since dt ~ 2e-15 s here, sqrt(dt) ~ 4.4e-8 scaled the entire
+# pulse down by that factor (confirmed: the printed peak amplitude was
+# ~2e-7, not the intended ~sqrt(P0)~4.3), so the whole experiment ran at a
+# physically negligible power regardless of propagation length -- explaining
+# why the shape-mismatch signal stayed ~1e-13 no matter how much L changed.
+pulse_energy(At) = grid.dt * sum(abs2, At)
 theta0 = sqrt(P0) .* exp.(-grid.t .^ 2 ./ (2 * T0^2))
-theta0 .*= sqrt(E0 / sum(abs2, theta0))
+theta0 .*= sqrt(E0 / pulse_energy(theta0))
 
 # --- Sanity check: Enzyme gradient vs. independent finite differences ---
 # This is a *different* differentiation surface than the betas-gradient
@@ -227,7 +236,7 @@ for k in 1:n_iters
 
     # Project back onto the fixed-energy hypersphere: excludes the trivial
     # zero solution and makes this a search over *shape only*.
-    theta .*= sqrt(E0 / sum(abs2, theta))
+    theta .*= sqrt(E0 / pulse_energy(theta))
 
     if k % 25 == 0 || k == 1
         @printf("  iter %4d: loss = %.6e\n", k, loss_val)
