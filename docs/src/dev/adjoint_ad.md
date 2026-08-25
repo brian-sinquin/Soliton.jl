@@ -7,6 +7,11 @@ power at the fiber output") with respect to simulation inputs (`γ`, `β_n`,
 fiber length, loss, pulse shape, ...) for gradient-based optimization
 (dispersion engineering, pulse-shaping inverse design, parameter fitting).
 
+See also [AD ecosystem review](ad_ecosystem_review.md), which compares this
+implementation against established differentiable-programming packages
+(AbstractFFTs, SciMLSensitivity, Checkpointing.jl, DifferentiationInterface,
+Lux) and lists what is worth borrowing, ordered by value over effort.
+
 It is **not** a user guide to a working feature: as of this writing, Soliton.jl
 does **not** support AD through `solve`/`propagate` — the FFTW adjoint rule
 (roadmap step 1) is implemented and tested for the underlying `mul!`/nonlinear-
