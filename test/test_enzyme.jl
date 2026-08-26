@@ -154,6 +154,11 @@ end
                 y = randn(ComplexF64, size(template))
                 padj, scale = SolitonEnzyme._adjoint_plan(p)
                 @test dot(p * x, y) ≈ dot(x, scale * (padj * y))
+                # AbstractFFTs exposes the same operator as `p'` (its
+                # AdjointPlan). We can't use it directly — AdjointPlan has no
+                # `mul!`, so it allocates — but it is a maintained upstream
+                # oracle for our factorization's normalization.
+                @test scale * (padj * y) ≈ p' * y
             end
         end
     end
@@ -184,6 +189,80 @@ end
                 g_fd = fd_grad_at(u -> loss(u, plan), u0, i)
                 @test isapprox(du[i], g_fd; rtol=1e-4, atol=1e-6)
             end
+        end
+    end
+
+    @testset "forward mode (linear plan => tangent obeys the same map)" begin
+        # Reverse mode tapes an entire propagation to produce a gradient, so for
+        # a design problem with a handful of parameters forward mode is cheaper
+        # in both time and memory. These check the forward rule computes the
+        # directional derivative correctly.
+        u0 = Vector{ComplexF64}(exp.(-grid.t .^ 2 ./ (2 * (1e-12)^2)) .+ 0im)
+        loss(u, p) = begin
+            y = similar(u)
+            mul!(y, p, u)
+            sum(abs2, y)
+        end
+
+        for (name, plan) in ("plan_fft" => plan_fft(u0), "plan_ifft" => plan_ifft(u0))
+            @testset "isolated $name" begin
+                seed = randn(ComplexF64, length(u0))
+                # Plain `Forward` (not `ForwardWithPrimal`) returns a 1-tuple
+                # holding only the derivative.
+                (g_fwd,) = Enzyme.autodiff(
+                    Enzyme.Forward,
+                    loss,
+                    Enzyme.Duplicated,
+                    Enzyme.Duplicated(u0, seed),
+                    Enzyme.Const(plan),
+                )
+                # Forward mode gives d/dε f(u0 + ε*seed); compare against a
+                # central difference along that same direction.
+                h = 1e-7
+                g_fd = (loss(u0 .+ h .* seed, plan) - loss(u0 .- h .* seed, plan)) / (2h)
+                @test isapprox(g_fwd, g_fd; rtol=1e-4, atol=1e-6)
+            end
+        end
+
+        @testset "full SSFM propagation w.r.t. beta2" begin
+            # The differentiation surface `ad_ssfm_enzyme_compression.jl` uses,
+            # which optimizes a single scalar through the whole solver — the
+            # case where forward mode should be preferred outright.
+            L, lambda0, gamma0 = 0.01, 1550e-9, 0.11
+            betas0 = [-1.0e-26]
+            model, params = ssfm_fixture(grid; L=L, gamma=gamma0, beta2=betas0[1])
+            pulse0 = sech_pulse(grid, 100.0, 1e-12)
+            pulse_const = Pulse(copy(pulse0.At), copy(pulse0.AW), grid)
+
+            function fwd_loss(betas, model, pulse, params)
+                m_disp = Medium(L, gamma0, 0.0, collect(betas), lambda0)
+                model.D .= fftshift(dispersion_operator(pulse.grid, m_disp))
+                _, At, _ = Soliton.propagate(model, pulse, params, params.solver, false)
+                return sum(abs2, At[:, end])
+            end
+
+            (g_fwd,) = Enzyme.autodiff(
+                Enzyme.set_runtime_activity(Enzyme.Forward),
+                fwd_loss,
+                Enzyme.Duplicated,
+                Enzyme.Duplicated(betas0, [1.0]),   # seed = d/d(beta2)
+                Enzyme.Duplicated(model, Enzyme.make_zero(model)),
+                Enzyme.Const(pulse_const),
+                Enzyme.Const(params),
+            )
+
+            h = 1e-4 * abs(betas0[1])
+            g_fd = fd_central(betas0, 1; h=h) do b
+                fwd_loss(b, model, pulse_const, params)
+            end
+            println(
+                "  [diag] forward mode d/dbeta2: Enzyme=", g_fwd, "  FD=", g_fd,
+                "  rel.diff=", relative_difference(g_fwd, g_fd),
+            )
+            # Same loose rtol as the reverse-mode betas test, and for the same
+            # reason: h ~ 1e-30 in absolute terms limits the FD estimate, not
+            # the AD one.
+            @test isapprox(g_fwd, g_fd; rtol=1e-2)
         end
     end
 

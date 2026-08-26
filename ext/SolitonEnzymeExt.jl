@@ -21,6 +21,17 @@ transform: conjugating and transposing a symmetric DFT matrix only flips its
 sign convention. See [`_adjoint_plan`](@ref) for how that is recovered from an
 arbitrary (possibly `ScaledPlan`-wrapped) plan.
 
+This is the same quantity `AbstractFFTs` exposes as `p'` (its `AdjointPlan`),
+factored so it can be applied with `mul!` into an existing buffer — `p'` itself
+allocates, since `AdjointPlan` does not support `mul!`. `test/test_enzyme.jl`
+checks the two agree, which makes upstream a maintained oracle for our
+normalization.
+
+Forward mode is supported too: an FFT plan is linear, so a tangent obeys the
+same map as the primal (`ẏ = P ẋ`). Reverse mode tapes the whole propagation to
+produce a gradient, so for a design problem with only a handful of parameters —
+e.g. optimizing `β₂` alone — forward mode is cheaper in both time and memory.
+
 Verified against finite differences on `model.to_freq` and `model.to_time` in
 isolation, on the full `_spm` nonlinear step, and end-to-end through a whole
 fixed-step `SSFM` propagation — see `test/test_enzyme.jl`.
@@ -79,9 +90,13 @@ field, where the normalization is the transform length rather than the array
 length. `AbstractFFTs` caches `inv` on the plan itself, so repeated calls cost
 a field read rather than a new plan.
 
-Assumes `p` maps `ℂⁿ → ℂⁿ` (`plan_fft`/`plan_ifft` and their scaled inverses),
-which is all `PhysicsModel` ever builds; real-input plans (`plan_rfft`) change
-the array size and would need a different adjoint.
+!!! warning "Complex-to-complex plans only"
+    Assumes `p` maps `ℂⁿ → ℂⁿ` (`plan_fft`/`plan_ifft` and their scaled
+    inverses), which is all `PhysicsModel` ever builds. Real-input plans
+    (`plan_rfft`/`plan_irfft`) change the array size and need boundary-aware
+    scaling at the Nyquist bin — `AbstractFFTs`' `RFFTAdjointStyle` handles
+    that, this does not, and would be silently wrong rather than erroring.
+    Adding real-transform support means deferring to `p'` for those styles.
 """
 function _adjoint_plan(p::Plan)
     base, scale = _unscale(p)
@@ -106,20 +121,21 @@ function EnzymeRules.augmented_primal(
         nothing
     end
 
-    # Scratch for the reverse pass's `padj * ȳ`, so `reverse` can `mul!` into a
-    # buffer instead of allocating a fresh result array per adjoint. `x`'s
-    # activity is known statically here, so a `Const` `x` — nothing to
-    # accumulate into — allocates nothing at all.
-    tape = x isa EC.Const ? nothing : similar(x.val)
-
-    return EnzymeRules.AugmentedReturn(primal, shadow, tape)
+    # No tape. An earlier version allocated the reverse pass's scratch buffer
+    # here, which removed one allocation per adjoint — but a tape entry is held
+    # from `augmented_primal` until its matching `reverse`, so that traded a
+    # transient allocation for one retained array *per taped `mul!`*. Invisible
+    # at test sizes; at N=2^14 over 10k steps it is several GB of extra live
+    # tape, and tape memory is already the binding constraint on differentiating
+    # realistic runs. `reverse` allocates its own scratch instead.
+    return EnzymeRules.AugmentedReturn(primal, shadow, nothing)
 end
 
 function EnzymeRules.reverse(
     ::EnzymeRules.RevConfigWidth{1},
     ::EC.Const{typeof(mul!)},
     ::Type{RT},
-    tape,
+    ::Nothing,
     y::EC.Annotation{<:AbstractVecOrMat},
     plan::EC.Annotation{<:Plan},
     x::EC.Annotation{<:AbstractVecOrMat},
@@ -127,13 +143,52 @@ function EnzymeRules.reverse(
     if !(x isa EC.Const) && !(y isa EC.Const)
         ybar = y.dval
         padj, scale = _adjoint_plan(plan.val)
-        mul!(tape, padj, ybar)
-        x.dval .+= scale .* tape
+        # Transient scratch: freed as soon as this adjoint returns, so peak
+        # extra memory is one array rather than one per taped call. Applying
+        # `padj` with `mul!` and folding `scale` into the accumulation still
+        # saves a `ScaledPlan` allocation and a full pass over the array
+        # compared with `x̄ .+= (scale * padj) * ȳ`.
+        tmp = similar(x.dval)
+        mul!(tmp, padj, ybar)
+        x.dval .+= scale .* tmp
         # `mul!` overwrites `y` in full, so `y`'s incoming adjoint is entirely
         # consumed here and must not leak back into any earlier use of `y`.
         ybar .= 0
     end
     return (nothing, nothing, nothing)
+end
+
+"""
+Forward-mode rule. An FFT plan is a linear map, so the tangent propagates
+through the identical transform: `ẏ = P ẋ`. A `Const` `x` carries no tangent,
+so `y`'s tangent is zeroed rather than left stale from a previous call.
+"""
+function EnzymeRules.forward(
+    config::EnzymeRules.FwdConfigWidth{1},
+    ::EC.Const{typeof(mul!)},
+    ::Type{RT},
+    y::EC.Annotation{<:AbstractVecOrMat},
+    plan::EC.Annotation{<:Plan},
+    x::EC.Annotation{<:AbstractVecOrMat},
+) where {RT}
+    mul!(y.val, plan.val, x.val)
+
+    if !(y isa EC.Const)
+        if x isa EC.Const
+            fill!(y.dval, zero(eltype(y.dval)))
+        else
+            mul!(y.dval, plan.val, x.dval)
+        end
+    end
+
+    # Return shape is dictated by `EnzymeRules.forward_rule_return_type`.
+    if !EnzymeRules.needs_shadow(config)
+        return EnzymeRules.needs_primal(config) ? y.val : nothing
+    elseif EnzymeRules.needs_primal(config)
+        return EC.Duplicated(y.val, y.dval)
+    else
+        return y.dval
+    end
 end
 
 # Only width-1 (`Duplicated`, not `BatchDuplicated`) reverse mode is covered;
