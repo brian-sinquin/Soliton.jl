@@ -8,20 +8,20 @@ the ecosystem has settled on and where we diverge from it.
 
 Findings are ordered by (value ÷ effort), not by interest.
 
-## Summary
+## Round 1 status
 
-| # | Finding | Effort | Payoff |
-|---|---------|--------|--------|
-| 1 | `AbstractFFTs` already ships an adjoint-plan type (`p'`) | XS | Correctness oracle for free |
-| 2 | Reverse-rule tape scratch raises peak memory | XS | Undoes a regression we introduced |
-| 3 | Shadows are rebuilt every optimizer iteration | S | ~150–300 wasted model allocations/run |
-| 4 | Hand-rolled finite differences in tests and examples | S | Removes a whole class of false alarms |
-| 5 | Hand-rolled Adam, four times over | S | Deletes code that already shipped a bug |
-| 6 | No forward-mode rule | M | Strictly cheaper for few-parameter designs |
-| 7 | Parameters and workspace live in one struct | M | Unblocks `gamma`; explains `Duplicated` |
-| 8 | AD backend is hard-wired to Enzyme | M | Roadmap step 4 |
-| 9 | No checkpointing — tape grows linearly with steps | L | The actual scaling ceiling |
-| 10 | No continuous/analytic adjoint | XL | O(1) memory in step count |
+| # | Finding | Status |
+|---|---------|--------|
+| 1 | `AbstractFFTs` already ships an adjoint-plan type (`p'`) | **Done** — used as a test oracle |
+| 2 | Reverse-rule tape scratch raises peak memory | **Done** — reverted to transient |
+| 3 | Shadows are rebuilt every optimizer iteration | Open |
+| 4 | Hand-rolled finite differences in tests and examples | Open |
+| 5 | Hand-rolled Adam, four times over | Open |
+| 6 | No forward-mode rule | **Done** — `EnzymeRules.forward` added |
+| 7 | Parameters and workspace live in one struct | Open — 0.3 |
+| 8 | AD backend is hard-wired to Enzyme | Open — see round 2 |
+| 9 | No checkpointing — tape grows linearly with steps | Open — **now top priority** |
+| 10 | No continuous/analytic adjoint | Open — **now discouraged**, see round 2 |
 
 ---
 
@@ -48,42 +48,36 @@ Two things follow.
 **Our derivation is confirmed, independently.** Upstream derives the
 normalization from `fftdims(p)` and `size(p)` — the transformed dimensions, not
 the array length. That is precisely the correction made in
-`SolitonEnzymeExt._adjoint_plan`, arrived at separately. The agreement is worth
-having as a test rather than a comment: `p'` is a free, upstream-maintained
-oracle for our factorization, and a cross-check against it would catch a
-normalization regression without us having to re-derive anything.
+`SolitonEnzymeExt._adjoint_plan`, arrived at separately.
 
 **We cannot simply delegate to it.** `AdjointPlan` does not support
 `LinearAlgebra.mul!` — `adjoint_mul` builds a fresh `ScaledPlan` and returns a
-newly allocated array. Adopting `p'` wholesale would reintroduce exactly the
-allocations removed in the last pass. Our factored `(padj, scale)` form is the
-`mul!`-able variant of the same math, and should stay.
+newly allocated array. Adopting `p'` wholesale would reintroduce the allocations
+removed earlier. Our factored `(padj, scale)` form is the `mul!`-able variant of
+the same math.
 
-Worth recording: upstream handles `RFFTAdjointStyle`/`IRFFTAdjointStyle` with
-boundary-aware scaling at the Nyquist bin. Our rule assumes `ℂⁿ → ℂⁿ` and would
-be silently wrong for a real-input plan. Soliton never builds one today, but the
-assumption should be asserted rather than assumed.
+*Resolved:* the test suite now asserts `scale * (padj * y) ≈ p' * y` for all four
+plan shapes we build, making upstream a maintained oracle for our normalization,
+and the complex-to-complex assumption is documented as a warning admonition
+rather than left implicit. Real-input plans (`plan_rfft`) need boundary-aware
+Nyquist scaling, which upstream's `RFFTAdjointStyle` handles and our fast path
+does not — adding them means deferring to `p'` for those styles.
 
-## 2. The tape scratch trades peak memory for allocation count
+## 2. The tape scratch traded peak memory for allocation count
 
-This one is a correction to a change made in the previous cleanup pass.
+Moving the reverse pass's scratch buffer into the tape removed one allocation per
+adjoint, but a tape entry is retained from `augmented_primal` until its matching
+`reverse` — so it held one array *per taped `mul!` call*, all live at once, where
+the previous code allocated transiently (peak: one array).
 
-Moving the reverse pass's scratch buffer into the tape removed one allocation
-per adjoint. But a tape entry is retained from `augmented_primal` until its
-matching `reverse` — so where the old code allocated transiently inside
-`reverse` (peak cost: one array at a time), the new code holds one array *per
-taped `mul!` call*, all live simultaneously.
+Invisible at test sizes (90 steps × 2 `mul!` × 32 KiB at `N = 2¹¹` is under
+6 MB); at `N = 2¹⁴` over 10,000 steps it is ~5 GB of extra live tape. Since
+finding 9 identifies tape memory as the binding constraint, that was the wrong
+side of the trade.
 
-At the sizes in our tests and examples this is invisible: 90 steps × 2 `mul!` ×
-32 KiB at `N = 2¹¹` is under 6 MB. At the sizes this package is actually for it
-is not: at `N = 2¹⁴` each field array is 256 KiB, so a 10,000-step run holds
-~20,000 scratch arrays ≈ 5 GB of tape *that the previous code did not*.
-
-Since finding 9 identifies tape memory as the binding constraint on
-differentiating realistic runs, this is the wrong side of the trade. The fused
-scale-and-accumulate (one fewer pass over `N`) and the eliminated `ScaledPlan`
-wrapper are worth keeping; the tape scratch should go back to being a transient
-allocation in `reverse`.
+*Resolved:* `reverse` allocates transient scratch again. The genuinely free wins
+— the fused scale-and-accumulate (one fewer pass over `N`) and the eliminated
+per-call `ScaledPlan` wrapper — are kept.
 
 ## 3. Rebuild shadows once, not every iteration
 
@@ -97,196 +91,238 @@ end
 ```
 
 `make_zero` deep-copies the entire structure. Across a 300-iteration run that is
-300 redundant allocations of every buffer in `PhysicsModel`, when a single
-shadow zeroed in place with `Enzyme.make_zero!` would do. (Caveat:
-`make_zero!` is documented to fail on some immutable structures — worth checking
-against `PhysicsModel` specifically rather than assuming.)
+300 redundant allocations of every buffer in `PhysicsModel`, when a single shadow
+zeroed in place with `Enzyme.make_zero!` would do. (Caveat: `make_zero!` is
+documented to fail on some immutable structures — worth checking against
+`PhysicsModel` specifically rather than assuming.)
 
 This is a special case of the principle
 [DifferentiationInterface.jl](https://juliadiff.org/DifferentiationInterface.jl/)
-builds its whole API around: a `prepare_gradient` step produces reusable data
-structures that depend only on the *type and size* of the input, not its values,
-so one-time costs are amortized across calls. Our shadow is exactly such a
-structure. Whatever else we adopt, the "prepare once, reuse across iterations"
-split is the right shape for a gradient API here.
+builds its API around: a `prepare_gradient` step produces reusable data
+structures depending only on the *type and size* of the input, so one-time costs
+amortize across calls. Our shadow is exactly such a structure.
 
 ## 4. Stop hand-rolling finite differences
 
 Both the test suite and every example compute gradient checks with a hand-written
-two-point or central difference at a hand-picked step size. This session spent
-several CI cycles on a gradient "mismatch" that turned out to be FD noise — the
-FD estimate was self-inconsistent by 19–475% between two step sizes, while the
-Enzyme gradient was correct throughout.
+central difference at a hand-picked step size. This project spent several CI
+cycles on a gradient "mismatch" that turned out to be FD noise — the FD estimate
+was self-inconsistent by 19–475% between two step sizes while the Enzyme gradient
+was correct throughout.
 
-[FiniteDifferences.jl](https://github.com/JuliaDiff/FiniteDifferences.jl) exists
-for this: `central_fdm(5, 1)` uses a higher-order stencil with Richardson
-extrapolation and adapts the step size, giving an estimate accurate to near
-machine precision instead of one that has to be eyeballed for step-size
-sensitivity. Adopting it would have collapsed that entire debugging arc into a
-single unambiguous number, and it removes the standing need to sanity-check the
-checker.
-
-`ChainRulesTestUtils.test_rrule` is the same idea packaged for rule authors,
-though it targets ChainRules rather than EnzymeRules, so it fits finding 8 better
-than this one.
+[FiniteDifferences.jl](https://github.com/JuliaDiff/FiniteDifferences.jl)'s
+`central_fdm(5, 1)` uses a higher-order stencil with Richardson extrapolation and
+adapts the step size, giving an estimate accurate to near machine precision
+instead of one that has to be eyeballed for step-size sensitivity.
 
 ## 5. Adam is a solved problem
 
-Four examples each carry their own Adam:
+Four examples each carry their own Adam. One copy shipped a real bug — the
+`eps = 1e-8` denominator dominating a ~1e-20 gradient, so the optimizer made
+bit-identical no-progress steps for 150 iterations.
+[Optimisers.jl](https://github.com/FluxML/Optimisers.jl) provides `Adam` with a
+`setup`/`update!` interface over arbitrary nested structures. Replacing four
+copies with one dependency removes the code *and* the class of bug.
 
-```julia
-mvec .= adam_b1 .* mvec .+ (1 - adam_b1) .* dtheta
-vvec .= adam_b2 .* vvec .+ (1 - adam_b2) .* dtheta .^ 2
-m_hat = mvec ./ (1 - adam_b1^k)
-...
-```
+## 6. Forward mode
 
-One of those copies shipped a real bug — the `eps = 1e-8` denominator dominating
-a ~1e-20 gradient, so the optimizer made bit-identical no-progress steps for 150
-iterations, costing a full CI round to diagnose.
-[Optimisers.jl](https://github.com/FluxML/Optimisers.jl) provides `Adam` (and the
-rest) with a `setup`/`update!` interface that works on arbitrary nested
-structures. Replacing four copies with one dependency removes the code *and* the
-class of bug.
+`SolitonEnzymeExt` originally implemented only `augmented_primal`/`reverse`, so
+`Enzyme.Forward` failed at the FFT boundary and reverse mode was the only option
+even for single-parameter designs.
 
-## 6. There is no forward-mode rule
+This matters because reverse mode is the wrong tool for most of our own examples.
+`ad_ssfm_enzyme_compression.jl` optimizes **one scalar** (β₂) through a 60-step
+solver: reverse mode tapes the entire propagation to get a single derivative,
+where forward mode carries one tangent at O(1) memory. For `n_params = 1` forward
+mode is strictly better on both axes.
 
-`SolitonEnzymeExt` implements only `EnzymeRules.augmented_primal`/`reverse`.
-`Enzyme.Forward` through any Soliton solver therefore fails at the FFT boundary,
-and the `ForwardDiff`-based examples can only touch `propagation_constant`, never
-the solver.
-
-This matters more than it looks, because reverse mode is the wrong tool for most
-of our own examples. `ad_ssfm_enzyme_compression.jl` optimizes **one scalar**
-(β₂) through a 60-step solver. Reverse mode tapes the entire propagation to get
-a single derivative; forward mode would carry one tangent alongside the primal at
-O(1) memory and roughly one extra function evaluation. For `n_params = 1`,
-forward mode is strictly better on both axes.
-
-For a linear operator the forward rule is nearly trivial — the tangent obeys the
-same map as the primal:
-
-```julia
-mul!(y.val,  plan.val, x.val)
-mul!(y.dval, plan.val, x.dval)   # plan is linear
-```
-
-`AbstractFFTs` ships `frule`s alongside its `rrule`s for exactly this reason.
+*Resolved:* `EnzymeRules.forward` is implemented. For a linear operator the rule
+is nearly trivial — the tangent obeys the same map as the primal
+(`mul!(y.dval, plan.val, x.dval)`), with a `Const` `x` zeroing the output tangent
+rather than leaving it stale. `AbstractFFTs` ships `frule`s alongside its
+`rrule`s for the same reason.
 
 ## 7. Separate parameters from workspace
 
-`PhysicsModel` currently holds three different kinds of thing in one struct:
-
-- transform plans (`to_freq`, `to_time`) — not differentiable, not mutable
-- physics parameters (`D`, `gamma`, `gamma_W`, `W`, `fr`, `RW`) — the things one
-  actually wants gradients of
-- scratch buffers (`buf_t1`, `buf_t2`, `buf_f1`) — pure workspace
+`PhysicsModel` holds three different kinds of thing in one struct: transform
+plans (not differentiable), physics parameters (the things one wants gradients
+of), and scratch buffers (pure workspace).
 
 Essentially every mature differentiable package separates these.
-[Lux.jl](https://lux.csail.mit.edu/) makes it explicit and total: a model is
-`(model, ps, st)` — architecture, parameters, state — with parameters passed
-separately precisely so AD has one clean object to differentiate. SciML's solvers
-take `(u, p, t)` with all differentiable quantities in `p`.
+[Lux.jl](https://lux.csail.mit.edu/) makes it explicit and total — a model is
+`(model, ps, st)`, with parameters passed separately precisely so AD has one
+clean object to differentiate. SciML's solvers take `(u, p, t)` with all
+differentiable quantities in `p`.
 
 Three current problems are downstream of not doing this:
 
-- **`gamma` is not differentiable.** It is an immutable scalar field, so it
-  cannot be mutated in place the way `D` is, and rebuilding the model inside the
-  differentiated closure trips `EnzymeRuntimeActivityError`. `adjoint_ad.md`
-  already identifies "hold `gamma` in a mutable container" as the fix; a
-  parameter struct is that fix, generalized.
-- **Shadows are larger than they need to be.** `make_zero(model)` shadows the
-  plans and `aux_data` too, not just the arrays that carry gradient.
-- **The `Duplicated(model, ...)` rule is hard to explain.** It exists because
-  workspace buffers are inside the same struct as parameters. With them
-  separated, "duplicate the workspace, duplicate the parameters you want
-  gradients of" is a rule users can derive rather than memorize.
+- **`gamma` is not differentiable** — an immutable scalar field cannot be mutated
+  in place the way `D` is, and rebuilding the model inside the differentiated
+  closure trips `EnzymeRuntimeActivityError`.
+- **Shadows are larger than needed** — `make_zero(model)` shadows the plans and
+  `aux_data` too.
+- **The `Duplicated(model, ...)` rule is hard to explain** — it exists only
+  because workspace buffers share a struct with parameters.
 
-This is the largest architectural difference between Soliton.jl and the
-ecosystem, and it is a breaking change — worth scoping for 0.3, not 0.2.x.
+Breaking change; scope for 0.3.
 
 ## 8. The AD backend is hard-wired
 
 Differentiating anything today means writing `Enzyme.autodiff` with correct
-activity annotations by hand, and knowing the `Duplicated(model, make_zero(model))`
-rule. That is a lot of specialist knowledge for "I want a gradient."
-
+activity annotations by hand and knowing the
+`Duplicated(model, make_zero(model))` rule.
 [ADTypes.jl](https://github.com/SciML/ADTypes.jl) and DifferentiationInterface
-have become the ecosystem's answer: users write `AutoEnzyme()`, `AutoForwardDiff()`,
-`AutoZygote()` and the package handles the rest. This is already roadmap step 4
-in `adjoint_ad.md` ("expose a small convenience layer suitable for driving
-Optimization.jl/Optim.jl-style optimizers"); the ecosystem has since standardized
-what that layer should look like, so it no longer needs designing from scratch.
-
-Pairs naturally with finding 3: the preparation object is where the reusable
-shadow lives.
+have become the ecosystem's answer — users write `AutoEnzyme()` and the package
+handles the rest. Round 2 sharpens what this can and cannot buy us.
 
 ## 9. Tape memory is the real ceiling
 
 Reverse-mode AD through an explicit time-stepping loop stores every intermediate,
 so memory grows linearly with step count. At `N = 2¹⁴` a single field array is
 256 KiB, and a fixed-step SSFM keeps on the order of half a dozen live per step —
-so a 10,000-step run, which is an ordinary supercontinuum simulation for this
-package, tapes on the order of 10 GB. Our tests and examples run 1–90 steps at
-`N = 2⁶`–`2¹¹` and never approach this, which is exactly why it has not surfaced.
+so a 10,000-step run, an ordinary supercontinuum simulation for this package,
+tapes on the order of 10 GB. Our tests and examples run 1–90 steps at
+`N = 2⁶`–`2¹¹` and never approach this, which is why it has not surfaced.
 
-Checkpointing is the standard answer, and it is well-developed in Julia.
 [Checkpointing.jl](https://github.com/Argonne-National-Laboratory/Checkpointing.jl)
 (Argonne) implements Revolve/binomial checkpointing — provably optimal schedules
 from Griewank & Walther's `revolve` (TOMS 2000) — plus periodic and online
-schemes, and is designed specifically for AD of time-stepping loops. Instead of
-storing all `n` steps it stores `O(log n)` checkpoints and recomputes the rest,
-trading a small constant factor of extra compute for a logarithmic memory
-footprint.
+schemes, designed specifically for AD of time-stepping loops. Instead of storing
+all `n` steps it stores `O(log n)` checkpoints and recomputes the rest.
 
-Our fixed-step SSFM loop is close to the ideal case for this: uniform steps, a
-small well-defined state (`U_mid`, `z`), and no adaptivity.
+Our fixed-step SSFM loop is close to the ideal case: uniform steps, a small
+well-defined state (`U_mid`, `z`), no adaptivity.
 
-## 10. Continuous adjoints, for later
+## 10. Continuous adjoints
 
-SciMLSensitivity's menu is the reference taxonomy for this problem, and it maps
-onto ours directly:
+SciMLSensitivity's menu is the reference taxonomy:
 
 - **`BacksolveAdjoint`** — reconstruct the forward solution by integrating
-  backwards. Uses the least memory of any option, but is documented as unstable
-  on stiff problems and needing checkpoints to stay accurate.
+  backwards. Least memory of any option, but documented as unstable on stiff
+  problems and needing checkpoints to stay accurate.
 - **`InterpolatingAdjoint(checkpointing=true)`** — interpolate the stored forward
-  solution; memory falls to holding one interpolation interval, at the cost of
-  roughly one extra forward pass.
+  solution; memory falls to one interpolation interval, at the cost of roughly
+  one extra forward pass.
 - **`GaussAdjoint`** — generally preferred upstream; also supports checkpointing.
 
 The domain-specific opportunity is that the adjoint of the NLSE is itself an
-NLSE-like equation, so it can in principle be integrated backwards with the *same*
-SSFM machinery — the classic adjoint-method trick used throughout photonic inverse
-design, where the gradient costs one additional solve regardless of parameter
-count. Implemented as an `EnzymeRules` pair for `propagate` itself (rather than
-letting Enzyme differentiate the loop), this would give O(1) memory in step count.
+NLSE-like equation, integrable backwards with the *same* SSFM machinery — the
+classic adjoint-method trick from photonic inverse design, where the gradient
+costs one extra solve regardless of parameter count.
 
-Two honest caveats before anyone starts: backward reconstruction of a
-lossy or Raman-damped propagation is the unstable direction, which is the same
-failure mode `BacksolveAdjoint` carries upstream; and any such rule must be
-validated against the existing taped gradient, not just against finite
-differences. This is a research-scale item, listed for completeness rather than
-as a near-term plan.
+**Round 2 revises this downward.** See below.
 
 ---
 
-## Suggested order
+# Round 2: the wider AD landscape
 
-1. Findings 1–5 are small, independent, and individually testable. Finding 2 in
-   particular reverses a regression we introduced and should go first.
-2. Finding 6 (forward mode) is self-contained and immediately useful to the
-   compression example.
-3. Findings 7–8 belong together and imply a 0.3 API.
-4. Finding 9 is the one that decides whether AD here scales past toy problems.
-5. Finding 10 is research.
+Round 1 stayed inside the packages closest to our own problem. This round looks
+at the broader set of famous AD-capable frameworks — Julia and otherwise — and
+mostly serves to *re-rank* round 1 rather than add to it.
+
+## A. Diffrax settles the checkpointing-vs-continuous-adjoint question
+
+[Diffrax](https://docs.kidger.site/diffrax/api/adjoints/) (JAX) is the most
+directly comparable framework to what Soliton.jl would become: a differentiable
+ODE/SDE solver library whose users routinely differentiate through thousands of
+steps. Its verdict is unusually blunt.
+
+Its **default** is `RecursiveCheckpointAdjoint` — plain autodiff through the
+solver, made tractable by checkpointing (discretise-then-optimise). Its docs
+state that this default "is usually a better choice than
+`diffrax.BacksolveAdjoint`", and that because checkpointing already gives low
+memory usage while `BacksolveAdjoint`'s "computed gradients will also be
+approximate", checkpointing "is essentially always preferred in practice".
+
+This directly re-ranks round 1:
+
+- **Finding 9 (checkpointing) is the single highest-value structural item**, not
+  merely one option among two. It is what an established, mature library in the
+  same problem class chose as its default.
+- **Finding 10 (continuous adjoint) should be demoted, not pursued.** The
+  approximate-gradient failure mode is exactly what a lossy or Raman-damped
+  backward reconstruction would suffer, and we would be re-deriving a method the
+  reference implementation advises against. Keep it documented as an
+  understood-and-rejected option rather than a roadmap item.
+
+That is a genuinely useful outcome: the most expensive item on the round-1 list
+(XL effort, research-scale) can be struck, and the effort redirected to the item
+below it.
+
+## B. Enzyme and Mooncake rules are mutually incompatible
+
+Julia's reverse-AD landscape now has two serious source-transformation backends:
+Enzyme.jl and [Mooncake.jl](https://chalk-lab.github.io/Mooncake.jl/). They
+**rolled out their own rule designs, which are not mutually compatible** —
+Mooncake handles a large subset of Julia out of the box but its rule system is
+less expressive than Enzyme's.
+
+The consequence for us is worth stating plainly, because it looks like a
+limitation and is actually a justified commitment:
+
+- Our FFTW rule is written as `EnzymeRules`. It therefore works with Enzyme and
+  nothing else. Rewriting it as a ChainRules `rrule` would not help, because
+  ChainRules consumers (Zygote, ReverseDiff) cannot differentiate our mutating,
+  buffer-reusing solver *at all* — the very design that makes the solver fast is
+  what rules them out. `adjoint_ad.md`'s blocker 4 already established this.
+- So finding 8 (ADTypes/DifferentiationInterface) buys **ergonomics, not
+  portability**. A `Soliton.gradient(loss, params; backend=AutoEnzyme())` façade
+  is worth building for the API — users should not have to know the
+  `Duplicated(model, make_zero(model))` rule — but nobody should expect
+  `AutoZygote()` to start working. The honest framing is "one supported backend,
+  behind a standard interface", not "backend-agnostic".
+- [Reactant.jl](https://enzymead.github.io/Reactant.jl/) is the one path that
+  could change the performance picture: it is a compilation system running atop
+  Enzyme, and SciMLSensitivity already exposes a `ReactantVJP`. Worth watching
+  for a GPU/XLA story, not worth adopting now.
+
+## C. Photonics inverse design converged on an API shape
+
+[Meep](https://meep.readthedocs.io/en/latest/Python_Tutorials/Adjoint_Solver/)'s
+adjoint solver and [ceviche](https://github.com/google/ceviche-challenges) are
+the reference points for gradient-based photonic design, and they agree on the
+user-facing shape:
+
+- The user declares a **design region** (Meep's `MaterialGrid`) and an
+  **objective function** of physically meaningful outputs — mode coefficients /
+  S-parameters, DFT fields, LDOS.
+- The framework runs a forward solve, then an adjoint solve, and hands back the
+  gradient with respect to the design variables.
+- The optimization library is wrapped *around* that gradient, not baked in.
+
+Our examples currently make the user assemble all of this by hand: build the
+model, write the loss, get the activity annotations right, hand-roll Adam.
+Findings 5, 7 and 8 together are what would close that gap, and the target to aim
+at is this API shape — "here is my design variable, here is my objective" —
+rather than a thin wrapper over `autodiff`. Worth noting that ceviche uses plain
+autograd rather than anything exotic: the value is in the framing, not the AD
+machinery.
+
+## D. What round 2 does not change
+
+- Findings 1, 2 and 6 were the right things to do first and are done.
+- Findings 3, 4, 5 remain small, independent, and worth doing whenever convenient.
+- Finding 7 remains the deepest structural difference and a 0.3 item.
+
+## Revised order
+
+1. **Finding 9, checkpointing** — promoted to the top structural item on
+   Diffrax's evidence. It is what decides whether AD here works on real
+   simulations rather than examples.
+2. Findings 3, 4, 5 — small, independent, do whenever convenient.
+3. Findings 7 + 8 together, as a 0.3 API, aiming at the design-region/objective
+   shape from section C rather than a thin `autodiff` wrapper.
+4. **Finding 10 — strike.** Document as considered and rejected; the reference
+   implementation in this problem class advises against it.
 
 ## Sources
 
-- [AbstractFFTs.jl `definitions.jl`](https://github.com/JuliaMath/AbstractFFTs.jl/blob/master/src/definitions.jl) and its ChainRulesCore extension
+- [AbstractFFTs.jl `definitions.jl`](https://github.com/JuliaMath/AbstractFFTs.jl/blob/master/src/definitions.jl)
+- [Diffrax — Adjoints](https://docs.kidger.site/diffrax/api/adjoints/) and [FAQ](https://docs.kidger.site/diffrax/further_details/faq/)
 - [SciMLSensitivity.jl — sensitivity algorithm selection](https://docs.sciml.ai/SciMLSensitivity/stable/manual/differential_equation_sensitivities/)
 - [Checkpointing.jl](https://github.com/Argonne-National-Laboratory/Checkpointing.jl)
-- [DifferentiationInterface.jl](https://juliadiff.org/DifferentiationInterface.jl/)
-- [FiniteDifferences.jl](https://github.com/JuliaDiff/FiniteDifferences.jl)
-- [Optimisers.jl](https://github.com/FluxML/Optimisers.jl)
-- [Enzyme.jl FAQ](https://enzymead.github.io/Enzyme.jl/stable/) and `make_zero!` ([issue #1661](https://github.com/EnzymeAD/Enzyme.jl/issues/1661))
+- [DifferentiationInterface.jl — backends](https://juliadiff.org/DifferentiationInterface.jl/DifferentiationInterface/dev/explanation/backends/)
+- [Reactant.jl — automatic differentiation](https://enzymead.github.io/Reactant.jl/stable/tutorials/automatic-differentiation)
+- [Meep adjoint solver tutorial](https://meep.readthedocs.io/en/latest/Python_Tutorials/Adjoint_Solver/)
+- [ceviche-challenges](https://github.com/google/ceviche-challenges)
+- [FiniteDifferences.jl](https://github.com/JuliaDiff/FiniteDifferences.jl), [Optimisers.jl](https://github.com/FluxML/Optimisers.jl), [Lux.jl](https://lux.csail.mit.edu/)
