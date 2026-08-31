@@ -12,14 +12,23 @@ implementation against established differentiable-programming packages
 (AbstractFFTs, SciMLSensitivity, Checkpointing.jl, DifferentiationInterface,
 Lux) and lists what is worth borrowing, ordered by value over effort.
 
-It is **not** a user guide to a working feature: as of this writing, Soliton.jl
-does **not** support AD through `solve`/`propagate` — the FFTW adjoint rule
-(roadmap step 1) is implemented and tested for the underlying `mul!`/nonlinear-
-step building blocks, but no solver (`SSFM`/`AdaptiveSSFM`/`ERK4IP`) has been
-differentiated end-to-end yet (roadmap steps 2–4). The sections below
-document *why*, what's done, and what a full implementation would still
-require, so the remaining work can be scoped and picked up deliberately
-rather than discovered piecemeal.
+**Current status.** The fixed-step `SSFM` solver *is* differentiated
+end-to-end today, in both directions, with Enzyme.jl:
+
+| Surface | Mode | Validated against |
+|---|---|---|
+| `TaylorDispersion.betas` through a full `propagate` | reverse | finite differences (~0.3%) |
+| `betas`, same loss | forward | FD, and cross-checked against the reverse gradient to ~4 significant figures |
+| Pulse envelope (`Duplicated(pulse, …)`) through a full `propagate` | reverse | finite differences (~1e-9) |
+
+`medium.gamma`, `AdaptiveSSFM` and `ERK4IP` (the default solver) are **not**
+validated — see roadmap steps 2–4. Nothing here is exposed as public API yet:
+callers still write `Enzyme.autodiff` with their own activity annotations, and
+must know the `Duplicated(model, …)` rule below.
+
+The sections that follow document how that was reached, which failure modes are
+already understood, and what a fuller implementation would still require, so the
+remaining work can be scoped deliberately rather than rediscovered piecemeal.
 
 ## Summary
 
@@ -28,7 +37,7 @@ rather than discovered piecemeal.
 | Forward-mode on dispersion/loss/gain math only (`propagation_constant`, `dispersion_operator`, `loss_vector`/`gain_vector`) | **Works today** | These are pure arithmetic, no FFTW involved. `Grid`, `TaylorDispersion`/`TabulatedDispersion`/`SellmeierDispersion`, and these functions' signatures are now generic over `<:Real` — see [Architecture audit](#architecture-audit), points 1–2. |
 | Forward-mode through full pulse propagation (ForwardDiff.jl, `Dual` numbers) | **Blocked** | FFTW only accepts `Float32`/`Float64`/`ComplexF32`/`ComplexF64` buffers; `Dual`-typed arrays cannot be passed to `plan_fft`/`plan_ifft` at all, regardless of how generic the surrounding types are. |
 | Reverse-mode via array overloading (Zygote.jl) | **Blocked** | The propagation loop is written as in-place mutation (`@.`, `mul!`, `copyto!` into pre-allocated buffers) for zero-allocation performance; Zygote does not differentiate through mutating array updates without a full rewrite to `Zygote.Buffer`/non-mutating style, which would defeat the current performance design. |
-| Reverse-mode via source transformation (Enzyme.jl) | **Fixed-step `SSFM` solved for `betas`; `gamma` and `ERK4IP`/`AdaptiveSSFM` still open** | Enzyme differentiates the compiled, concretely-typed, mutating code directly (no `Dual` overloading needed), so it is not affected by the FFTW or mutation blockers above. The hand-written `EnzymeRules` adjoint for the FFTW `ccall` boundary (`ext/SolitonEnzymeExt.jl`) is validated against finite differences on `to_freq`/`to_time` and the full `_spm` nonlinear step. A full **fixed-step `SSFM` propagation**, end-to-end, w.r.t. `TaylorDispersion.betas`, is now validated too (roadmap step 2) — it took five rounds of fixing distinct instances of the same "conditionally active memory" limitation, three of them real library fixes (`src/dispersion.jl`'s `propagation_constant`) or caller-side patterns (build `PhysicsModel`/`Pulse` once, mutate/reuse rather than reconstruct inside the differentiated closure), the last one `set_runtime_activity` (verified correct here against finite differences, unlike an earlier, different misclassification case where it silently zeroed a gradient). `medium.gamma`, `AdaptiveSSFM`, and `ERK4IP` (the default solver) are not yet validated — see roadmap steps 2–4. |
+| Reverse- **and forward**-mode via source transformation (Enzyme.jl) | **Fixed-step `SSFM` solved for `betas` and for the pulse envelope, both modes; `gamma` and `ERK4IP`/`AdaptiveSSFM` still open** | Enzyme differentiates the compiled, concretely-typed, mutating code directly (no `Dual` overloading needed), so it is not affected by the FFTW or mutation blockers above. The hand-written `EnzymeRules` adjoint for the FFTW `ccall` boundary (`ext/SolitonEnzymeExt.jl`) is validated against finite differences on `to_freq`/`to_time` and the full `_spm` nonlinear step. A full **fixed-step `SSFM` propagation**, end-to-end, w.r.t. `TaylorDispersion.betas`, is now validated too (roadmap step 2) — it took five rounds of fixing distinct instances of the same "conditionally active memory" limitation, three of them real library fixes (`src/dispersion.jl`'s `propagation_constant`) or caller-side patterns (build `PhysicsModel`/`Pulse` once, mutate/reuse rather than reconstruct inside the differentiated closure), the last one `set_runtime_activity` (verified correct here against finite differences, unlike an earlier, different misclassification case where it silently zeroed a gradient). `medium.gamma`, `AdaptiveSSFM`, and `ERK4IP` (the default solver) are not yet validated — see roadmap steps 2–4. |
 | Gradient-free (`solve_sweep` + Optim.jl/BlackBoxOptim.jl/surrogate optimization) | **Works today** | No code changes needed; recommended near-term path for optimizing over full propagation until adjoint support lands. |
 
 **Recommendation:** target **Enzyme.jl** as the AD backend for adjoint
