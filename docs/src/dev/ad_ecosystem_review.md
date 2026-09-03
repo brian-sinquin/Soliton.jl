@@ -136,7 +136,12 @@ solver: reverse mode tapes the entire propagation to get a single derivative,
 where forward mode carries one tangent at O(1) memory. For `n_params = 1` forward
 mode is strictly better on both axes.
 
-*Resolved:* `EnzymeRules.forward` is implemented. For a linear operator the rule
+*Resolved,* and now exercised by a real design problem:
+`.github/scripts/ad_soliton_compression_optimum.jl` locates a soliton
+compressor's optimal pump power through the full solver in forward mode, and
+agrees with the published optimum on the soliton order to 0.13 %.
+
+`EnzymeRules.forward` is implemented. For a linear operator the rule
 is nearly trivial — the tangent obeys the same map as the primal
 (`mul!(y.dval, plan.val, x.dval)`), with a `Const` `x` zeroing the output tangent
 rather than leaving it stale. `AbstractFFTs` ships `frule`s alongside its

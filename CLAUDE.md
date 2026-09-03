@@ -34,9 +34,9 @@ Relevant CI (`.github/workflows/`):
 - `CI.yml` → `test` (matrix 1.10/1.12/pre × x64/x86), `enzyme`
   ("Enzyme adjoint-AD extension", Julia 1.12/x64 only — Enzyme's artifact is
   large and its x86/nightly support is comparatively untested), `docs`.
-- `example-ad-dispersion.yml` → one job per `ad_*` example, on `pull_request`.
-  It never commits plots back on PR runs (five parallel jobs would race);
-  `workflow_dispatch` runs do.
+- `example-ad-dispersion.yml` → one job per `ad_*` example (six of them), on
+  `pull_request` and `workflow_dispatch`. Figures go out as build artifacts;
+  nothing is committed back.
 
 The `enzyme` job prints `[diag]` lines with Enzyme-vs-FD numbers for every
 gradient surface, and ends with a test count — currently **22**. That count is
@@ -50,9 +50,14 @@ not failures — but they are also not verified. Re-check them on the newer run.
 
 **`examples/` is git-ignored.** `/examples/` is in `.gitignore`; only
 `.github/scripts/*.jl` is tracked, and that is what CI runs. The two are manual
-mirrors and **do drift** (they are out of sync right now, harmlessly, by two
-comment lines). Edit `.github/scripts/`; treat `examples/` as a local scratch
-copy.
+mirrors and drift silently — a fresh clone has no `examples/` at all. Edit
+`.github/scripts/`; treat `examples/` as a local scratch copy.
+
+**Generated plots are not committed.** `.gitignore` covers `*.png`, and the
+example jobs upload their figures as build artifacts. An earlier version of the
+workflow force-added them on `workflow_dispatch` runs, which accumulated a
+stale, partial set of binaries in git; that step is gone. Download the artifact
+rather than re-adding it.
 
 **`Duplicated(model, Enzyme.make_zero(model))`, always — never
 `Const(model)`.** `propagate` and the nonlinear-step functions write active,

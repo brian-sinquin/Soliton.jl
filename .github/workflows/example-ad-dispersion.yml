@@ -7,16 +7,17 @@ name: "Examples: AD dispersion design + supercontinuum run"
 # separate workflow file from CI.yml and shares nothing with its (slow)
 # `docs` job, so nothing here ever triggers a documentation build.
 #
-# On `pull_request` runs, jobs only verify the script succeeds and upload
-# the resulting plots as a build artifact — they do NOT commit anything
-# back to the branch, since four jobs now run in parallel (no `needs:`
-# ordering) and pushing from all of them would race. `workflow_dispatch`
-# runs still commit the plots back (guarded by `github.event_name`) so a
-# one-off manual run's results can be inspected without downloading the
-# artifact ZIP. See examples/README.md for the local-run instructions this
-# mirrors; the scripts live in .github/scripts/ (tracked) rather than
-# examples/ (git-ignored, local-only) purely so this workflow has something
-# to check out and run.
+# Jobs verify the script succeeds and upload the resulting plots as a build
+# artifact. Nothing is committed back to the branch: the repository ignores
+# `*.png`, the jobs run in parallel with no `needs:` ordering so pushes from
+# them would race, and the artifacts are uploaded on every run anyway
+# (including `workflow_dispatch`). An earlier version force-added the plots
+# on manual runs, which left a stale, partial set of generated binaries in
+# git; download the artifact instead.
+#
+# The scripts live in .github/scripts/ (tracked) rather than examples/
+# (git-ignored, local-only) purely so this workflow has something to check
+# out and run. See examples/README.md for the local-run instructions.
 on:
   pull_request:
   workflow_dispatch:
@@ -30,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -56,31 +57,13 @@ jobs:
           name: ad-sellmeier-example-results
           path: .github/scripts/output/*.png
           if-no-files-found: warn
-      - name: Commit result plots back to the branch
-        if: always() && github.event_name == 'workflow_dispatch'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -f .github/scripts/output/*.png
-          git diff --cached --quiet && exit 0
-          git commit -m "ci: attach Sellmeier inverse-design example output plots"
-          # These four jobs run in parallel with no `needs:` ordering between
-          # them, so their pushes (each touching disjoint files) can race;
-          # retry with a rebase onto the latest tip rather than serializing.
-          for attempt in 1 2 3 4 5; do
-            git push && exit 0
-            git fetch origin "$GITHUB_REF_NAME"
-            git rebase "origin/$GITHUB_REF_NAME"
-            sleep $((attempt * 3))
-          done
-          echo "::error::Failed to push result plots after retries." && exit 1
 
   run-flattening-example:
     name: Example - Dispersion flattening (Julia 1.12 - ubuntu-latest)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -106,28 +89,13 @@ jobs:
           name: ad-flattening-example-results
           path: .github/scripts/output/*.png
           if-no-files-found: warn
-      - name: Commit result plots back to the branch
-        if: always() && github.event_name == 'workflow_dispatch'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -f .github/scripts/output/*.png
-          git diff --cached --quiet && exit 0
-          git commit -m "ci: attach dispersion-flattening example output plots"
-          for attempt in 1 2 3 4 5; do
-            git push && exit 0
-            git fetch origin "$GITHUB_REF_NAME"
-            git rebase "origin/$GITHUB_REF_NAME"
-            sleep $((attempt * 3))
-          done
-          echo "::error::Failed to push result plots after retries." && exit 1
 
   run-dispersive-wave-example:
     name: Example - Dispersive-wave design + verification (Julia 1.12 - ubuntu-latest)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -153,28 +121,13 @@ jobs:
           name: ad-dispersive-wave-example-results
           path: .github/scripts/output/*.png
           if-no-files-found: warn
-      - name: Commit result plots back to the branch
-        if: always() && github.event_name == 'workflow_dispatch'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -f .github/scripts/output/*.png
-          git diff --cached --quiet && exit 0
-          git commit -m "ci: attach dispersive-wave design example output plots"
-          for attempt in 1 2 3 4 5; do
-            git push && exit 0
-            git fetch origin "$GITHUB_REF_NAME"
-            git rebase "origin/$GITHUB_REF_NAME"
-            sleep $((attempt * 3))
-          done
-          echo "::error::Failed to push result plots after retries." && exit 1
 
   run-soliton-recovery-example:
     name: Example - Soliton shape recovery via invariance (Julia 1.12 - ubuntu-latest)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -200,28 +153,13 @@ jobs:
           name: ad-soliton-recovery-example-results
           path: .github/scripts/output/*.png
           if-no-files-found: warn
-      - name: Commit result plots back to the branch
-        if: always() && github.event_name == 'workflow_dispatch'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -f .github/scripts/output/*.png
-          git diff --cached --quiet && exit 0
-          git commit -m "ci: attach soliton shape recovery example output plots"
-          for attempt in 1 2 3 4 5; do
-            git push && exit 0
-            git fetch origin "$GITHUB_REF_NAME"
-            git rebase "origin/$GITHUB_REF_NAME"
-            sleep $((attempt * 3))
-          done
-          echo "::error::Failed to push result plots after retries." && exit 1
 
   run-compression-optimum-example:
     name: Example - Soliton compression optimum vs. published formula (Julia 1.12 - ubuntu-latest)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -247,28 +185,13 @@ jobs:
           name: ad-compression-optimum-example-results
           path: .github/scripts/output/*.png
           if-no-files-found: warn
-      - name: Commit result plots back to the branch
-        if: always() && github.event_name == 'workflow_dispatch'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -f .github/scripts/output/*.png
-          git diff --cached --quiet && exit 0
-          git commit -m "ci: attach soliton compression optimum example output plots"
-          for attempt in 1 2 3 4 5; do
-            git push && exit 0
-            git fetch origin "$GITHUB_REF_NAME"
-            git rebase "origin/$GITHUB_REF_NAME"
-            sleep $((attempt * 3))
-          done
-          echo "::error::Failed to push result plots after retries." && exit 1
 
   run-enzyme-example:
     name: Example - Enzyme-through-SSFM compression design (Julia 1.12 - ubuntu-latest)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -294,18 +217,3 @@ jobs:
           name: ad-ssfm-enzyme-example-results
           path: .github/scripts/output/*.png
           if-no-files-found: warn
-      - name: Commit result plots back to the branch
-        if: always() && github.event_name == 'workflow_dispatch'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -f .github/scripts/output/*.png
-          git diff --cached --quiet && exit 0
-          git commit -m "ci: attach Enzyme-through-SSFM example output plots"
-          for attempt in 1 2 3 4 5; do
-            git push && exit 0
-            git fetch origin "$GITHUB_REF_NAME"
-            git rebase "origin/$GITHUB_REF_NAME"
-            sleep $((attempt * 3))
-          done
-          echo "::error::Failed to push result plots after retries." && exit 1
