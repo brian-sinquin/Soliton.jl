@@ -35,11 +35,13 @@ the new capability is opt-in via a weak dependency.
   fundamental soliton shape from propagation invariance alone, and location of
   a soliton-effect compressor's optimal operating point. The last one is
   cross-checked against the published empirical optimum
-  (`z_opt/z₀ ≈ 0.32/N + 1.1/N²`) rather than only against itself, and lands
-  within 4.2 % of it (N = 2.596 vs 2.492) at a point whose measured output
-  duration is the better of the two. It uses forward mode — one free
-  parameter, so reverse mode would tape 500 steps to produce a single
-  derivative.
+  (`z_opt/z₀ ≈ 0.32/N + 1.1/N²`) rather than only against itself, and agrees
+  with it on the soliton order to **0.13 %** (N = 4.0051 vs 4.0000). It carries
+  its own convergence check, and a sweep showing that the companion relation
+  `F_c ≈ 4.1N` is a large-N asymptotic — the measured/predicted ratio climbs
+  monotonically from 0.38 at N = 1.5 to 0.92 at N = 8. It uses forward mode:
+  one free parameter, so reverse mode would tape the whole propagation to
+  produce a single derivative.
 - Developer documentation: an AD readiness/roadmap page and a comparison
   against other differentiable-programming packages
   ([`docs/src/dev/ad_ecosystem_review.md`](docs/src/dev/ad_ecosystem_review.md)).

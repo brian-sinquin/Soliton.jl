@@ -41,14 +41,27 @@ duly measured F_c = 7.07 against a predicted 10.22 — the optimum's *location*
 reproduced to ~4 %, its *depth* did not.
 
 So the experiment is set here at a higher soliton order, and two diagnostics are
-printed rather than asserted:
+printed rather than asserted. Both are confirmed by the run:
 
   1. a **convergence check** — the same operating point re-simulated with twice
-     the steps and twice the temporal resolution. If the answer moves, the gap
-     is this script's numerics and nothing may be concluded about the formula.
+     the steps and twice the temporal resolution. If the answer moved, the gap
+     would be this script's numerics and nothing could be concluded about the
+     formula. It does not: 13.74 fs baseline, 13.90 at 2x steps, 13.73 at 2x
+     resolution, 13.90 at both — a 1.2 % spread, far too small to explain a
+     20 %+ discrepancy in F_c.
   2. a **trend across N** — measured versus predicted compression factor at each
      order's own optimal length. If the relations really are large-N
      asymptotics, the measured/predicted ratio should climb toward 1 with N.
+     It does, monotonically:
+
+         N        1.5     2.0     3.0     4.0     5.0     8.0
+         F_c/4.1N 0.381   0.508   0.685   0.781   0.835   0.918
+
+At N ≈ 4 the AD optimum and the formula agree on the soliton order to **0.13 %**
+(4.0051 vs 4.0000), against 4.19 % at N ≈ 2.5 — a thirtyfold improvement from
+nothing but moving into the regime where the relation is meant to apply. The
+compression factor agrees there too (12.83 measured vs 12.81 at the predicted
+order), while `4.1N = 16.4` remains the optimistic asymptote it is.
 
 # Choosing an objective that means "compressed"
 
