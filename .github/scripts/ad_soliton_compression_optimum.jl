@@ -6,12 +6,11 @@ Enzyme **forward-mode** AD, and checking it against the published optimum.
 
 Soliton-effect compression is a standard way to shorten a pulse: launch a
 higher-order soliton (N > 1) into a fixed length of anomalous-dispersion fiber
-and take the output at the point where the pulse is narrowest. The design
-question a practitioner actually faces is *how hard to pump*: for a given
-fiber (β₂, γ, length L) and a given input duration, which input peak power
-compresses best? Too little and the pulse barely reshapes; too much and it
-compresses before the fiber end and has begun to break up again by the time
-it exits.
+and take the output where the pulse is narrowest. The design question a
+practitioner actually faces is *how hard to pump*: for a given fiber (β₂, γ,
+length L) and a given input duration, which input peak power compresses best?
+Too little and the pulse barely reshapes; too much and it compresses before the
+fiber end and has begun to break up again by the time it exits.
 
 That optimum is known analytically. Writing the soliton order
 
@@ -25,29 +24,50 @@ the classic empirical relations for soliton-effect compression are
 (Agrawal, *Nonlinear Fiber Optics*, soliton-effect compression; the same pair
 is quoted in the PCF compression literature, e.g. Foroni et al.,
 `arXiv:physics/0610252`.) Inverting the first relation for a **fixed** L gives
-the soliton order the fiber is optimal for — and therefore the ideal input
-peak power P₀ = N²|β₂|/(γT₀²).
+the soliton order the fiber is optimal for — and therefore the ideal input peak
+power P₀ = N²|β₂|/(γT₀²).
 
 So this script has a real, falsifiable answer to aim at. It never uses the
 formulas to *drive* the optimization: the gradient comes entirely from Enzyme
-differentiating `Soliton.propagate`, and the formulas are only consulted at
-the end, to see whether AD landed where the literature says it should.
+differentiating `Soliton.propagate`, and the formulas are only consulted at the
+end, to see whether AD landed where the literature says it should.
+
+# Choosing an objective that means "compressed"
+
+The first version of this script maximized the output peak power, and CI showed
+why that is wrong: d(peak)/dN came back strongly positive and *growing* over the
+whole scanned range (+2.0e2 at N=1.8, +9.9e4 at N=3.2). The reason is that the
+input power itself is the parameter — P₀ ∝ N² — so "maximize output peak power"
+mostly rewards pumping harder, not compressing better, and it does not
+correspond to the criterion behind z_opt at all.
+
+The objective here is instead the **effective duration**
+
+    τ_eff = (∫I dt)² / ∫I² dt,       I(t) = |A(z=L, t)|²
+
+which is invariant under I → αI, so it measures pulse *shape* only and cannot be
+gamed by injecting more energy. It is smooth (two `sum` reductions, no `maximum`
+and no threshold search, unlike a literal FWHM), which matters because it has to
+be differentiated. For a sech² intensity τ_eff = 3T₀ exactly, so ratios of τ_eff
+are directly comparable to ratios of FWHM for sech-like pulses; the compressed
+pulse's pedestal inflates τ_eff somewhat, so the τ_eff-based compression factor
+is a mild *under*-estimate of the FWHM-based F_c quoted above. Both are reported.
 
 # Why forward mode
 
-There is exactly **one** free parameter here. Reverse mode would tape the whole
+There is exactly **one** free parameter. Reverse mode would tape the whole
 500-step propagation to produce a single derivative; forward mode carries one
 tangent alongside the primal at O(1) memory in the step count and roughly one
 extra function evaluation. This is the case
 `docs/src/dev/ad_ecosystem_review.md` (finding 6) identifies as strictly better
-served by forward mode, and it is the first example to use the forward rule
-added in `ext/SolitonEnzymeExt.jl`.
+served by forward mode, and it is the first example to use the forward rule in
+`ext/SolitonEnzymeExt.jl`.
 
-Having an exact derivative also changes *how* we optimize. Rather than gradient
-ascent with a hand-tuned learning rate — which has already produced two real
-bugs in this repository's examples — the optimum is located by bisecting the
-derivative to its zero crossing. In one dimension that is better conditioned,
-needs no step size, and converges monotonically.
+An exact derivative also changes *how* to optimize. Rather than gradient descent
+with a hand-tuned learning rate — which has already produced two real bugs in
+this repository's examples — the optimum is located by bisecting the derivative
+to its zero crossing: no step size, monotone convergence, and the bracket is
+verified up front instead of assumed.
 
 Run with:
     julia --project=. -e 'import Pkg; Pkg.add(["Enzyme", "Plots"])'
@@ -116,41 +136,36 @@ pulse = Pulse(zeros(ComplexF64, grid.N), zeros(ComplexF64, grid.N), grid)
 
 peak_power_of_N(Nsol) = Nsol^2 * abs(beta2) / (gamma0 * T0^2)
 
-# Input and output are symmetric about t = 0 (a symmetric sech launched into a
-# medium with no Raman and no self-steepening stays symmetric), so the on-axis
-# intensity *is* the peak power — but it is a smooth function of the parameter,
-# where `maximum` would introduce a kink whenever the argmax hops a grid point.
-# The two are checked against each other after optimizing.
-i_axis = argmin(abs.(grid.t))
-
 """
-Output on-axis power after propagating the N-th order soliton through the fiber.
-`theta[1]` is the soliton order; everything else is fixed.
+Effective duration τ_eff = (∫I dt)²/∫I² dt of the output pulse, for an input
+soliton of order `theta[1]`. Amplitude-scale invariant, so it scores shape only.
+The `grid.dt` factor is what turns the discrete sums into the integrals — the
+same factor whose omission silently rescaled an earlier example by √dt.
 """
-function compressed_peak(theta, model, pulse, params)
+function output_duration(theta, model, pulse, params)
     P0 = theta[1]^2 * abs(beta2) / (gamma0 * T0^2)
     @. pulse.At = complex(sqrt(P0) * sech(grid.t / T0), 0.0)
     mul!(pulse.AW, model.to_freq, pulse.At)
     _, At, _ = Soliton.propagate(model, pulse, params, params.solver, false)
-    return abs2(At[i_axis, end])
+    I = abs2.(At[:, end])
+    return grid.dt * sum(I)^2 / sum(abs2, I)
 end
 
 """
-Forward-mode derivative d(peak power)/dN at `Nsol`, taken straight through the
-solver. The `model` tangent is zero (the fiber does not depend on N) but the
-model must still be `Duplicated`, never `Const`, or its scratch buffers get no
-shadow and the derivative silently comes back 0.0.
+Forward-mode derivative dτ_eff/dN, taken straight through the solver. The
+`model` tangent is zero (the fiber does not depend on N) but the model must
+still be `Duplicated`, never `Const`, or its scratch buffers get no shadow and
+the derivative silently comes back 0.0.
 
-Shadows are rebuilt per call for clarity; reusing one across calls is the known
-optimization (`ad_ecosystem_review.md`, finding 3).
+Shadows are rebuilt per call for clarity; reusing one is the known optimization
+(`ad_ecosystem_review.md`, finding 3).
 """
-function dpeak_dN(Nsol)
-    theta = [Nsol]
+function dtau_dN(Nsol)
     (deriv,) = Enzyme.autodiff(
         Enzyme.set_runtime_activity(Enzyme.Forward),
-        compressed_peak,
+        output_duration,
         Enzyme.Duplicated,
-        Enzyme.Duplicated(theta, [1.0]),
+        Enzyme.Duplicated([Nsol], [1.0]),
         Enzyme.Duplicated(model, Enzyme.make_zero(model)),
         Enzyme.Duplicated(pulse, Enzyme.make_zero(pulse)),
         Enzyme.Const(params),
@@ -158,55 +173,65 @@ function dpeak_dN(Nsol)
     return deriv
 end
 
-peak_at(Nsol) = compressed_peak([Nsol], model, pulse, params)
+tau_at(Nsol) = output_duration([Nsol], model, pulse, params)
 
 # --- Sanity check the forward-mode gradient against finite differences ---
 println("\nForward-mode gradient check (Enzyme vs. central differences):")
 for Ncheck in (1.8, 2.5, 3.2)
     h = 1e-5
-    g_ad = dpeak_dN(Ncheck)
-    g_fd = (peak_at(Ncheck + h) - peak_at(Ncheck - h)) / (2h)
+    g_ad = dtau_dN(Ncheck)
+    g_fd = (tau_at(Ncheck + h) - tau_at(Ncheck - h)) / (2h)
     @printf("  N = %.2f: Enzyme = %+.6e  FD = %+.6e  rel.diff = %.3e\n",
         Ncheck, g_ad, g_fd, abs(g_ad - g_fd) / max(abs(g_fd), 1e-300))
 end
 
-# --- Scan: peak power and its AD derivative across soliton order ---
-println("\nScanning soliton order (peak power and its exact derivative)...")
+# --- Scan: effective output duration and its AD derivative vs soliton order ---
+println("\nScanning soliton order (effective duration and its exact derivative)...")
 N_scan = collect(range(1.2, 4.2; length=25))
-P_scan = similar(N_scan)
-dP_scan = similar(N_scan)
+tau_scan = similar(N_scan)
+dtau_scan = similar(N_scan)
 for (k, Nv) in enumerate(N_scan)
-    P_scan[k] = peak_at(Nv)
-    dP_scan[k] = dpeak_dN(Nv)
+    tau_scan[k] = tau_at(Nv)
+    dtau_scan[k] = dtau_dN(Nv)
 end
 
-# --- Locate the optimum by bisecting the derivative to its zero crossing ---
-# With one parameter and an exact derivative this beats gradient ascent: no
-# learning rate, monotone convergence, and the bracket is verified up front
-# rather than assumed.
-N_lo, N_hi = 1.4, 4.0
-d_lo, d_hi = dpeak_dN(N_lo), dpeak_dN(N_hi)
-N_ad = NaN
-if d_lo <= 0 || d_hi >= 0
-    @printf("\nNo sign change of dP/dN on [%.2f, %.2f] (d_lo = %+.3e, d_hi = %+.3e).\n",
-        N_lo, N_hi, d_lo, d_hi)
-    println("The optimum is not bracketed — reporting the scan maximum instead.")
-    N_ad = N_scan[argmax(P_scan)]
-else
-    println("\nBisecting dP/dN = 0 ...")
-    for _ in 1:32
-        N_mid = 0.5 * (N_lo + N_hi)
-        if dpeak_dN(N_mid) > 0
-            N_lo = N_mid
+"""
+Locate the minimum of τ_eff(N) by bisecting its derivative to zero on
+`[lo, hi]`, which must bracket a sign change (dτ/dN < 0 then > 0). Returns
+`(N_opt, bracketed)`; when the bracket fails, falls back to the scan minimum so
+the script reports something honest instead of a spurious root.
+
+Kept in a function rather than at top level on purpose: assigning to `lo`/`hi`
+inside a top-level `for` hits Julia's soft-scope rule and silently creates new
+locals, which is exactly how the first version of this script failed in CI.
+"""
+function bisect_derivative(deriv, lo, hi; iters=32)
+    d_lo, d_hi = deriv(lo), deriv(hi)
+    if d_lo >= 0 || d_hi <= 0
+        @printf("\nNo sign change of dtau/dN on [%.2f, %.2f]", lo, hi)
+        @printf(" (d_lo = %+.3e, d_hi = %+.3e).\n", d_lo, d_hi)
+        return NaN, false
+    end
+    println("\nBisecting dtau/dN = 0 ...")
+    for _ in 1:iters
+        mid = 0.5 * (lo + hi)
+        if deriv(mid) < 0
+            lo = mid
         else
-            N_hi = N_mid
+            hi = mid
         end
     end
-    N_ad = 0.5 * (N_lo + N_hi)
-    @printf("  converged: N = %.6f  (bracket width %.2e)\n", N_ad, N_hi - N_lo)
+    @printf("  converged: N = %.6f  (bracket width %.2e)\n", 0.5 * (lo + hi), hi - lo)
+    return 0.5 * (lo + hi), true
 end
 
-# --- Verify the result with plain forward simulations (no AD involved) ---
+N_ad, bracketed = bisect_derivative(dtau_dN, 1.4, 4.0)
+if !bracketed
+    println("The optimum is not bracketed — reporting the scan minimum instead.")
+    N_ad = N_scan[argmin(tau_scan)]
+end
+
+# --- Verify with plain forward simulations (no AD involved) ---
 P0_ad = peak_power_of_N(N_ad)
 pulse_in = sech_pulse(grid, P0_ad, FWHM_in)
 
@@ -221,30 +246,35 @@ end
 
 At_ad = propagate_at(N_ad)
 At_lit = propagate_at(N_lit)
-
 I_ad = abs2.(At_ad)
+
 fwhm_out_ad = Soliton._fwhm(I_ad, grid.t)
 fwhm_out_lit = Soliton._fwhm(abs2.(At_lit), grid.t)
 Fc_ad = FWHM_in / fwhm_out_ad
+Fc_lit_measured = FWHM_in / fwhm_out_lit
+tau_in = 3 * T0                     # exact for a sech² intensity profile
+Feff_ad = tau_in / tau_at(N_ad)
 
-@printf("\n%-34s %12s %12s\n", "", "AD", "literature")
-@printf("%-34s %12.4f %12.4f\n", "soliton order N", N_ad, N_lit)
-@printf("%-34s %12.2f %12.2f\n", "input peak power P0 [W]", P0_ad, P0_lit)
-@printf("%-34s %12.2f %12.2f\n", "compression factor F_c", Fc_ad, Fc_lit)
-@printf("%-34s %12.1f %12.1f\n", "output FWHM [fs]",
+@printf("\n%-36s %12s %12s\n", "", "AD", "literature")
+@printf("%-36s %12.4f %12.4f\n", "soliton order N", N_ad, N_lit)
+@printf("%-36s %12.2f %12.2f\n", "input peak power P0 [W]", P0_ad, P0_lit)
+@printf("%-36s %12.1f %12.1f\n", "output FWHM [fs]",
     fwhm_out_ad * 1e15, fwhm_out_lit * 1e15)
-@printf("\nDisagreement in N: %.2f %%\n", 100 * abs(N_ad - N_lit) / N_lit)
-
-# The on-axis / true-peak identity the objective relies on.
-@printf("On-axis vs. true peak power at the optimum: %.4f W vs %.4f W (rel. %.2e)\n",
-    I_ad[i_axis], maximum(I_ad), abs(I_ad[i_axis] - maximum(I_ad)) / maximum(I_ad))
+@printf("%-36s %12.2f %12.2f\n", "compression factor (FWHM ratio)",
+    Fc_ad, Fc_lit_measured)
+@printf("\nPredicted F_c = 4.1*N = %.2f; tau_eff-based factor at the AD optimum = %.2f\n",
+    Fc_lit, Feff_ad)
+@printf("Disagreement in N between AD and the published formula: %.2f %%\n",
+    100 * abs(N_ad - N_lit) / N_lit)
+@printf("Output peak power at the AD optimum: %.1f W (input %.1f W)\n",
+    maximum(I_ad), P0_ad)
 
 # --- Plot 1: the objective and its exact derivative ---
 plt1 = plot(
-    N_scan, P_scan;
+    N_scan, tau_scan .* 1e15;
     xlabel="soliton order N",
-    ylabel="output peak power [W]",
-    label="peak power",
+    ylabel="effective output duration [fs]",
+    label="tau_eff",
     linewidth=2,
     legend=:topleft,
     title="Compressor optimum: objective and its Enzyme derivative",
@@ -255,8 +285,8 @@ vline!(plt1, [N_lit];
     label=@sprintf("published N = %.3f", N_lit), linestyle=:dot, linewidth=2)
 plt1b = twinx(plt1)
 plot!(
-    plt1b, N_scan, dP_scan;
-    ylabel="dP/dN  [W]", label="dP/dN (forward-mode AD)",
+    plt1b, N_scan, dtau_scan .* 1e15;
+    ylabel="d(tau_eff)/dN [fs]", label="derivative (forward-mode AD)",
     linewidth=2, color=:darkred, legend=:topright,
 )
 hline!(plt1b, [0.0]; label="", color=:gray, linestyle=:dash)
