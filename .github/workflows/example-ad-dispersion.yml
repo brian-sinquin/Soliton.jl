@@ -1,0 +1,219 @@
+name: "Examples: AD dispersion design + supercontinuum run"
+
+# Each AD-driven example is its own job/CI check here, so a regression in
+# any one of them shows up as its own named status on a PR rather than
+# being buried inside one big job. Runs automatically on every PR (like the
+# `test`/`enzyme`/`docs` jobs in CI.yml) plus on manual dispatch; it is a
+# separate workflow file from CI.yml and shares nothing with its (slow)
+# `docs` job, so nothing here ever triggers a documentation build.
+#
+# Jobs verify the script succeeds and upload the resulting plots as a build
+# artifact. Nothing is committed back to the branch: the repository ignores
+# `*.png`, the jobs run in parallel with no `needs:` ordering so pushes from
+# them would race, and the artifacts are uploaded on every run anyway
+# (including `workflow_dispatch`). An earlier version force-added the plots
+# on manual runs, which left a stale, partial set of generated binaries in
+# git; download the artifact instead.
+#
+# The scripts live in .github/scripts/ (tracked) rather than examples/
+# (git-ignored, local-only) purely so this workflow has something to check
+# out and run. See examples/README.md for the local-run instructions.
+on:
+  pull_request:
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+
+jobs:
+  run-sellmeier-example:
+    name: Example - Sellmeier inverse design (Julia 1.12 - ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref }}
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.12"
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/julia-buildpkg@v1
+      - name: Add example-only dependencies (ForwardDiff, Plots)
+        shell: julia --project=. --color=yes {0}
+        run: |
+          import Pkg
+          Pkg.add(["ForwardDiff", "Plots"])
+      - name: Run Sellmeier inverse-design example
+        shell: julia --project=. --color=yes {0}
+        run: |
+          include(joinpath(pwd(), ".github", "scripts", "ad_dispersion_inverse_design.jl"))
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ad-sellmeier-example-results
+          path: .github/scripts/output/*.png
+          if-no-files-found: warn
+
+  run-flattening-example:
+    name: Example - Dispersion flattening (Julia 1.12 - ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref }}
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.12"
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/julia-buildpkg@v1
+      - name: Add example-only dependencies (ForwardDiff, Plots)
+        shell: julia --project=. --color=yes {0}
+        run: |
+          import Pkg
+          Pkg.add(["ForwardDiff", "Plots"])
+      - name: Run dispersion-flattening example
+        shell: julia --project=. --color=yes {0}
+        run: |
+          include(joinpath(pwd(), ".github", "scripts", "ad_dispersion_flattening.jl"))
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ad-flattening-example-results
+          path: .github/scripts/output/*.png
+          if-no-files-found: warn
+
+  run-dispersive-wave-example:
+    name: Example - Dispersive-wave design + verification (Julia 1.12 - ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref }}
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.12"
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/julia-buildpkg@v1
+      - name: Add example-only dependencies (ForwardDiff, Plots)
+        shell: julia --project=. --color=yes {0}
+        run: |
+          import Pkg
+          Pkg.add(["ForwardDiff", "Plots"])
+      - name: Run dispersive-wave design + verification example
+        shell: julia --project=. --color=yes {0}
+        run: |
+          include(joinpath(pwd(), ".github", "scripts", "ad_dispersive_wave_design.jl"))
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ad-dispersive-wave-example-results
+          path: .github/scripts/output/*.png
+          if-no-files-found: warn
+
+  run-soliton-recovery-example:
+    name: Example - Soliton shape recovery via invariance (Julia 1.12 - ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref }}
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.12"
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/julia-buildpkg@v1
+      - name: Add example-only dependencies (Enzyme, Plots)
+        shell: julia --project=. --color=yes {0}
+        run: |
+          import Pkg
+          Pkg.add(["Enzyme", "Plots"])
+      - name: Run soliton shape recovery example
+        shell: julia --project=. --color=yes {0}
+        run: |
+          include(joinpath(pwd(), ".github", "scripts", "ad_soliton_shape_recovery.jl"))
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ad-soliton-recovery-example-results
+          path: .github/scripts/output/*.png
+          if-no-files-found: warn
+
+  run-compression-optimum-example:
+    name: Example - Soliton compression optimum vs. published formula (Julia 1.12 - ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref }}
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.12"
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/julia-buildpkg@v1
+      - name: Add example-only dependencies (Enzyme, Plots)
+        shell: julia --project=. --color=yes {0}
+        run: |
+          import Pkg
+          Pkg.add(["Enzyme", "Plots"])
+      - name: Run soliton compression optimum example
+        shell: julia --project=. --color=yes {0}
+        run: |
+          include(joinpath(pwd(), ".github", "scripts", "ad_soliton_compression_optimum.jl"))
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ad-compression-optimum-example-results
+          path: .github/scripts/output/*.png
+          if-no-files-found: warn
+
+  run-enzyme-example:
+    name: Example - Enzyme-through-SSFM compression design (Julia 1.12 - ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref }}
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.12"
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/julia-buildpkg@v1
+      - name: Add example-only dependencies (Enzyme, Plots)
+        shell: julia --project=. --color=yes {0}
+        run: |
+          import Pkg
+          Pkg.add(["Enzyme", "Plots"])
+      - name: Run Enzyme-through-SSFM compression design example
+        shell: julia --project=. --color=yes {0}
+        run: |
+          include(joinpath(pwd(), ".github", "scripts", "ad_ssfm_enzyme_compression.jl"))
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ad-ssfm-enzyme-example-results
+          path: .github/scripts/output/*.png
+          if-no-files-found: warn

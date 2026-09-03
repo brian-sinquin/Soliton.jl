@@ -97,11 +97,16 @@ function propagate(
 
         # Save state
         z_out[save_idx] = z
-        copyto!(model.buf_f1, U)
+        # `fftshift!` and `mul!` only read their source, so `U` is used
+        # directly rather than staged through `model.buf_f1` — one less
+        # N-element copy per save point, and one less place where active
+        # pulse data flows through a model-owned scratch buffer (which is
+        # what forces `Duplicated(model, ...)` under Enzyme; see
+        # `docs/src/dev/adjoint_ad.md`).
         if params.save_freq
-            fftshift!(@view(Aw_out[:, save_idx]), model.buf_f1)
+            fftshift!(@view(Aw_out[:, save_idx]), U)
         end
-        mul!(u_temp, model.to_time, model.buf_f1)
+        mul!(u_temp, model.to_time, U)
         copyto!(@view(At_out[:, save_idx]), u_temp)
 
         if !isnothing(prog)

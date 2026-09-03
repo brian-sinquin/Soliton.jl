@@ -35,6 +35,15 @@ Create time-frequency grid for GNLSE simulations in natural SI units.
 
 `V` and `W` are stored in monotonic (not FFT-natural) order; operators that act
 on FFT output apply `ifftshift` as needed.
+
+The grid's element type `T<:Real` is `promote_type(typeof(time_window),
+typeof(wavelength), Float64)` — plain `Float64` arguments (the common case)
+produce a `Grid{Float64}`, while AD dual numbers (e.g. `ForwardDiff.Dual`)
+passed for `time_window`/`wavelength` propagate through to produce a
+`Grid{<:Real}` whose `t`, `V`, `W`, `dt`, `omega0` carry derivative
+information. Note this only helps for the pure-arithmetic grid itself — FFTW
+(used downstream in [`build_physics_model`](@ref)) only accepts `Float64`
+buffers, so a non-`Float64` `Grid` cannot currently be propagated with `solve`.
 """
 function create_grid(resolution::Int, time_window::Real, wavelength::Real)
     resolution > 0 || throw(ArgumentError("resolution must be positive"))
@@ -44,9 +53,12 @@ function create_grid(resolution::Int, time_window::Real, wavelength::Real)
     wavelength > 0 || throw(ArgumentError("wavelength must be positive"))
 
     N = resolution
+    T = promote_type(typeof(time_window), typeof(wavelength), Float64)
+    tw = T(time_window)
+    lambda0 = T(wavelength)
 
     # Time domain grid [s]
-    t = collect(range(-time_window / 2, time_window / 2; length=N))
+    t = collect(range(-tw / 2, tw / 2; length=N))
     dt = t[2] - t[1]
 
     # Relative angular frequency grid [rad/s], monotonic.
@@ -56,12 +68,12 @@ function create_grid(resolution::Int, time_window::Real, wavelength::Real)
     V = 2π .* ((-N ÷ 2):(N ÷ 2 - 1)) ./ (N * dt)
 
     # Central angular frequency [rad/s]: ω₀ = 2πc/λ₀
-    omega0 = (2.0 * π * c) / wavelength
+    omega0 = (2 * T(π) * T(c)) / lambda0
 
     # Absolute optical angular frequency grid ω = ω₀ + V [rad/s]
     W = omega0 .+ V
 
-    Grid{Float64}(N, t, V, W, dt, omega0, wavelength)
+    Grid{T}(N, t, V, W, dt, omega0, lambda0)
 end
 
 """

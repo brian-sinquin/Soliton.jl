@@ -16,6 +16,32 @@ Concrete models: [`TaylorDispersion`](@ref), [`TabulatedDispersion`](@ref).
 abstract type DispersionModel end
 
 """
+    @strict_ctor function Name{T}(field1::Vector{T}, field2::Vector{T}, ...) where {T <: Real}
+        <validation statements, referring to field1, field2, ...>
+    end
+
+Defines a struct's inner constructor from just its validation body, appending
+the `new{T}(field1, field2, ...)` call for you. Defining *any* inner
+constructor suppresses Julia's auto-generated default one — which, for a
+parametric struct, would otherwise dispatch ahead of a validating outer
+constructor for same-element-type vector arguments and silently skip the
+checks. Use this on every parametric `DispersionModel`/`AbstractMedium` field
+struct that needs argument validation, instead of hand-writing `new{T}(...)`
+each time.
+"""
+macro strict_ctor(funcdef)
+    funcdef.head === :function ||
+        throw(ArgumentError("@strict_ctor expects a `function Name{T}(...) where {...} ... end`"))
+    sig, body = funcdef.args[1], funcdef.args[2]
+    sig.head === :where || throw(ArgumentError("@strict_ctor expects a `where` clause"))
+    callexpr = sig.args[1]
+    tparam = callexpr.args[1].args[2]
+    argnames = [a isa Expr ? a.args[1] : a for a in callexpr.args[2:end]]
+    new_call = Expr(:call, Expr(:curly, :new, tparam), argnames...)
+    esc(Expr(:function, sig, Expr(:block, body.args..., new_call)))
+end
+
+"""
     TaylorDispersion(betas)
 
 Dispersion from a Taylor expansion of the propagation constant about ω₀:
@@ -23,15 +49,22 @@ Dispersion from a Taylor expansion of the propagation constant about ω₀:
     B(V) = Σ βₙ / n! · Vⁿ ,   n ≥ 2
 
 `betas[1] = β₂` [s²/m], `betas[2] = β₃` [s³/m], … (β₀ and β₁ are excluded).
+
+Parametric in the coefficient element type `T<:Real` (default `Float64`) so
+that `betas`/`beta1` may hold AD dual numbers (e.g. `ForwardDiff.Dual`) for
+gradient-based dispersion-profile optimization, in addition to plain
+`Float64`.
 """
-struct TaylorDispersion <: DispersionModel
-    betas::Vector{Float64}
-    beta1::Float64
+struct TaylorDispersion{T <: Real} <: DispersionModel
+    betas::Vector{T}
+    beta1::T
 end
 
 # An empty `betas` vector means no dispersion (pure SPM).
-TaylorDispersion(betas::AbstractVector{<:Real}, beta1::Real=0.0) =
-    TaylorDispersion(collect(Float64, betas), Float64(beta1))
+function TaylorDispersion(betas::AbstractVector{<:Real}, beta1::Real=0.0)
+    T = promote_type(eltype(betas), typeof(beta1), Float64)
+    TaylorDispersion{T}(collect(T, betas), T(beta1))
+end
 
 """
     TabulatedDispersion(detuning, beta)
@@ -41,20 +74,28 @@ frequency ω - ω₀ [rad/s] (sorted ascending); `beta` is the corresponding
 propagation-constant deviation `B` [1/m] in the co-moving frame. Values are
 linearly interpolated onto the simulation grid; outside the tabulated range the
 nearest endpoint is held (flat extrapolation).
-"""
-struct TabulatedDispersion <: DispersionModel
-    detuning::Vector{Float64}
-    beta::Vector{Float64}
 
-    function TabulatedDispersion(
-        detuning::AbstractVector{<:Real}, beta::AbstractVector{<:Real}
-    )
+Parametric in the sample element type `T<:Real` (default `Float64`), so
+`beta` may hold AD dual numbers for gradient-based fitting of a tabulated
+dispersion curve.
+"""
+struct TabulatedDispersion{T <: Real} <: DispersionModel
+    detuning::Vector{T}
+    beta::Vector{T}
+
+    @strict_ctor function TabulatedDispersion{T}(
+        detuning::Vector{T}, beta::Vector{T}
+    ) where {T <: Real}
         length(detuning) == length(beta) ||
             throw(ArgumentError("detuning and beta must have equal length"))
         length(detuning) >= 2 || throw(ArgumentError("need at least two tabulated samples"))
         issorted(detuning) || throw(ArgumentError("detuning must be sorted ascending"))
-        new(collect(Float64, detuning), collect(Float64, beta))
     end
+end
+
+function TabulatedDispersion(detuning::AbstractVector{<:Real}, beta::AbstractVector{<:Real})
+    T = promote_type(eltype(detuning), eltype(beta), Float64)
+    TabulatedDispersion{T}(collect(T, detuning), collect(T, beta))
 end
 
 """
@@ -73,18 +114,26 @@ SellmeierDispersion(B, C; microns=true)
 ```
 
 If `microns` is `true` (default), the `C` coefficients are assumed to be in μm² and will be converted to m² for natural SI unit calculations.
-"""
-struct SellmeierDispersion <: DispersionModel
-    B::Vector{Float64}
-    C::Vector{Float64}
 
-    function SellmeierDispersion(
-        B::AbstractVector{<:Real}, C::AbstractVector{<:Real}; microns::Bool=true
-    )
+Parametric in the coefficient element type `T<:Real` (default `Float64`), so
+`B`/`C` may hold AD dual numbers for gradient-based Sellmeier-coefficient
+fitting.
+"""
+struct SellmeierDispersion{T <: Real} <: DispersionModel
+    B::Vector{T}
+    C::Vector{T}
+
+    @strict_ctor function SellmeierDispersion{T}(B::Vector{T}, C::Vector{T}) where {T <: Real}
         length(B) == length(C) || throw(ArgumentError("B and C must have equal length"))
-        C_val = microns ? collect(Float64, C) .* 1e-12 : collect(Float64, C) # 1 μm² = 1e-12 m²
-        new(collect(Float64, B), C_val)
     end
+end
+
+function SellmeierDispersion(
+    B::AbstractVector{<:Real}, C::AbstractVector{<:Real}; microns::Bool=true
+)
+    T = promote_type(eltype(B), eltype(C), Float64)
+    C_val = microns ? collect(T, C) .* T(1e-12) : collect(T, C) # 1 μm² = 1e-12 m²
+    SellmeierDispersion{T}(collect(T, B), C_val)
 end
 
 """

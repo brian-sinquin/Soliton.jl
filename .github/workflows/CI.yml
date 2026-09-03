@@ -40,6 +40,35 @@ jobs:
       - uses: julia-actions/cache@v2
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
+  enzyme:
+    # Separate job (not part of the main test matrix) because Enzyme pulls in
+    # a large LLVM-based artifact and its i686/nightly-Julia support is less
+    # battle-tested than the main dependency set; runs on a single platform
+    # so it doesn't add weight or risk to every matrix cell above.
+    name: Enzyme adjoint-AD extension (Julia 1.12 - ubuntu-latest - x64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.12"
+          arch: x64
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/julia-buildpkg@v1
+      - name: Run Enzyme adjoint-AD extension tests
+        shell: julia --project=. --color=yes {0}
+        run: |
+          import Pkg
+          Pkg.add("Enzyme")
+          # `include` resolves relative paths against the including file's
+          # directory, not `pwd()` — and this script itself is written to a
+          # runner temp dir by `shell:`, not the checkout, so a bare relative
+          # path here silently looks in the wrong place.
+          include(joinpath(pwd(), "test", "test_enzyme.jl"))
   docs:
     name: Documentation
     runs-on: ubuntu-latest
