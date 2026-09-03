@@ -49,9 +49,29 @@ which is invariant under I → αI, so it measures pulse *shape* only and cannot
 gamed by injecting more energy. It is smooth (two `sum` reductions, no `maximum`
 and no threshold search, unlike a literal FWHM), which matters because it has to
 be differentiated. For a sech² intensity τ_eff = 3T₀ exactly, so ratios of τ_eff
-are directly comparable to ratios of FWHM for sech-like pulses; the compressed
-pulse's pedestal inflates τ_eff somewhat, so the τ_eff-based compression factor
-is a mild *under*-estimate of the FWHM-based F_c quoted above. Both are reported.
+are comparable to ratios of FWHM for sech-like pulses.
+
+It is only a *proxy* for the FWHM, though, and the run below shows how much: at
+the optimum the FWHM ratio is 7.07 while the τ_eff ratio is 4.64, because τ_eff
+integrates the whole trace and so is dragged upward by the pedestal that
+soliton-effect compression always leaves behind. What matters here is that its
+*argmin* is in the right place — and it is: minimizing τ_eff lands on a point
+whose measured FWHM (24.9 fs) is better than the one the empirical formula
+points at (27.8 fs). Both factors are reported so the gap stays visible.
+
+# What the run actually finds
+
+    soliton order N          AD 2.5961   vs   literature 2.4918   (4.19 % apart)
+    input peak power P0      AD 122.5 W  vs   literature 112.9 W
+    output FWHM              AD 24.9 fs  vs   literature 27.8 fs
+
+Two honest caveats. The optimum AD finds is 4.2 % away from the empirical
+prediction, which is about the accuracy the empirical relation itself claims —
+and AD's point is the better one by direct measurement, which is what an
+optimizer is supposed to do. But the *compression factor* the same relation
+predicts, F_c ≈ 4.1N ≈ 10.2, is well above the 7.07 actually delivered here:
+4.1N is an idealized figure and the NLS does not reach it at these modest
+soliton orders. The location of the optimum reproduces; its depth does not.
 
 # Why forward mode
 
