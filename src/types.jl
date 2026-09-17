@@ -257,9 +257,9 @@ function AmplifyingMedium(;
     gain_val = if g0_db !== nothing
         (
         if g0_db isa Real
-            Float64(g0_db) * (log(10.0) / 10.0)
+            db_to_np(Float64(g0_db))
         else
-            Float64.(g0_db) .* (log(10.0) / 10.0)
+            db_to_np.(Float64.(g0_db))
         end
     )
     else

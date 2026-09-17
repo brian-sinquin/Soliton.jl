@@ -62,6 +62,13 @@ solution = solve(pulse, params)
 
 **Physics**: `dispersion_operator`, `raman_response`, `build_physics_model`
 
+**Analysis**: `pulse_energy`, `peak_power`, `fwhm`, `spectral_bandwidth`,
+`soliton_number`, `soliton_period`, `modulation_instability_gain`,
+`instantaneous_frequency`
+
+**Conversions**: `dispersion_D_to_beta2`, `wavelength_to_omega`,
+`db_to_linear_power`, `dbm_to_watt`, `photon_energy`, `n2_aeff_to_gamma`
+
 # References
 
 Adapted from gnlse-python (https://github.com/WUST-FOG/gnlse-python)
@@ -125,6 +132,10 @@ export step_index_aeff, MarcuseAeff
 # Optics Units Conversions
 export dispersion_D_to_beta2, beta2_to_dispersion_D, dispersion_S_to_beta3
 export wavelength_to_frequency, frequency_to_wavelength
+export wavelength_to_omega, omega_to_wavelength
+export db_to_linear_power, linear_power_to_db, db_to_linear_amplitude, linear_amplitude_to_db
+export db_to_np, np_to_db, dbm_to_watt, watt_to_dbm
+export photon_energy, n2_aeff_to_gamma, gamma_aeff_to_n2
 
 # Export grid functions
 export create_grid, wavelength_grid
@@ -148,9 +159,13 @@ export build_physics_model
 # Export analysis functions
 export pulse_energy, peak_power, fwhm, spectral_bandwidth, time_bandwidth_product
 export photon_number, spectral_centroid
-export dispersion_length, nonlinear_length, soliton_number
+export dispersion_length, nonlinear_length, soliton_number, soliton_period
+export modulation_instability_gain, mi_peak_frequency, mi_bandwidth
+export pulse_energy_estimate, peak_power_estimate
+export average_power, pulse_energy_from_average, peak_power_from_average
 export add_noise, rin_rms, spectral_coherence
 export spectrogram, shg_frog_trace, track_solitons, dispersive_wave_wavelength
+export instantaneous_frequency
 
 # Physical constant
 export c

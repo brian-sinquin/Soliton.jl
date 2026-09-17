@@ -547,7 +547,7 @@ function inject_ase_noise!(
     E_pulse = sum(abs2, u_time) * dt
     g_local = g0_val * (Esat / (Esat + E_pulse))  # net saturated gain [1/m]
 
-    n_sp = 10.0^(aux.noise_figure_db / 10.0) / 2.0
+    n_sp = db_to_linear_power(aux.noise_figure_db) / 2.0
     n_ase = n_sp * (exp(g_local * dz) - 1.0)
     n_ase > 0 || return U
 

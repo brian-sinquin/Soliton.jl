@@ -119,6 +119,119 @@ function time_bandwidth_product(pulse::Pulse)
 end
 
 """
+    pulse_energy_estimate(Pmax, FWHM; shape=:sech) -> Float64
+
+Analytic pulse energy E [J] for an *ideal* transform-limited pulse of peak
+power `Pmax` [W] and intensity FWHM [s], given the envelope `shape`
+(`:sech`, `:gaussian`, or `:lorentzian`, matching [`sech_pulse`](@ref),
+[`gaussian_pulse`](@ref), [`lorentzian_pulse`](@ref)):
+
+    E = Pmax · FWHM · k(shape)
+
+with `k(:sech) = 2/m ≈ 1.1346`, `k(:gaussian) = √(π/(4ln2)) ≈ 1.0645`,
+`k(:lorentzian) = (π/2)/m ≈ 1.2203`, where each shape's `m` matches the
+corresponding pulse-generator function. Inverse of
+[`peak_power_estimate`](@ref).
+
+Use this to relate a datasheet or measured (autocorrelator/scope) peak power
+and FWHM to pulse energy without constructing a [`Pulse`](@ref)/[`Grid`](@ref)
+— e.g. for a quick back-of-envelope estimate before setting up a simulation.
+For the exact numerical energy of an actual `Pulse` (which may not be a pure
+transform-limited shape), use [`pulse_energy`](@ref) instead.
+"""
+function pulse_energy_estimate(Pmax::Real, FWHM::Real; shape::Symbol=:sech)
+    Pmax >= 0 || throw(ArgumentError("Pmax must be non-negative"))
+    FWHM > 0 || throw(ArgumentError("FWHM must be positive"))
+    return Pmax * FWHM * _energy_fwhm_factor(shape)
+end
+
+"""
+    peak_power_estimate(energy, FWHM; shape=:sech) -> Float64
+
+Analytic peak power P_max [W] for a transform-limited pulse of energy
+`energy` [J], intensity FWHM [s], and envelope `shape` (see
+[`pulse_energy_estimate`](@ref) for the supported shapes and the underlying
+`E = Pmax·FWHM·k(shape)` relation). Inverse of [`pulse_energy_estimate`](@ref):
+`Pmax = E / (FWHM·k(shape))`.
+"""
+function peak_power_estimate(energy::Real, FWHM::Real; shape::Symbol=:sech)
+    energy >= 0 || throw(ArgumentError("energy must be non-negative"))
+    FWHM > 0 || throw(ArgumentError("FWHM must be positive"))
+    return energy / (FWHM * _energy_fwhm_factor(shape))
+end
+
+"""
+    _energy_fwhm_factor(shape::Symbol) -> Float64
+
+Dimensionless factor `k` in `E = Pmax·FWHM·k` for the intensity profile of
+`shape` (see [`sech_pulse`](@ref), [`gaussian_pulse`](@ref),
+[`lorentzian_pulse`](@ref) for the corresponding field envelopes), derived by
+integrating `∫|A(T)|²dT` in closed form.
+"""
+function _energy_fwhm_factor(shape::Symbol)
+    if shape === :sech
+        m = 2 * log(1 + sqrt(2))
+        return 2 / m
+    elseif shape === :gaussian
+        m = 4 * log(2)
+        return sqrt(π / m)
+    elseif shape === :lorentzian
+        m = 2 * sqrt(sqrt(2) - 1)
+        return (π / 2) / m
+    else
+        throw(ArgumentError("shape must be :sech, :gaussian, or :lorentzian"))
+    end
+end
+
+"""
+    average_power(energy, rep_rate) -> Float64
+
+Average optical power P_avg [W] of a periodic pulse train with per-pulse
+energy `energy` [J] and repetition rate `rep_rate` [Hz]: `P_avg = E·f_rep`.
+Inverse of [`pulse_energy_from_average`](@ref).
+"""
+function average_power(energy::Real, rep_rate::Real)
+    energy >= 0 || throw(ArgumentError("energy must be non-negative"))
+    rep_rate > 0 || throw(ArgumentError("rep_rate must be positive"))
+    return energy * rep_rate
+end
+
+"""
+    pulse_energy_from_average(P_avg, rep_rate) -> Float64
+
+Per-pulse energy E [J] of a periodic pulse train given average power `P_avg`
+[W] and repetition rate `rep_rate` [Hz]: `E = P_avg / f_rep`. Inverse of
+[`average_power`](@ref).
+"""
+function pulse_energy_from_average(P_avg::Real, rep_rate::Real)
+    P_avg >= 0 || throw(ArgumentError("P_avg must be non-negative"))
+    rep_rate > 0 || throw(ArgumentError("rep_rate must be positive"))
+    return P_avg / rep_rate
+end
+
+"""
+    peak_power_from_average(P_avg, rep_rate, FWHM; shape=:sech) -> Float64
+
+Estimate the peak power P_max [W] of a mode-locked pulse train from the
+quantities usually read off a power meter and a scope/spectrum analyzer:
+average power `P_avg` [W], repetition rate `rep_rate` [Hz], and intensity
+FWHM [s], assuming a transform-limited envelope `shape` (see
+[`pulse_energy_estimate`](@ref)).
+
+Composes [`pulse_energy_from_average`](@ref) and [`peak_power_estimate`](@ref):
+first recovers the per-pulse energy from `P_avg` and `rep_rate`, then converts
+to peak power via the shape's energy/FWHM relation. This is a shape-aware
+replacement for the common lab estimate `P_peak ≈ P_avg / (f_rep·FWHM)`, which
+implicitly (and only approximately) assumes a rectangular pulse.
+"""
+function peak_power_from_average(
+    P_avg::Real, rep_rate::Real, FWHM::Real; shape::Symbol=:sech
+)
+    E = pulse_energy_from_average(P_avg, rep_rate)
+    return peak_power_estimate(E, FWHM; shape=shape)
+end
+
+"""
     spectral_centroid(pulse::Pulse)
 
 Intensity-weighted center frequency of the pulse spectrum relative to the
@@ -196,6 +309,91 @@ function soliton_number(beta2::Real, gamma::Real, T0::Real, P0::Real)
 end
 
 """
+    soliton_period(beta2, T0) -> Float64
+
+Fundamental soliton period `z₀ = (π/2)·L_D = π·T₀²/(2|β₂|)` [m]: the
+propagation distance over which a fundamental soliton (N ≈ 1, see
+[`soliton_number`](@ref)) recovers its input shape after one cycle of
+periodic phase evolution, and the characteristic breathing period for
+higher-order solitons (N > 1) referenced in [`soliton_number`](@ref)'s
+docstring as `Tfission ≈ π·L_D/2`.
+
+Reference: G. P. Agrawal, "Nonlinear Fiber Optics," 6th ed., Eq. (5.2.9).
+"""
+soliton_period(beta2::Real, T0::Real) = (π / 2) * dispersion_length(beta2, T0)
+
+"""
+    modulation_instability_gain(beta2, gamma, P0, Omega) -> Float64
+    modulation_instability_gain(beta2, gamma, P0, Omega::AbstractVector) -> Vector{Float64}
+
+Power-gain coefficient g(Ω) [1/m] for scalar modulation instability (MI) of a
+continuous-wave/quasi-CW pump of power `P0` [W] in a fiber with GVD `beta2`
+[s²/m] and nonlinear coefficient `gamma` [1/(W·m)], at angular-frequency
+detuning `Omega` [rad/s] from the pump. A weak perturbation at detuning Ω
+grows as `exp(g(Ω)·z)` along the fiber:
+
+    g(Ω) = |β₂Ω|·√(Ω_c² − Ω²),   Ω_c = √(4γP₀/|β₂|)
+
+Only anomalous dispersion (β₂ < 0) supports scalar MI; `g(Ω) = 0` is returned
+for normal dispersion (β₂ ≥ 0) or for `|Ω| ≥ Ω_c`. The peak gain
+`g_max = 2γP₀` occurs at `Ω = Ω_c/√2` (see [`mi_peak_frequency`](@ref)); the
+full gain bandwidth is `2Ω_c` (see [`mi_bandwidth`](@ref)).
+
+MI is the mechanism that seeds soliton fission and supercontinuum generation
+under quasi-CW or long-pulse pumping. Compare `g(Ω)` to `1/L` (fiber length)
+to gauge whether sidebands grow appreciably over the propagation length; for
+short-pulse pumping use [`soliton_number`](@ref)/[`nonlinear_length`](@ref)
+instead.
+
+Reference: J. M. Dudley, G. Genty & S. Coen, Rev. Mod. Phys. 78, 1135 (2006),
+Eq. (3); G. P. Agrawal, "Nonlinear Fiber Optics," 6th ed., §5.1.
+"""
+function modulation_instability_gain(beta2::Real, gamma::Real, P0::Real, Omega::Real)
+    gamma >= 0 || throw(ArgumentError("gamma must be non-negative"))
+    P0 >= 0 || throw(ArgumentError("P0 must be non-negative"))
+    beta2 < 0 || return 0.0
+    Omega_c2 = 4 * gamma * P0 / abs(beta2)
+    Omega2 = Omega^2
+    Omega2 < Omega_c2 || return 0.0
+    return abs(beta2 * Omega) * sqrt(Omega_c2 - Omega2)
+end
+
+modulation_instability_gain(
+    beta2::Real, gamma::Real, P0::Real, Omega::AbstractVector{<:Real}
+) = modulation_instability_gain.(beta2, gamma, P0, Omega)
+
+"""
+    mi_peak_frequency(beta2, gamma, P0) -> Float64
+
+Angular-frequency detuning `Ω_max = √(2γP₀/|β₂|)` [rad/s] at which
+[`modulation_instability_gain`](@ref) is maximal, giving peak gain
+`g_max = 2γP₀` [1/m]. Requires anomalous dispersion (`beta2 < 0`).
+"""
+function mi_peak_frequency(beta2::Real, gamma::Real, P0::Real)
+    beta2 < 0 ||
+        throw(ArgumentError("modulation instability requires anomalous dispersion (beta2 < 0)"))
+    gamma >= 0 || throw(ArgumentError("gamma must be non-negative"))
+    P0 >= 0 || throw(ArgumentError("P0 must be non-negative"))
+    return sqrt(2 * gamma * P0 / abs(beta2))
+end
+
+"""
+    mi_bandwidth(beta2, gamma, P0) -> Float64
+
+Full modulation-instability gain bandwidth `2Ω_c` [rad/s], the width of the
+interval `|Ω| < Ω_c` over which [`modulation_instability_gain`](@ref) is
+nonzero, with `Ω_c = √(4γP₀/|β₂|)`. Requires anomalous dispersion
+(`beta2 < 0`).
+"""
+function mi_bandwidth(beta2::Real, gamma::Real, P0::Real)
+    beta2 < 0 ||
+        throw(ArgumentError("modulation instability requires anomalous dispersion (beta2 < 0)"))
+    gamma >= 0 || throw(ArgumentError("gamma must be non-negative"))
+    P0 >= 0 || throw(ArgumentError("P0 must be non-negative"))
+    return 2 * sqrt(4 * gamma * P0 / abs(beta2))
+end
+
+"""
     rin_rms(psd_dbc_hz, bandwidth) -> Float64
 
 RMS relative intensity fluctuation σ_P/P obtained by integrating a (flat)
@@ -210,7 +408,7 @@ with −150 dBc/Hz RIN observed over a 1 GHz bandwidth gives
 """
 function rin_rms(psd_dbc_hz::Real, bandwidth::Real)
     bandwidth > 0 || throw(ArgumentError("bandwidth must be positive"))
-    return sqrt(10.0^(psd_dbc_hz / 10) * bandwidth)
+    return sqrt(db_to_linear_power(psd_dbc_hz) * bandwidth)
 end
 
 """
@@ -403,6 +601,65 @@ When spectra were not saved, reconstructs them from the time-domain fields.
 spectral_coherence(solutions::AbstractVector{<:Solution}) =
     spectral_coherence([isempty(sol.AW) ? fftshift(ifft(sol.At[:, end])) :
                         sol.AW[:, end] for sol in solutions])
+
+"""
+    _unwrap(phase::AbstractVector{<:Real}) -> Vector{Float64}
+
+Unwrap a sequence of phase samples (radians) by removing 2π discontinuities
+between consecutive points, so that the result is a continuous phase ramp
+suitable for differentiation. Standard sequential unwrap algorithm.
+"""
+function _unwrap(phase::AbstractVector{<:Real})
+    unwrapped = zeros(Float64, length(phase))
+    isempty(phase) && return unwrapped
+    unwrapped[1] = phase[1]
+    @inbounds for i in 2:length(phase)
+        d = phase[i] - phase[i - 1]
+        d -= 2π * round(d / (2π))
+        unwrapped[i] = unwrapped[i - 1] + d
+    end
+    return unwrapped
+end
+
+"""
+    instantaneous_frequency(pulse::Pulse) -> Vector{Float64}
+
+Instantaneous angular-frequency deviation δω(t) = -dφ/dt [rad/s] from the
+carrier, where φ(t) = arg(A(t)) is the unwrapped temporal phase of the pulse
+envelope. This is the time-domain chirp: a linear chirp appears as
+`δω(t) ∝ t`, and self-phase modulation on an unchirped pulse produces the
+characteristic S-shaped chirp (red-shifted leading edge, blue-shifted
+trailing edge, for `γ, P₀ > 0`) that seeds spectral broadening.
+
+Computed via central finite differences of the unwrapped phase on the
+uniform grid `pulse.grid.t` (one-sided differences at the endpoints).
+
+!!! note "Low-intensity wings"
+
+    Where `|A(t)|² ≈ 0`, the phase is dominated by numerical noise and its
+    derivative can show large spurious excursions unrelated to the physical
+    chirp. Mask the result with `abs2.(pulse.At)` (e.g. only trust
+    `instantaneous_frequency` where intensity exceeds a few percent of the
+    peak) before interpreting it.
+
+# See also
+
+[`spectrogram`](@ref) and [`shg_frog_trace`](@ref) for time-frequency
+visualizations that do not require explicit phase unwrapping.
+"""
+function instantaneous_frequency(pulse::Pulse)
+    phase = _unwrap(angle.(pulse.At))
+    dt = pulse.grid.dt
+    N = length(phase)
+    domega = zeros(Float64, N)
+    N >= 2 || return domega
+    domega[1] = -(phase[2] - phase[1]) / dt
+    domega[N] = -(phase[N] - phase[N - 1]) / dt
+    @inbounds for i in 2:(N - 1)
+        domega[i] = -(phase[i + 1] - phase[i - 1]) / (2dt)
+    end
+    return domega
+end
 
 """
     spectrogram(pulse::Pulse; n_delay=200, gate_fwhm=nothing) -> (t_delays, V_grid, S_matrix)
