@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-09-19
+
 ### Added
 
 - Angular-frequency/wavelength conversion helpers `wavelength_to_omega` and
@@ -36,10 +38,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unified the several ad hoc `10^(x/10)`/`10^(x/20)`/`log(10)/10` decibel
   conversions scattered across `elements.jl` (`Amplifier`/`Attenuator`),
   `dispersion.jl` (`Medium.loss`/gain dB → Np), `types.jl`
-  (`AmplifyingMedium`'s `g0_db`), `nonlinearity.jl` (ASE noise figure), and
-  `analysis.jl` (`rin_rms`) to call the new named conversion functions. Purely
-  a naming/DRY cleanup — the underlying formulas and numerical results are
-  unchanged.
+  (`AmplifyingMedium`'s `g0_db`), `nonlinearity.jl` (ASE noise figure),
+  `analysis.jl` (`rin_rms`), and `fibers.jl` (`HollowCoreFiber`'s gamma and
+  confinement-loss dB conversion) to call the new named conversion functions.
+  Purely a naming/DRY cleanup — the underlying formulas and numerical results
+  are unchanged.
+- Reduced `instantaneous_frequency` allocation by ~9x (measured at N=4096) by
+  isolating its finite-difference loop behind a function barrier, avoiding
+  boxing from `Pulse`'s type-erased `grid` field.
+- Local docs builds (`DOCS_DRAFT=true julia --project=docs docs/make.jl`) can
+  now skip executing the example pages' full GNLSE solves for faster
+  iteration; CI is unaffected and still runs every example to completion.
+
+### Fixed
+
+- A unit test's decibel cross-check asserted the wrong expected value
+  (double-counted the amplitude/power dB squaring); no library code was
+  affected.
 
 ## [0.2.2] - 2026-09-07
 
@@ -86,7 +101,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Renamed JuGNLSE.jl to GNLSE.jl for Julia General registry compatibility.
 
-[Unreleased]: https://github.com/brian-sinquin/Soliton.jl/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/brian-sinquin/Soliton.jl/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/brian-sinquin/Soliton.jl/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/brian-sinquin/Soliton.jl/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/brian-sinquin/Soliton.jl/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/brian-sinquin/Soliton.jl/releases/tag/v0.2.0
