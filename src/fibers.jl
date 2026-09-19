@@ -302,8 +302,8 @@ hollow dielectric (silica-clad) waveguide, evaluated at absolute angular frequen
 
 where `a` is the core radius, and `ν = n_clad(λ)/n_gas(λ,P)` is the ratio of the silica
 cladding index (Malitson fused-silica Sellmeier fit, [`FusedSilica`](@ref)) to the
-gas core index. Returns the loss in [dB/m] (the natural-log/Np result of the formula
-above is converted via `10/ln(10)`), for direct use as a `Medium.loss` function.
+gas core index. Returns the loss in [dB/m] (the Np/m result of the formula above is
+converted via [`np_to_db`](@ref)), for direct use as a `Medium.loss` function.
 
 Reference: E. A. J. Marcatili & R. A. Schmeltzer, Bell Syst. Tech. J. 43, 1783 (1964).
 """
@@ -323,7 +323,7 @@ function _capillary_confinement_loss_dB_per_m(
 
     nu = nclad / ngas
     alpha_Np = (u01 / (2π))^2 * lam^2 / radius^3 * (nu^2 + 1.0) / sqrt(nu^2 - 1.0)  # [Np/m]
-    return alpha_Np * (10.0 / log(10.0))  # [dB/m]
+    return np_to_db(alpha_Np)  # [dB/m]
 end
 
 """
@@ -432,7 +432,7 @@ function HollowCoreFiber(;
 
     Aeff = 0.84 * π * radius^2
     n2_val = gas_n2(gas, pressure)
-    gamma_val = 2π * n2_val / (lambda0 * Aeff)
+    gamma_val = n2_aeff_to_gamma(n2_val, lambda0, Aeff)
 
     loss_final = if confinement_loss
         extra_loss = loss

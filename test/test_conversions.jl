@@ -56,8 +56,10 @@ using Soliton
         @test db_to_linear_amplitude(0.0) ≈ 1.0
         @test db_to_linear_amplitude(20.0) ≈ 10.0
         @test linear_amplitude_to_db(db_to_linear_amplitude(-4.2)) ≈ -4.2
-        # A doubling of amplitude is a quadrupling of power: consistent cross-check
-        @test db_to_linear_power(2 * linear_amplitude_to_db(2.0)) ≈ 4.0
+        # A doubling of amplitude is a quadrupling of power: consistent cross-check.
+        # The same numeric dB value means the same physical ratio under either
+        # convention (10*log10(A^2) == 20*log10(A)), so no extra factor of 2 here.
+        @test db_to_linear_power(linear_amplitude_to_db(2.0)) ≈ 4.0
         @test_throws ArgumentError linear_amplitude_to_db(0.0)
 
         # dB <-> Np (matches the loss/gain convention used internally for Medium.loss)
