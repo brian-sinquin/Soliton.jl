@@ -23,6 +23,15 @@ using LinearAlgebra
 # test/generate_vectorial_reference_data.py, built on `cnlse`
 # (https://github.com/WUST-FOG/cgnlse-python — vendored in test/cnlse_pkg/),
 # the WUST-FOG group's own Coupled GNLSE solver built on top of gnlse-python.
+#
+# Scenario 7 (SemiconductorMedium TPA) exploits gnlse-python's Kerr-only
+# nonlinear step accepting a *complex* nonlinearity value to encode TPA as
+# gamma_i = alpha2/(2*Aeff) — see the comment on that scenario below, and
+# test/generate_reference_data.py, for the full derivation. This is currently
+# the only externally-validated piece of SemiconductorMedium; 3PA and FCA/FCR
+# have no equivalent trick (see SemiconductorMedium's docstring "Known
+# Limitations" section) and are validated only via test/test_semiconductor.jl's
+# dedicated ODE ground-truth integrator.
 # ─────────────────────────────────────────────────────────────────────────────
 
 const REFDIR = joinpath(@__DIR__, "reference_data")
@@ -310,5 +319,73 @@ end
         # Peak intensity matches to within 5%
         @test isapprox(maximum(abs2.(Ax_julia)), maximum(Ax_int); rtol=0.05)
         @test isapprox(maximum(abs2.(Ay_julia)), maximum(Ay_int); rtol=0.05)
+    end
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Scenario 7 — Two-Photon Absorption via the "complex gamma" trick
+    #
+    # gnlse-python has no TPA/free-carrier model, but its Kerr-only nonlinear
+    # step `rv = 1j*gamma*W*M*exp(-D*z)` accepts a *complex* `nonlinearity`
+    # value: with gamma = gamma_r + i*gamma_i, `1j*gamma*M = 1j*gamma_r*M -
+    # gamma_i*M`, i.e. ordinary Kerr phase plus a `-gamma_i*|A|^2*A` loss term
+    # -- exactly `SemiconductorMedium`'s TPA equation with gamma_i =
+    # alpha2/(2*Aeff) (the standard "complex gamma = Kerr + i*TPA" convention,
+    # Lin, Painter & Agrawal, Opt. Express 15, 16604 (2007)). This lets the
+    # already-vendored gnlse-python dependency serve as an independent,
+    # externally-implemented solver (scipy solve_ivp RK45, not Soliton's own
+    # ERK4IP/SSFM) for the TPA channel specifically -- see
+    # test/generate_reference_data.py Scenario 7 for the reference generator.
+    #
+    # 3PA and FCA/FCR still have no such trick available: 3PA is a quintic
+    # field nonlinearity (|A|^4*A) that gnlse-python's cubic-only Kerr/Raman
+    # step cannot express, and FCA/FCR require an auxiliary carrier-density
+    # ODE gnlse-python has no concept of. Those remain validated only via the
+    # dedicated ODE ground-truth integrator in test/test_semiconductor.jl.
+    # ─────────────────────────────────────────────────────────────────────────
+    @testset "Scenario 7 — Two-Photon Absorption (complex γ vs gnlse-python)" begin
+        ref = readdlm(joinpath(REFDIR, "gnlse_tpa.csv"), ',', Float64; skipstart=1)
+        z_ref = ref[:, 1]      # m
+        peak_ref = ref[:, 2]   # W
+
+        ref_field = readdlm(joinpath(REFDIR, "gnlse_tpa_field.csv"), ',', Float64; skipstart=1)
+        At_ref = ref_field[:, 2] .+ 1im .* ref_field[:, 3]   # sqrt(W)
+
+        alpha2 = 5.0e-12   # m/W
+        Aeff = 0.1e-12     # m^2
+        lam0 = 1550e-9
+
+        grid = create_grid(N_PTS, T_WIN, lam0)
+        medium = SemiconductorMedium(;
+            length=z_ref[end], gamma=100.0, alpha2=alpha2, Aeff=Aeff,
+            sigma_fca=0.0, k_fcr=0.0, alpha3=0.0, tau_c=1.0e-9,
+            betas=[-1000e-27], lambda0=lam0,
+        )
+        pulse = gaussian_pulse(grid, 50.0, 1.0e-12)
+        params = SimParams(;
+            medium=medium,
+            z_saves=length(z_ref),
+            raman_model=nothing,
+            self_steepening=false,
+            rtol=1e-10,
+            atol=1e-12,
+        )
+        sol = solve(pulse, params; progress=false)
+
+        peak_julia = [maximum(abs2, sol.At[:, i]) for i in axes(sol.At, 2)]
+
+        # TPA collapses peak power ~13x over this run (50 W -> ~3.8 W); a
+        # missing/mis-scaled TPA term would produce a very different curve, so
+        # 1% per-point tolerance is tight but achievable between two
+        # independently-implemented adaptive solvers.
+        @testset "vs gnlse-python peak power at each z" begin
+            for i in eachindex(peak_ref)
+                @test isapprox(peak_julia[i], peak_ref[i]; rtol=0.01)
+            end
+        end
+
+        # Full-field cross-correlation at the waveguide output
+        At_julia = sol.At[:, end]
+        xcorr = abs(dot(At_julia, At_ref))^2 / (sum(abs2, At_julia) * sum(abs2, At_ref))
+        @test xcorr >= 0.999
     end
 end

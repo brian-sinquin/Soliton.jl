@@ -15,9 +15,11 @@ Each example in **Soliton.jl** reproduces a key result from the nonlinear optics
 | **5** | [Higher-Order Soliton Compression](ex5_soliton_compression.md) | Mollenauer et al., *Phys. Rev. Lett.* **45**, 1095 (1980) | Periodic temporal compression ($N=3$) | `soliton_number`, `Medium` |
 | **6** | [Stable N=3 Soliton Recurrence](ex6_stable_n3_soliton.md) | Zakharov & Shabat (1972); Akhmediev (1987) | FPUT recurrence & perturbation stability | `solve`, `ERK4IP` |
 | **7** | [Gas-Filled Hollow-Core PCF](ex7_hollowcore_gas.md) | Russell et al., *Nat. Photonics* **8**, 278 (2014) | Pressure-tuned dispersion ($\beta_n(P)$) & gas Raman | `HollowCoreFiber`, `MolecularRamanGas` |
-| **8** | [Silicon Photonics (TPA)](ex8_silicon_tpa.md) | Yin & Agrawal, *Opt. Lett.* **32**, 2031 (2007) | Two-photon absorption & free-carrier blue-shift | `SemiconductorMedium` |
+| **8** | [Silicon TPA Optical Limiter](ex8_silicon_tpa.md) | Yin & Agrawal, *Opt. Lett.* **32**, 2031 (2007) | Two-photon absorption power-limiting curve | `SemiconductorMedium`, `solve_sweep` |
 | **9** | [Femtosecond EDFA Amplifier](ex9_edfa_amplifier.md) | Agrawal, *Nonlinear Fiber Optics*, Ch. 11 | Gain saturation & quantum ASE noise | `AmplifyingMedium` |
 | **10** | [Multithreaded Parameter Sweep](ex10_parallel_sweep.md) | ZDW Boundary & Dispersive Wave Trapping | 2D Spectral Heatmap across ZDW | `solve_sweep`, `Threads` |
+| **11** | [Mid-IR Three-Photon Absorption](ex11_silicon_3pa.md) | Opt. Express **21**, 32192 (2013) | TPA (∝P) vs 3PA (∝P²) fractional-loss scaling | `SemiconductorMedium` (`alpha3`) |
+| **12** | [Free-Carrier Lifetime Pump-Probe](ex12_freecarrier_decay.md) | Turner-Foster et al., *Opt. Express* **18**, 3582 (2010) | Carrier recombination decay via delayed probe | `SemiconductorMedium`, `Pulse` |
 
 ---
 
@@ -68,13 +70,14 @@ hcf    = HollowCoreFiber(; radius=15e-6, gas=:Ar, pressure=3.0, length=0.5, lamb
 sol    = solve(pulse, SimParams(; medium=hcf, raman_model=nothing))
 ```
 
-### 5. Silicon Nanowire (TPA & Free Carriers)
+### 5. Silicon Nanowire (TPA, 3PA & Free Carriers)
 ```julia
 using Soliton
 
 grid   = create_grid(2^12, 40e-12, 1550e-9)
 pulse  = gaussian_pulse(grid, 30.0, 2.0e-12)
-soi    = SemiconductorMedium(; length=0.01, gamma=300.0, alpha2=5.0e-12, Aeff=0.1e-12, tau_c=1.0e-9, betas=[-1000e-27], lambda0=1550e-9)
+# alpha3 defaults to 0.0 (pure TPA); set it for mid-IR (>~2.2 μm) waveguides
+soi    = SemiconductorMedium(; length=0.01, gamma=300.0, alpha2=5.0e-12, alpha3=0.0, Aeff=0.1e-12, tau_c=1.0e-9, betas=[-1000e-27], lambda0=1550e-9)
 sol    = solve(pulse, SimParams(; medium=soi, raman_model=nothing))
 ```
 
