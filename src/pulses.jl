@@ -97,7 +97,10 @@ end
 """
     lorentzian_pulse(grid::Grid, Pmax::Real, FWHM::Real)
 
-Generate Lorentzian pulse following gnlse-python LorentzianEnvelope.
+Generate a Lorentzian field envelope following gnlse-python LorentzianEnvelope.
+The intensity is the square of the Lorentzian envelope; `FWHM` specifies its
+intensity full width at half maximum, and `Pmax` its peak intensity [W].
+The sampled peak may be slightly lower when the grid does not contain t = 0.
 
 # Arguments
 
@@ -139,6 +142,9 @@ end
     cw_pulse(grid::Grid, Pmax::Real; Pn::Real=0.0, rng=Random.default_rng())
 
 Generate a continuous-wave (CW) field with optional broadband temporal noise.
+With `Pn=0`, every time bin has power `Pmax`. For `Pn>0`, the ensemble-mean
+power is `Pmax + Pn`; interference makes the instantaneous power fluctuate.
+Pass a seeded RNG for reproducible noise.
 
 # Arguments
 

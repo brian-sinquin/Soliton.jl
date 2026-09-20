@@ -5,6 +5,7 @@ using Soliton
     include("test_unit.jl")
     include("test_audit_fixes.jl")
     include("test_api.jl")
+    include("test_coverage.jl")
     include("test_solvers.jl")
     include("test_physics.jl")
     include("test_vectorial.jl")

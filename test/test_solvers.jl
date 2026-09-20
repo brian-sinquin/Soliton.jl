@@ -232,3 +232,24 @@ using Soliton
         @test_throws ArgumentError SimParams(; medium=medium, z_saves=0)
     end
 end
+
+@testset "SSFM known first-order convergence" begin
+    T0, beta2, gamma = 100e-15, -20e-27, 0.01
+    LD = T0^2 / abs(beta2)
+    P0 = abs(beta2) / (gamma * T0^2) # N = 1
+    grid = create_grid(2^11, 40T0, 1550e-9)
+    pulse = sech_pulse(grid, P0, 2asinh(1) * T0)
+    medium = Medium(LD, gamma, 0.0, [beta2], 1550e-9)
+    exact = sqrt(P0) .* sech.(grid.t ./ T0) .* cis(0.5)
+    errors = map((100, 200, 400)) do steps
+        params = SimParams(; medium, z_saves=2, solver=SSFM(LD / steps),
+                           raman_model=nothing, self_steepening=false)
+        sol = solve(pulse, params; progress=false)
+        sqrt(sum(abs2, sol.At[:, end] .- exact) / sum(abs2, exact))
+    end
+    @test all(isfinite, errors)
+    for i in 1:2
+        order = log2(errors[i] / errors[i + 1])
+        @test 0.9 < order < 1.2
+    end
+end

@@ -45,7 +45,12 @@ end
 """
     SSFM(dz)
 
-Fixed-step Symmetric Split-Step Fourier Method (SSFM) solver configuration.
+Fixed-step Split-Step Fourier Method (SSFM) solver configuration.
+
+!!! warning "First-order nonlinear substep"
+    The nonlinear substep uses explicit Euler, so the method is first-order
+    overall, NOT symmetric second-order Strang splitting. Linear half-steps
+    do not restore second-order accuracy.
 """
 struct SSFM <: GNLSESolver
     dz::Float64
@@ -62,6 +67,11 @@ end
 Phase-controlled adaptive Split-Step Fourier Method (SSFM) solver.
 Controls step size via maximum nonlinear phase shift per step:
 Δz_opt = phi_max / (γ_phys * P_max).
+
+!!! warning "First-order nonlinear substep"
+    The nonlinear substep uses explicit Euler, so this is NOT symmetric
+    second-order Strang splitting. Phase-based adaptation does not change
+    the first-order accuracy of the underlying method.
 """
 struct AdaptiveSSFM <: GNLSESolver
     phi_max::Float64

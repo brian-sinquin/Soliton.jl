@@ -10,6 +10,10 @@ import ..AdaptiveSSFM, ..propagate, ..Pulse, ..SimParams, ..Solution
     propagate(model::PhysicsModel, pulse::Pulse, params::SimParams, solver::AdaptiveSSFM, progress::Bool)
 
 Propagate pulse using Phase-Controlled Adaptive Split-Step Fourier Method (AdaptiveSSFM).
+!!! warning "First-order accuracy"
+    The nonlinear substep is explicit Euler, NOT symmetric second-order
+    Strang splitting. Adaptive phase control does not raise its order.
+
 Step size is controlled via local nonlinear phase shift:
 dz_opt = clamp(solver.phi_max / (gamma_phys * P_max + 1e-15), solver.dz_min, solver.dz_max)
 """
@@ -73,6 +77,7 @@ function propagate(
             mul!(u_mid, model.to_time, U_mid)
             Nu = model.nonlinear_function(u_mid, model, z + 0.5 * dz_step)
 
+            # First-order Euler nonlinear update, NOT second-order Strang splitting.
             @. U_nl = U_mid + dz_step * Nu
             @. U = U_nl * exp_half_dz_D
             z += dz_step

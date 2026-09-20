@@ -20,6 +20,11 @@ function pulse_energy(pulse::Pulse)
     return sum(abs2, pulse.At) * pulse.grid.dt
 end
 
+"""
+    pulse_energy(vpulse::VectorialPulse)
+
+Total energy [J], integrating the sum of both polarization intensities.
+"""
 function pulse_energy(vpulse::VectorialPulse)
     return (sum(abs2, @view(vpulse.At[:, 1])) + sum(abs2, @view(vpulse.At[:, 2]))) *
            vpulse.grid.dt
@@ -34,6 +39,12 @@ function peak_power(pulse::Pulse)
     return maximum(abs2, pulse.At)
 end
 
+"""
+    peak_power(vpulse::VectorialPulse)
+
+Maximum total instantaneous power [W] across both polarizations. The two
+intensities are summed before finding the maximum.
+"""
 function peak_power(vpulse::VectorialPulse)
     return maximum(abs2.(vpulse.At[:, 1]) .+ abs2.(vpulse.At[:, 2]))
 end
@@ -95,6 +106,11 @@ end
 
 Spectral width at the given intensity `level` (0.5 = FWHM), returned as ordinary
 frequency ν [Hz] (i.e. divided by 2π; not angular frequency ω [rad/s]).
+Use a fractional level in `(0, 1]`. The width spans the first and last sampled
+bins at or above `level * maximum(spectrum)`, without interpolating crossings;
+disconnected peaks are included in that span. Returns zero for a zero spectrum
+or fewer than two qualifying bins. For interpolated spectral FWHM in rad/s,
+use `fwhm(pulse; domain=:frequency)`.
 """
 function spectral_bandwidth(pulse::Pulse; level::Float64=0.5)
     spectrum = abs2.(fftshift(pulse.AW))
@@ -236,7 +252,7 @@ end
 
 Intensity-weighted center frequency of the pulse spectrum relative to the
 carrier: ⟨ω - ω₀⟩ [rad/s]. Returns zero for a spectrum centered at the carrier;
-positive/negative for red/blue shifts. Useful for tracking spectral drift during
+positive/negative for blue/red shifts. Useful for tracking spectral drift during
 nonlinear propagation.
 """
 function spectral_centroid(pulse::Pulse)
@@ -253,7 +269,10 @@ GNLSE integration. For a lossless fiber this quantity is conserved by the GNLSE
 (including self-steepening); a drift indicates the step-size tolerance is too
 loose. Note: the returned value is *not* an absolute photon count — it lacks the
 ℏ and dω normalization factors and should only be compared *relative* to itself
-along the propagation axis. For a `Solution`, returns one value per saved distance.
+along the propagation axis. Multiplying the pulse result by `grid.N * grid.dt / ℏ`
+restores the absolute photon count for spectra confined to positive optical
+frequencies. For a narrowband pulse this is approximately `pulse_energy(pulse) /
+(ℏ * grid.omega0)`. For a `Solution`, returns one value per saved distance.
 """
 function photon_number(pulse::Pulse)
     # pulse.AW = ifft(At) is in FFT order; align the absolute-frequency grid.
@@ -524,6 +543,10 @@ relative-intensity-noise power spectral density `psd_dbc_hz` [dBc/Hz] over a
 one-sided detection `bandwidth` [Hz]:
 
     σ² = ∫₀^B S(f) df = 10^(RIN/10) · B
+
+This converts a flat PSD specification; it does not estimate RIN from a pulse
+or an ensemble. `bandwidth` must be positive. The returned fractional RMS
+power fluctuation is dimensionless.
 
 Use the result as the `rin` argument of [`add_noise`](@ref). Example: a laser
 with −150 dBc/Hz RIN observed over a 1 GHz bandwidth gives

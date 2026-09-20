@@ -9,7 +9,11 @@ import ..SSFM, ..propagate
 """
     propagate(model::PhysicsModel, pulse::Pulse, params::SimParams, solver::SSFM, progress::Bool)
 
-Propagate the pulse using the fixed-step Symmetric Split-Step Fourier Method (SSFM).
+Propagate the pulse using the fixed-step Split-Step Fourier Method (SSFM).
+
+!!! warning "First-order accuracy"
+    The nonlinear substep is explicit Euler, NOT symmetric second-order
+    Strang splitting, despite the surrounding linear half-steps.
 """
 function propagate(
     model::PhysicsModel,
@@ -79,7 +83,8 @@ function propagate(
             # Evaluate nonlinear operator at midpoint
             Nu = model.nonlinear_function(u_mid, model, z_mid)
 
-            # Apply nonlinear step: Euler step at midpoint
+            # First-order explicit Euler nonlinear substep; NOT symmetric second-order
+            # Strang splitting. The linear midpoint does not raise the order.
             @. U_nl = U_mid + dz_eff * Nu
 
             # ASE noise (AmplifyingMedium only; no-op otherwise)
