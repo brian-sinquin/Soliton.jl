@@ -57,6 +57,22 @@ The nonlinear coefficient ``\gamma`` can be:
 - **z-dependent** — a function `γ(z)` for tapered or graded fibers
 - **Frequency-dependent** — `FrequencyDependentNonlinearity` or derived from effective mode area via `NonlinearityFromEffectiveArea`
 
+## The B-Integral (Self-Focusing Risk)
+
+The accumulated nonlinear phase carried by the pulse peak,
+
+```math
+B(z) = \int_0^z \gamma(z')\, P_{\rm peak}(z')\, {\rm d}z' ,
+```
+
+is the standard quantitative indicator for the risk of catastrophic
+self-focusing / beam breakup in high-peak-power laser chains (CPA
+amplifiers, fiber amplifiers, multi-pass cells). Design rules of thumb keep
+the total B below roughly 3–4 rad across a chain [Perry & Mourou 1994].
+[`b_integral`](@ref) and [`b_integral_profile`](@ref) compute it directly
+from a `Solution`/`VectorialSolution` and its `Medium`, post-propagation —
+no separate tracking is needed during `solve`.
+
 ## Raman Scattering
 
 Three models for the Raman response ``h_R(t)`` are available:
@@ -143,6 +159,7 @@ All solvers work in the **interaction picture** — the simulation variable ``U 
 ## References
 
 - G. P. Agrawal, *Nonlinear Fiber Optics*, 6th ed. (Academic Press, 2019)
+- M. D. Perry & G. Mourou, "Terawatt to Petawatt Subpicosecond Lasers," Science **264**, 917 (1994)
 - J. M. Dudley, G. Genty & S. Coen, Rev. Mod. Phys. **78**, 1135 (2006)
 - P. St.J. Russell et al., Nat. Photonics **8**, 278 (2014)
 - L. Yin & G. P. Agrawal, Opt. Lett. **32**, 2031-2033 (2007)
