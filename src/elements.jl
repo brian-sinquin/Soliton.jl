@@ -94,28 +94,28 @@ PMDElement(mean_dgd::Real; rng::AbstractRNG=default_rng()) =
 Apply the lumped element to the optical pulse, returning a new `Pulse`.
 """
 function apply(pulse::Pulse, amp::Amplifier)
-    factor = 10.0^(amp.gain_db / 20.0)
+    factor = db_to_linear_amplitude(amp.gain_db)
     At = pulse.At .* factor
     AW = pulse.AW .* factor
     return Pulse(At, AW, pulse.grid)
 end
 
 function apply(vpulse::VectorialPulse, amp::Amplifier)
-    factor = 10.0^(amp.gain_db / 20.0)
+    factor = db_to_linear_amplitude(amp.gain_db)
     At = vpulse.At .* factor
     AW = vpulse.AW .* factor
     return VectorialPulse(At, AW, vpulse.grid)
 end
 
 function apply(pulse::Pulse, att::Attenuator)
-    factor = 10.0^(-att.loss_db / 20.0)
+    factor = db_to_linear_amplitude(-att.loss_db)
     At = pulse.At .* factor
     AW = pulse.AW .* factor
     return Pulse(At, AW, pulse.grid)
 end
 
 function apply(vpulse::VectorialPulse, att::Attenuator)
-    factor = 10.0^(-att.loss_db / 20.0)
+    factor = db_to_linear_amplitude(-att.loss_db)
     At = vpulse.At .* factor
     AW = vpulse.AW .* factor
     return VectorialPulse(At, AW, vpulse.grid)
