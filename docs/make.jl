@@ -3,11 +3,21 @@ using Documenter
 
 DocMeta.setdocmeta!(Soliton, :DocTestSetup, :(using Soliton); recursive=true)
 
+# The example pages run real GNLSE solves (up to 2^14 grid points, hundreds of
+# z_saves) inside `@example` blocks, so a full build takes several minutes.
+# For local iteration on prose/navigation/formatting, run with
+# `DOCS_DRAFT=true julia --project=docs docs/make.jl` to skip executing those
+# blocks (Documenter renders a placeholder instead). CI never sets this, so
+# PRs still get the full execution — a broken example fails the build there,
+# per the `warnonly` note below.
+draft = get(ENV, "DOCS_DRAFT", "false") == "true"
+
 makedocs(;
     modules=[Soliton],
     authors="Brian Sinquin <148503669+brian-sinquin@users.noreply.github.com> and contributors",
     sitename="Soliton.jl",
     checkdocs=:exports,
+    draft=draft,
     format=Documenter.HTML(;
         canonical="https://brian-sinquin.github.io/Soliton.jl",
         edit_link="master",
@@ -39,9 +49,11 @@ makedocs(;
             "5 — HOSoliton Compression" => "examples/ex5_soliton_compression.md",
             "6 — Stable N=3 Soliton" => "examples/ex6_stable_n3_soliton.md",
             "7 — Hollow-Core Gas Fiber" => "examples/ex7_hollowcore_gas.md",
-            "8 — Silicon Photonics (TPA)" => "examples/ex8_silicon_tpa.md",
+            "8 — Silicon TPA Limiter" => "examples/ex8_silicon_tpa.md",
             "9 — EDFA Pulse Amplifier" => "examples/ex9_edfa_amplifier.md",
             "10 — Multithreaded Sweep" => "examples/ex10_parallel_sweep.md",
+            "11 — Mid-IR 3PA Scaling" => "examples/ex11_silicon_3pa.md",
+            "12 — Free-Carrier Lifetime" => "examples/ex12_freecarrier_decay.md",
         ],
         "API Reference" => [
             "Medium" => "api/medium.md",

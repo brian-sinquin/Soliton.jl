@@ -57,6 +57,22 @@ The nonlinear coefficient ``\gamma`` can be:
 - **z-dependent** — a function `γ(z)` for tapered or graded fibers
 - **Frequency-dependent** — `FrequencyDependentNonlinearity` or derived from effective mode area via `NonlinearityFromEffectiveArea`
 
+## The B-Integral (Self-Focusing Risk)
+
+The accumulated nonlinear phase carried by the pulse peak,
+
+```math
+B(z) = \int_0^z \gamma(z')\, P_{\rm peak}(z')\, {\rm d}z' ,
+```
+
+is the standard quantitative indicator for the risk of catastrophic
+self-focusing / beam breakup in high-peak-power laser chains (CPA
+amplifiers, fiber amplifiers, multi-pass cells). Design rules of thumb keep
+the total B below roughly 3–4 rad across a chain [Perry & Mourou 1994].
+[`b_integral`](@ref) and [`b_integral_profile`](@ref) compute it directly
+from a `Solution`/`VectorialSolution` and its `Medium`, post-propagation —
+no separate tracking is needed during `solve`.
+
 ## Raman Scattering
 
 Three models for the Raman response ``h_R(t)`` are available:
@@ -121,18 +137,22 @@ Gas guidance in hollow-core anti-resonant / photonic crystal fibers (HC-PCF) com
    with coefficients from Börzsönyi et al. (2013) for noble gases (`:Ar`, `:Ne`, `:Kr`, `:Xe`) and molecular gases (`:H2`, `:N2`).
 3. **Molecular Gas Raman Response**: Rotational ($S(1)$ shift $17.6\text{ THz}$) and vibrational ($Q(1)$ shift $124.6\text{ THz}$) Raman lines for $\text{H}_2$ and $\text{N}_2$.
 
-## Semiconductor Photonics & TPA / Free Carriers
+## Semiconductor Photonics & TPA / 3PA / Free Carriers
 
-In silicon nanowires, Germanium, and GaAs PIC waveguides, two-photon absorption (TPA) and free-carrier dynamics modify pulse propagation:
+In silicon nanowires, Germanium, and GaAs PIC waveguides, two-photon absorption (TPA), three-photon absorption (3PA), and free-carrier dynamics modify pulse propagation. 3PA is the dominant nonlinear-absorption channel in the mid-infrared, where the photon energy is below half the bandgap (TPA forbidden) but three-photon transitions remain allowed:
 
 1. **Two-Photon Absorption (TPA)**:
    ```math
    \frac{\partial A}{\partial z} \Big|_{\text{TPA}} = -\frac{\alpha_2}{2 A_{\text{eff}}} |A|^2 A
    ```
-2. **Free-Carrier Dynamics**:
-   Carrier density $N_c(t)$ evolves via the TPA rate equation:
+2. **Three-Photon Absorption (3PA)**:
    ```math
-   \frac{d N_c}{dt} = \frac{\alpha_2}{2 \hbar \omega_0 A_{\text{eff}}^2} |A(t)|^4 - \frac{N_c(t)}{\tau_c}
+   \frac{\partial A}{\partial z} \Big|_{\text{3PA}} = -\frac{\alpha_3}{2 A_{\text{eff}}^2} |A|^4 A
+   ```
+3. **Free-Carrier Dynamics**:
+   Carrier density $N_c(t)$ evolves via the additive TPA + 3PA generation rate:
+   ```math
+   \frac{d N_c}{dt} = \frac{\alpha_2}{2 \hbar \omega_0 A_{\text{eff}}^2} |A(t)|^4 + \frac{\alpha_3}{3 \hbar \omega_0 A_{\text{eff}}^3} |A(t)|^6 - \frac{N_c(t)}{\tau_c}
    ```
    producing Free-Carrier Absorption (FCA loss $\sigma_{\text{FCA}} N_c$) and Free-Carrier Refraction (FCR index blue-shifting $-k_{\text{FCR}} N_c$).
 
@@ -143,6 +163,7 @@ All solvers work in the **interaction picture** — the simulation variable ``U 
 ## References
 
 - G. P. Agrawal, *Nonlinear Fiber Optics*, 6th ed. (Academic Press, 2019)
+- M. D. Perry & G. Mourou, "Terawatt to Petawatt Subpicosecond Lasers," Science **264**, 917 (1994)
 - J. M. Dudley, G. Genty & S. Coen, Rev. Mod. Phys. **78**, 1135 (2006)
 - P. St.J. Russell et al., Nat. Photonics **8**, 278 (2014)
 - L. Yin & G. P. Agrawal, Opt. Lett. **32**, 2031-2033 (2007)
@@ -150,3 +171,6 @@ All solvers work in the **interaction picture** — the simulation variable ``U 
 - Q. Lin & G. P. Agrawal, Opt. Lett. **31**, 3086 (2006)
 - D. Hollenbeck & C. D. Cantrell, J. Opt. Soc. Am. B **19**, 2886 (2002)
 - W. H. Blow & D. Wood, IEEE J. Quantum Electron. **25**, 2665 (1989)
+- Q. Lin, J. Zhang, G. Piestun, R. Boyraz & G. P. Agrawal, "Nonlinear optical phenomena in silicon waveguides: modeling and applications," Opt. Express **15**, 16604 (2007)
+- "Multi-photon absorption and third-order nonlinearity in silicon at mid-infrared wavelengths," Opt. Express **21**, 32192 (2013)
+- "Impact of third-order dispersion and three-photon absorption on mid-infrared time magnification via four-wave mixing in Si₀.₈Ge₀.₂ waveguides," Appl. Opt. **59**, 1187 (2020)
