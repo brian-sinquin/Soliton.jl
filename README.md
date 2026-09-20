@@ -16,6 +16,7 @@ Soliton.jl is the successor to [FiberNlse.jl](https://github.com/brian-sinquin/F
 - Gas-filled hollow-core PCF with pressure-tunable dispersion and molecular Raman response
 - Silicon photonics: two-photon and three-photon absorption, and free-carrier dynamics
 - Coupled vectorial/birefringent GNLSE solver (SPM + XPM + FWM)
+- Quantitative indicators: soliton number, dispersion/nonlinear lengths, B-integral self-focusing risk
 - Cascaded multi-stage pipelines (fibers, amplifiers, filters) via `|>` piping
 - Adaptive (`ERK4IP`, `AdaptiveSSFM`) and fixed-step (`SSFM`) solvers, multi-threaded parameter sweeps
 
