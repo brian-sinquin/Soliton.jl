@@ -32,6 +32,82 @@ using Soliton
         @test frequency_to_wavelength(f) ≈ lam
     end
 
+    @testset "Wavelength <-> Angular Frequency" begin
+        lam = 1550e-9
+        omega = wavelength_to_omega(lam)
+        @test omega ≈ 2π * wavelength_to_frequency(lam)
+        @test omega_to_wavelength(omega) ≈ lam
+        # Consistent with the internal Grid convention omega0 = 2*pi*c/lambda0
+        grid = create_grid(2^8, 1e-12, lam)
+        @test wavelength_to_omega(lam) ≈ grid.omega0
+        @test omega_to_wavelength(grid.omega0) ≈ lam
+    end
+
+    @testset "Decibel / power-ratio conversions" begin
+        # Power-ratio dB <-> linear
+        @test db_to_linear_power(0.0) ≈ 1.0
+        @test db_to_linear_power(10.0) ≈ 10.0
+        @test db_to_linear_power(20.0) ≈ 100.0
+        @test linear_power_to_db(db_to_linear_power(13.7)) ≈ 13.7
+        @test_throws ArgumentError linear_power_to_db(0.0)
+        @test_throws ArgumentError linear_power_to_db(-1.0)
+
+        # Amplitude-ratio dB <-> linear (factor of 2 vs power dB)
+        @test db_to_linear_amplitude(0.0) ≈ 1.0
+        @test db_to_linear_amplitude(20.0) ≈ 10.0
+        @test linear_amplitude_to_db(db_to_linear_amplitude(-4.2)) ≈ -4.2
+        # A doubling of amplitude is a quadrupling of power: consistent cross-check.
+        # The same numeric dB value means the same physical ratio under either
+        # convention (10*log10(A^2) == 20*log10(A)), so no extra factor of 2 here.
+        @test db_to_linear_power(linear_amplitude_to_db(2.0)) ≈ 4.0
+        @test_throws ArgumentError linear_amplitude_to_db(0.0)
+
+        # dB <-> Np (matches the loss/gain convention used internally for Medium.loss)
+        @test db_to_np(10.0) ≈ log(10.0)
+        @test np_to_db(db_to_np(0.2)) ≈ 0.2
+        # A 10 dB/m loss over 1 m attenuates power by exactly a factor of 10
+        @test exp(-db_to_np(10.0)) ≈ 0.1
+
+        # dBm <-> W
+        @test dbm_to_watt(0.0) ≈ 1e-3      # 0 dBm = 1 mW
+        @test dbm_to_watt(30.0) ≈ 1.0      # 30 dBm = 1 W
+        @test watt_to_dbm(1.0) ≈ 30.0
+        @test watt_to_dbm(1e-3) ≈ 0.0
+        @test watt_to_dbm(dbm_to_watt(17.3)) ≈ 17.3
+        @test_throws ArgumentError watt_to_dbm(0.0)
+        @test_throws ArgumentError watt_to_dbm(-1.0)
+    end
+
+    @testset "Loss/gain refactor: dB helpers match Medium's internal dB/m -> Np/m operator" begin
+        # Regression guard: dispersion_operator's real part is (gain-loss)/2 [1/m],
+        # so a scalar 10 dB/m loss must give real(D) = -db_to_np(10.0)/2 everywhere.
+        grid = create_grid(2^8, 1e-12, 1550e-9)
+        medium = Medium(; length=1.0, gamma=0.0, loss=10.0, betas=[0.0], lambda0=1550e-9)
+        D = dispersion_operator(grid, medium)
+        @test all(x -> isapprox(real(x), -db_to_np(10.0) / 2; atol=1e-12), D)
+    end
+
+    @testset "Photon energy" begin
+        # Well-known reference values: hc/lambda in eV
+        eV = 1.602176634e-19
+        @test photon_energy(1550e-9) / eV ≈ 0.7999 rtol=1e-3
+        @test photon_energy(1000e-9) / eV ≈ 1.2398 rtol=1e-3
+        # Scales as 1/lambda
+        @test photon_energy(500e-9) ≈ 2 * photon_energy(1000e-9)
+    end
+
+    @testset "n2/Aeff <-> gamma" begin
+        n2 = 2.6e-20   # fused silica, m^2/W
+        Aeff = 80e-12  # 80 um^2, typical SMF
+        lambda0 = 1550e-9
+        gamma = n2_aeff_to_gamma(n2, lambda0, Aeff)
+        # Typical SMF-28-like gamma is ~1-1.5 /W/km
+        @test 0.5e-3 < gamma < 3.0e-3
+        @test gamma_aeff_to_n2(gamma, lambda0, Aeff) ≈ n2
+        @test_throws ArgumentError n2_aeff_to_gamma(n2, -lambda0, Aeff)
+        @test_throws ArgumentError n2_aeff_to_gamma(n2, lambda0, -Aeff)
+    end
+
     @testset "Automated Soliton Tracking" begin
         grid = create_grid(2^10, 10e-12, 835e-9)
         medium = Medium(0.02, 0.11, 0.0, [-1.0e-26], 835e-9)

@@ -133,4 +133,36 @@ using Soliton
         vpulse_piped = vpulse |> Amplifier(3.0) |> params |> VectorialPulse
         @test vpulse_piped isa VectorialPulse
     end
+
+    @testset "B-integral for VectorialSolution uses combined polarization power" begin
+        # No dispersion ⇒ pure coupled-Kerr SPM/XPM, combined peak power |Ax|²+|Ay|²
+        # is conserved along z, so B reduces to γ·P_combined·L exactly.
+        gam = 0.1
+        L = 0.02
+        Px0, Py0 = 20.0, 10.0
+
+        grid = create_grid(2^10, 10e-12, 835e-9)
+        dis_x = TaylorDispersion([0.0])
+        dis_y = TaylorDispersion([0.0])
+        medium = BirefringentMedium(L, gam, 0.0, dis_x, dis_y, 0.0, 835e-9)
+
+        px = gaussian_pulse(grid, Px0, 200e-15)
+        py = gaussian_pulse(grid, Py0, 200e-15)
+        vpulse = VectorialPulse(px.At, py.At, grid)
+
+        # BirefringentMedium only supports the SSFM solver (no ERK4IP method exists
+        # for VectorialPulse), matching every other vectorial SimParams in this file.
+        params = SimParams(;
+            medium=medium, z_saves=10, solver=SSFM(1e-5), raman_model=nothing
+        )
+        sol = solve(vpulse, params; progress=false)
+
+        P_combined = maximum(abs2.(vpulse.At[:, 1]) .+ abs2.(vpulse.At[:, 2]))
+        @test b_integral(sol, medium) ≈ gam * P_combined * L rtol = 3e-3
+        @test b_integral(sol, params) ≈ b_integral(sol, medium)
+
+        profile = b_integral_profile(sol, medium)
+        @test profile[1] == 0.0
+        @test issorted(profile)
+    end
 end

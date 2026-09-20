@@ -224,6 +224,13 @@ two quantities every `build_physics_model` method needs:
   - `gamma_W_mon`: the frequency-domain `γ(ω)` weighting vector (monotonic
     frequency order, matching `grid.W`).
 
+The product `eval_gamma(gamma_z_model, z, omega0) * gamma_W_mon` is the
+physical nonlinear spectral coefficient [1/(W·m)]. Numeric, constant-wrapper,
+and z-dependent inputs use γ/ω₀ times ω₀ (shock off) or ω (shock on).
+Frequency-dependent and effective-area inputs instead use a scalar 1 and the
+full spectral coefficient; they must not be divided by ω₀ again. This contract
+applies to the Kerr/Raman polarization only, never to gain saturation.
+
 Dispatched by type instead of an `isa` chain, so every `AbstractMedium` gets
 the same `NonlinearityModel` support for free — previously `AmplifyingMedium`
 and `SemiconductorMedium` only handled `Number`/`Function` and would hit a
@@ -374,11 +381,19 @@ function _amplifying_spm(u, model::PhysicsModel, z::Real)
     gamma_z = eval_gamma(model.gamma, z, model.omega0)
     ig = 1.0im * gamma_z
 
-    @. model.buf_t1 = u * (ig * abs2(u) + delta_g)
-
+    # Kerr term in time domain: u * (i * gamma_z * |u|^2)
+    @. model.buf_t1 = u * (ig * abs2(u))
+    # Transform Kerr term to frequency (to_freq = ifft)
     mul!(model.buf_f1, model.to_freq, model.buf_t1)
-    inv_w0 = 1.0 / model.omega0
-    @. model.buf_f1 = model.buf_f1 * model.gamma_W * inv_w0
+    # Apply gamma_W to Kerr term
+    @. model.buf_f1 = model.buf_f1 * model.gamma_W
+
+    # Gain term in time domain: delta_g * u
+    @. model.buf_t1 = delta_g * u
+    # Transform gain term into temporary buffer buf_t2
+    mul!(model.buf_t2, model.to_freq, model.buf_t1)
+    # Add gain term frequency domain (no gamma_W multiplication)
+    @. model.buf_f1 += model.buf_t2
 
     return model.buf_f1
 end
@@ -403,11 +418,18 @@ function _amplifying_spm_raman(u, model::PhysicsModel, z::Real)
     ig = 1.0im * gamma_z
 
     @. model.buf_t1 =
-        u * (ig * ((1.0 - model.fr) * abs2(u) + model.fr * dt * model.buf_t2) + delta_g)
+        u * ig * ((1.0 - model.fr) * abs2(u) + model.fr * dt * model.buf_t2)
 
     mul!(model.buf_f1, model.to_freq, model.buf_t1)
-    inv_w0 = 1.0 / model.omega0
-    @. model.buf_f1 = model.buf_f1 * model.gamma_W * inv_w0
+    # Weight only the Kerr/Raman polarization, as in the passive operator.
+    @. model.buf_f1 = model.buf_f1 * model.gamma_W
+
+    # Saturation is an amplitude gain [1/m], independent of gamma_W. The Raman
+    # convolution in buf_t2 must be fully consumed into buf_t1 above before
+    # overwriting buf_t2 with the gain spectrum; do not move this reuse earlier.
+    @. model.buf_t1 = delta_g * u
+    mul!(model.buf_t2, model.to_freq, model.buf_t1)
+    @. model.buf_f1 += model.buf_t2
 
     return model.buf_f1
 end
@@ -534,7 +556,7 @@ function inject_ase_noise!(
     E_pulse = sum(abs2, u_time) * dt
     g_local = g0_val * (Esat / (Esat + E_pulse))  # net saturated gain [1/m]
 
-    n_sp = 10.0^(aux.noise_figure_db / 10.0) / 2.0
+    n_sp = db_to_linear_power(aux.noise_figure_db) / 2.0
     n_ase = n_sp * (exp(g_local * dz) - 1.0)
     n_ase > 0 || return U
 

@@ -321,5 +321,11 @@ using Soliton
             pulse, SimParams(; medium=m_marcuse, raman_model=nothing); progress=false
         )
         @test sol_marcuse.Z[end] == 0.1
+
+        # 5. b_integral resolves every NonlinearityModel variant to the same
+        # physical γ, so all four equivalent media give the same B-integral.
+        @test b_integral(sol_const, m_const) ≈ b_integral(sol_float, m_float)
+        @test b_integral(sol_freq, m_freq) ≈ b_integral(sol_no_shock, m_const)
+        @test b_integral(sol_area, m_area) ≈ b_integral(sol_expected, m_expected)
     end
 end

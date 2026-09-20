@@ -3,11 +3,21 @@ using Documenter
 
 DocMeta.setdocmeta!(Soliton, :DocTestSetup, :(using Soliton); recursive=true)
 
+# The example pages run real GNLSE solves (up to 2^14 grid points, hundreds of
+# z_saves) inside `@example` blocks, so a full build takes several minutes.
+# For local iteration on prose/navigation/formatting, run with
+# `DOCS_DRAFT=true julia --project=docs docs/make.jl` to skip executing those
+# blocks (Documenter renders a placeholder instead). CI never sets this, so
+# PRs still get the full execution — a broken example fails the build there,
+# per the `warnonly` note below.
+draft = get(ENV, "DOCS_DRAFT", "false") == "true"
+
 makedocs(;
     modules=[Soliton],
     authors="Brian Sinquin <148503669+brian-sinquin@users.noreply.github.com> and contributors",
     sitename="Soliton.jl",
     checkdocs=:exports,
+    draft=draft,
     format=Documenter.HTML(;
         canonical="https://brian-sinquin.github.io/Soliton.jl",
         edit_link="master",

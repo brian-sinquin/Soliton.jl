@@ -257,9 +257,9 @@ function AmplifyingMedium(;
     gain_val = if g0_db !== nothing
         (
         if g0_db isa Real
-            Float64(g0_db) * (log(10.0) / 10.0)
+            db_to_np(Float64(g0_db))
         else
-            Float64.(g0_db) .* (log(10.0) / 10.0)
+            db_to_np.(Float64.(g0_db))
         end
     )
     else
@@ -643,14 +643,14 @@ Optical pulse envelope in time and frequency domains.
 # Fields
 
   - `At::Vector{T}`: Time domain envelope A(t) [√W]
-  - `AW::Vector{T}`: Frequency domain envelope A(ω) [√W·s]
+  - `AW::Vector{T}`: Discrete frequency domain envelope [√W]; multiply by N·dt for Fourier-integral scaling
   - `grid::Grid`: Associated time-frequency grid
 
 # Notes
 
 Following gnlse-python convention:
 
-  - AW = N * ifft(At) (note: inverted FFT convention)
+  - AW = ifft(At), in FFT-natural order; Solution.AW is in monotonic frequency order
   - At = fft(AW)
   - Power: P(t) = |A(t)|²
   - Energy: E = ∫|A(t)|²dt
@@ -971,7 +971,7 @@ Two-component (orthogonal polarization) optical pulse envelope in time and frequ
 # Fields
 
   - `At::Matrix{ComplexF64}`: Time domain envelope matrix of size `N × 2` [√W]
-  - `AW::Matrix{ComplexF64}`: Frequency domain envelope matrix of size `N × 2` [√W·s]
+  - `AW::Matrix{ComplexF64}`: Discrete spectrum `ifft(At, 1)`, size `N × 2`, in FFT-natural order [√W]
   - `grid::Grid`: Associated time-frequency grid
 """
 struct VectorialPulse <: AbstractPulse

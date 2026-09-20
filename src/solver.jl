@@ -161,7 +161,9 @@ function Pulse(sol::Solution)
     V = sol.W .- sol.omega0
     lambda0 = 2π * c / sol.omega0
     grid = Grid(N, sol.t, V, sol.W, dt, sol.omega0, lambda0)
-    return Pulse(sol.At[:, end], sol.AW[:, end], grid)
+    At = sol.At[:, end]
+    AW = isempty(sol.AW) ? ifft(At) : ifftshift(sol.AW[:, end])
+    return Pulse(At, AW, grid)
 end
 
 # Make SimParams callable for piping support
@@ -197,7 +199,9 @@ function VectorialPulse(sol::VectorialSolution)
     V = sol.W .- sol.omega0
     lambda0 = 2π * c / sol.omega0
     grid = Grid(N, sol.t, V, sol.W, dt, sol.omega0, lambda0)
-    return VectorialPulse(sol.At[:, :, end], grid)
+    At = sol.At[:, :, end]
+    AW = isempty(sol.AW) ? ifft(At, 1) : ifftshift(sol.AW[:, :, end], 1)
+    return VectorialPulse(At, AW, grid)
 end
 
 # Make SimParams callable for vectorial piping support

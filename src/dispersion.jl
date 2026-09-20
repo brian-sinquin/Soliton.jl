@@ -129,9 +129,8 @@ function _eval_loss_or_gain!(
     N = length(V)
     length(res) == N ||
         throw(ArgumentError("Buffer length $(length(res)) does not match grid size $N"))
-    factor = log(10.0) / 10.0
     if val isa Real
-        alpha_Np = is_loss ? Float64(val) * factor : Float64(val)
+        alpha_Np = is_loss ? db_to_np(Float64(val)) : Float64(val)
         fill!(res, alpha_Np)
         return res
     elseif val isa AbstractVector
@@ -139,7 +138,7 @@ function _eval_loss_or_gain!(
             ArgumentError("Spectrum length $(length(val)) does not match grid size $N")
         )
         if is_loss
-            @. res = Float64(val) * factor
+            @. res = db_to_np(Float64(val))
         else
             copyto!(res, val)
         end
@@ -157,7 +156,7 @@ function _eval_loss_or_gain!(
             else
                 val(z)
             end
-            res[i] = is_loss ? Float64(out) * factor : Float64(out)
+            res[i] = is_loss ? db_to_np(Float64(out)) : Float64(out)
         end
         return res
     else
