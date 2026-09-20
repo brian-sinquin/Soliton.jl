@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `README.md`, `docs/src/index.md`, `docs/src/physics.md`, `docs/src/guide/semiconductor.md`, `docs/src/examples/index.md`: updated to mention 3PA alongside TPA and reference the new examples.
 - `docs/make.jl`: navigation updated for the two new example pages (11, 12) and the renamed Example 8.
+- CI: the Documentation workflow job now runs with `JULIA_NUM_THREADS=auto`. Example 10 ("Multithreaded Parameter Sweep") documents itself as needing multiple threads to be fast, but the job previously always ran single-threaded, so that one `@example` block alone could dominate the ~10-minute build. Also dropped a redundant standalone `doctest(Soliton)` step: `makedocs` already runs doctests as part of the main build, and the package currently has no `jldoctest` blocks for the extra step to have covered.
 
 ### Fixed
 
