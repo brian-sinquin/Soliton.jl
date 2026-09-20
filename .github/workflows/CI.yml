@@ -47,6 +47,13 @@ jobs:
       actions: write # needed to allow julia-actions/cache to proactively delete old caches that it has created
       contents: write
       statuses: write
+    env:
+      # Example 10 ("Multithreaded Parameter Sweep") runs a 100-trial `solve_sweep`
+      # and documents itself as needing multiple threads to be fast (~40s on 8
+      # threads); without this, every `julia` invocation in this job — including
+      # the one that executes it inside `makedocs()` — defaults to a single
+      # thread, so that one example alone can dominate the build.
+      JULIA_NUM_THREADS: auto
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v2
@@ -69,10 +76,8 @@ jobs:
         with:
           name: documentation-preview
           path: docs/build/
-      - name: Run doctests
-        shell: julia --project=docs --color=yes {0}
-        run: |
-          using Documenter: DocMeta, doctest
-          using Soliton
-          DocMeta.setdocmeta!(Soliton, :DocTestSetup, :(using Soliton); recursive=true)
-          doctest(Soliton)
+      # No separate doctest step: `makedocs` above already runs doctests as part
+      # of the main build (Documenter's default `doctest=true`), and the package
+      # currently has no `jldoctest` blocks for a standalone `doctest(Soliton)`
+      # pass to add coverage for — it was a second full Julia startup + package
+      # load (~16s) that never actually tested anything extra.
