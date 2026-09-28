@@ -75,13 +75,13 @@ no separate tracking is needed during `solve`.
 
 ## Raman Scattering
 
-Three models for the Raman response ``h_R(t)`` are available:
+Three silica models for the Raman response ``h_R(t)`` are available:
 
 | Model | Reference |
 |:---|:---|
 | `BlowWood()` | Blow & Wood (1989) — two-component exponential |
 | `LinAgrawal()` | Lin & Agrawal (2006) — fits measured fused-silica data |
-| `Hollenbeck()` | Hollenbeck & Cantrell (2002) — most accurate for silica |
+| `Hollenbeck()` | Hollenbeck & Cantrell (2002) — 13-oscillator silica response |
 
 ## Self-Steepening
 
@@ -135,7 +135,7 @@ Gas guidance in hollow-core anti-resonant / photonic crystal fibers (HC-PCF) com
    n(\lambda, P) = 1 + P \cdot \frac{C_1}{C_2 - \lambda^{-2}}
    ```
    with coefficients from Börzsönyi et al. (2013) for noble gases (`:Ar`, `:Ne`, `:Kr`, `:Xe`) and molecular gases (`:H2`, `:N2`).
-3. **Molecular Gas Raman Response**: Rotational ($S(1)$ shift $17.6\text{ THz}$) and vibrational ($Q(1)$ shift $124.6\text{ THz}$) Raman lines for $\text{H}_2$ and $\text{N}_2$.
+3. **Molecular Gas Raman Response**: Gas-specific rotational and vibrational Raman lines for $\text{H}_2$ and $\text{N}_2$. For hydrogen, the rotational shift is $17.6\text{ THz}$ and the vibrational shift is $124.6\text{ THz}$.
 
 ## Semiconductor Photonics & TPA / 3PA / Free Carriers
 
@@ -158,7 +158,9 @@ In silicon nanowires, Germanium, and GaAs PIC waveguides, two-photon absorption 
 
 ## Interaction Picture
 
-All solvers work in the **interaction picture** — the simulation variable ``U = e^{-D z} A`` eliminates the linear dispersion operator from the equation of motion. This allows the solver to take larger steps in weakly nonlinear regimes and enables high-accuracy adaptive stepping.
+The `ERK4IP` solver works in the **interaction picture** — the simulation variable ``U = e^{-D z} A`` eliminates the linear dispersion operator from the equation of motion. This allows the solver to take larger steps in weakly nonlinear regimes and enables high-accuracy adaptive stepping.
+
+`SSFM` and `AdaptiveSSFM` instead alternate linear propagation with an explicit-Euler nonlinear substep. They are first-order overall; phase-based step control in `AdaptiveSSFM` does not change that order. See the [solver API](api/solvers.md) for configuration options.
 
 ## References
 

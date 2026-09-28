@@ -13,9 +13,14 @@ These tools are designed to support ensemble simulations, where multiple indepen
 The [`add_noise`](@ref) function injects physically-motivated noise into an initial optical [`Pulse`](@ref). It supports four independent noise mechanisms:
 
 ```julia
+using Soliton, Random
+
+grid = create_grid(2^12, 20e-12, 1550e-9)
+clean_pulse = sech_pulse(grid, 1.0, 1e-12)
+
 noisy_pulse = add_noise(
     clean_pulse;
-    rng = Random.default_rng(),
+    rng = Xoshiro(42),  # reproducible noise realization
     photons_per_mode = 1.0,
     quantum_model = :gaussian,
     rin = 0.0,
@@ -71,11 +76,14 @@ The `PMDElement` draws a random DGD from a Maxwell-Boltzmann distribution (mean 
 Because it is a `LumpedElement`, it can be easily cascaded in a piping workflow:
 
 ```julia
-# Simulate a long link composed of multiple 10 km spans, each with 0.5 ps mean DGD
-span = BirefringentMedium(10e3, ...)
-pmd  = PMDElement(0.5e-12)
+# A short two-polarization link with independent PMD at each lumped stage.
+disp = TaylorDispersion([-21.5e-27])
+medium = BirefringentMedium(10.0, 0.0011, 0.0, disp, disp, 0.0, grid.lambda0)
+span = SimParams(; medium=medium, solver=SSFM(0.1), raman_model=nothing, z_saves=2)
+vpulse = VectorialPulse(clean_pulse.At, zeros(ComplexF64, grid.N), grid)
+pmd = PMDElement(0.5e-12; rng=Xoshiro(43))
 
-out_pulse = vpulse |> span |> pmd |> span |> pmd |> span
+vsol = vpulse |> span |> pmd |> span |> pmd |> span
 ```
 
 ## Ensemble Coherence
@@ -83,6 +91,9 @@ out_pulse = vpulse |> span |> pmd |> span |> pmd |> span
 To study the shot-to-shot stability of a process (like supercontinuum generation), you can simulate an ensemble of pulses, each with an independent noise realization, and compute the complex degree of first-order coherence $|g_{12}^{(1)}(\omega)|$.
 
 ```julia
+medium = commercial_fiber("Corning_SMF28"; length=1.0, lambda0=grid.lambda0)
+params = SimParams(; medium=medium, z_saves=2)
+
 function run_noisy_shot(clean_pulse, params)
     # Each call draws new random variables
     noisy_pulse = add_noise(clean_pulse; photons_per_mode=1.0)

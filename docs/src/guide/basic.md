@@ -44,7 +44,7 @@ medium = Medium(;
 
 ## Step 3: Generate an Initial Pulse
 
-Several pulse shapes are available:
+Choose one of the following pulse shapes. Each assignment replaces `pulse`; run only the one you want to propagate. Pulse widths are intensity FWHM values in seconds:
 
 ```julia
 # Hyperbolic secant: sech_pulse(grid, Pmax, FWHM)
@@ -79,7 +79,7 @@ params = SimParams(;
 sol = solve(pulse, params)
 ```
 
-A [`Solution`](@ref) is returned:
+A [`Solution`](@ref) is returned. The default `save_freq=true` stores both temporal and spectral fields:
 
 | Field | Description |
 |:---|:---|
@@ -88,6 +88,8 @@ A [`Solution`](@ref) is returned:
 | `sol.Z` | Propagation distances [m] |
 | `sol.At` | Time-domain field matrix `(N × z_saves)` |
 | `sol.AW` | Freq-domain field matrix `(N × z_saves)` |
+
+`sol.AW` is already in monotonic frequency order, aligned with `sol.W`; do not apply another `fftshift` when plotting it. A `Pulse` stores its spectrum in FFT order instead. Use `Pulse(sol)` to convert the final state safely. Set `save_freq=false` to omit spectral snapshots and reduce memory use; `sol.AW` will then be empty.
 
 ## Full Example: Soliton Propagation
 
@@ -107,7 +109,7 @@ medium = Medium(;
 )
 
 # Fundamental soliton: N = √(γ P₀ T₀² / |β₂|) = 1
-T0 = 1e-12  # soliton 1/e half-width [s]
+T0 = 1e-12  # sech scale parameter in A(t) = sqrt(P0) * sech(t/T0) [s]
 P0 = abs(medium.dispersion.betas[1]) / (medium.gamma * T0^2)  # [W]
 # sech_pulse takes the intensity FWHM; m = 2·arcsinh(1) ≈ 1.763 converts T₀ → FWHM
 pulse = sech_pulse(grid, P0, 2 * log(1 + sqrt(2)) * T0)
@@ -131,15 +133,18 @@ params = SimParams(;
 )
 ```
 
-Or tune the adaptive solver tolerances:
+Both `SSFM` and `AdaptiveSSFM` use an explicit-Euler nonlinear substep and are first-order overall. Check convergence by reducing the step size (or `phi_max` for `AdaptiveSSFM`).
+
+Tune the default adaptive `ERK4IP` solver explicitly:
 
 ```julia
 params = SimParams(;
     medium = medium,
-    rtol   = 1e-8,             # relative tolerance
-    atol   = 1e-10,            # absolute tolerance
+    solver = ERK4IP(; rtol=1e-8, atol=1e-10),
 )
 ```
+
+`SimParams(; medium=medium, rtol=1e-8, atol=1e-10)` is also supported for compatibility. Do not combine those keywords with an explicit `solver`.
 
 ## Parallel Parameter Sweeps (`solve_sweep`)
 
@@ -156,4 +161,4 @@ solutions = solve_sweep(powers) do P0
 end
 ```
 
-`solve_sweep` guarantees thread-safe, isolated memory allocations for each simulation trial.
+`solve_sweep` creates separate solver workspaces for each trial. Keep shared grids and media read-only, and avoid mutating shared arrays or random-number generators inside the setup function.

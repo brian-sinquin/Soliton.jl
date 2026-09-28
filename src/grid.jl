@@ -70,7 +70,7 @@ end
     wavelength_grid(solution::Solution)
 
 Wavelength grid [m] for the absolute frequency axis, λ = 2πc/ω. The result is
-aligned element-for-element with `grid.W` (and with `solution.W` / the columns
+aligned element-for-element with `grid.W` (and with `solution.W` / the rows
 of `solution.AW`), so it is monotonically decreasing in array order.
 """
 wavelength_grid(grid::Grid) = (2π * c) ./ grid.W

@@ -13,7 +13,7 @@ CurrentModule = Soliton
 - **New to Soliton.jl?** Install the package below, run the quick start, then follow the [Getting Started guide](guide/basic.md).
 - **Looking for a simulation to adapt?** Explore the [worked examples](examples/index.md), from supercontinuum generation to pulse amplification.
 - **Choosing a physical model?** Read the [Physics Background](physics.md) and the topic guides below.
-- **Need function signatures and options?** Browse the API for [media and simulation parameters](api/medium.md), [pulses](api/pulse.md), and [solvers](api/solvers.md).
+- **Need function signatures and options?** Browse the API for [media](api/medium.md), [pulses](api/pulse.md), and [solvers and simulation parameters](api/solvers.md).
 
 ## Installation
 
@@ -35,7 +35,7 @@ Pkg.add(url="https://github.com/brian-sinquin/Soliton.jl")
 
 Propagate a pulse through one meter of telecom fiber. Times are in seconds, lengths and wavelengths in meters, and peak power in watts.
 
-```julia
+```@example home
 using Soliton
 
 # Choose a fiber and use its reference wavelength for the grid.
@@ -51,6 +51,7 @@ sol = solve(pulse, params)
 
 # Output temporal power profile [W].
 output_power = abs2.(sol.At[:, end])
+nothing # hide
 ```
 
 The returned solution contains propagation distances (`sol.Z`), the time axis (`sol.t`), and temporal and spectral fields (`sol.At`, `sol.AW`). The [Getting Started guide](guide/basic.md) explains each step and how to choose a solver.
@@ -77,7 +78,7 @@ The returned solution contains propagation distances (`sol.Z`), the time axis (`
 
 | Feature / Model | Description | Reference Module |
 |:---|:---|:---|
-| **Chromatic dispersion** | Taylor expansion ($\beta_2, \beta_3, \dots$), tabulated, or Sellmeier glass presets (`FusedSilica`, `SF6`, `SF57`) | `TaylorDispersion`, `Sellmeier` |
+| **Chromatic dispersion** | Taylor expansion ($\beta_2, \beta_3, \dots$), tabulated, or Sellmeier glass presets (`FusedSilica`, `SF6`, `SF57`) | `TaylorDispersion`, `SellmeierDispersion` |
 | **Kerr nonlinearity (SPM)** | Self-phase modulation ($i \gamma \|A\|^2 A$) | `Medium` |
 | **Raman scattering** | Delayed silica response (Blow–Wood, Lin–Agrawal, Hollenbeck) | `BlowWood`, `Hollenbeck` |
 | **Self-steepening** | Frequency-dependent shock term $\gamma \omega / \omega_0$ | `SimParams` |
@@ -93,8 +94,8 @@ The returned solution contains propagation distances (`sol.Z`), the time axis (`
 | Solver | Type | Description |
 |:---|:---|:---|
 | `ERK4IP` | Adaptive | Embedded Runge–Kutta 4(3) in the Interaction Picture (default) |
-| `SSFM` | Fixed-step | Symmetric Split-Step Fourier Method |
-| `AdaptiveSSFM` | Adaptive | Phase-controlled adaptive Split-Step Fourier Method |
+| `SSFM` | Fixed-step | Split-Step Fourier Method with a first-order nonlinear substep |
+| `AdaptiveSSFM` | Adaptive | Phase-controlled Split-Step Fourier Method with a first-order nonlinear substep |
 
 ## Project and Support
 
