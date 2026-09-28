@@ -6,7 +6,7 @@ gnlse-python conventions for optical pulse propagation in nonlinear dispersive m
 
 # Physical Effects
 
-  - Dispersion: Arbitrary-order Taylor expansion β₂, β₃, β₄, ... [ps^n/m]
+  - Dispersion: Arbitrary-order Taylor expansion β₂, β₃, β₄, ... [s^n/m]
   - Kerr nonlinearity: Self-phase modulation, γ|A|² [1/(W·m)]
   - Raman scattering: Delayed nonlinear response (BlowWood, LinAgrawal, Hollenbeck models)
   - Self-steepening: Shock term for sub-100 fs pulses

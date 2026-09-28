@@ -7,7 +7,7 @@ Reference: gnlse-python GNLSE.run()
 """
     solve(pulse::AbstractPulse, params::SimParams; progress::Bool=true)
 
-Solve GNLSE following gnlse-python conventions using adaptive ERK4IP method.
+Solve the GNLSE using the solver selected in `params` (default: `ERK4IP()`).
 
 # Arguments
 
@@ -47,7 +47,7 @@ solution = solve(pulse, params)
 
 # Notes
 
-Integrates the GNLSE with the adaptive ERK4IP solver. All quantities are in
+Integrates the GNLSE with the selected solver. All quantities are in
 natural SI units; the envelope spectrum follows the standard optics convention
 `AW = ifft(At)`.
 """
@@ -74,7 +74,7 @@ end
 """
     solve(pulse::AbstractPulse, params::SimParams; progress::Bool=true, rng::AbstractRNG=default_rng())
 
-Solve GNLSE following gnlse-python conventions using adaptive ERK4IP method.
+Solve the GNLSE using the solver selected in `params` (default: `ERK4IP()`).
 
 `rng` seeds the Amplified Spontaneous Emission (ASE) noise for `AmplifyingMedium`
 propagation (ignored for all other media).

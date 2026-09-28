@@ -38,13 +38,13 @@ pulse = gaussian_pulse(grid, 50.0, 1.0e-12) # 50 W peak power input
 soi = SemiconductorMedium(
     length = 0.01,        # 1 cm waveguide
     gamma = 300.0,        # 300 /W/m Kerr parameter
-    alpha2 = 5.0e-12,     # 5 cm/GW TPA parameter at 1550 nm
+    alpha2 = 5.0e-12,     # 0.5 cm/GW = 5e-12 m/W at 1550 nm
     Aeff = 0.1e-12,       # 0.1 μm² modal area
     tau_c = 1.0e-9,       # 1 ns carrier recombination lifetime
     betas = [-1000e-27],  # anomalous dispersion
     lambda0 = 1550e-9
 )
 
-params = SimParams(; medium=soi, z_saves=50)
+params = SimParams(; medium=soi, raman_model=nothing, z_saves=50)
 sol = solve(pulse, params)
 ```

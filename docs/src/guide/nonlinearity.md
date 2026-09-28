@@ -4,7 +4,7 @@ CurrentModule = Soliton
 
 # Wavelength-Dependent Nonlinearity
 
-Soliton.jl supports three levels of nonlinearity specification:
+Soliton.jl supports four forms of nonlinearity specification:
 
 ## 1. Constant Nonlinearity
 
@@ -48,7 +48,7 @@ medium = Medium(0.1, γ_model, 0.0, TaylorDispersion([-1.2e-26]), 835e-9)
 
 ## 4. Effective Mode Area Model
 
-The most physically rigorous model: compute ``\gamma(\omega)`` from the material nonlinear index ``n_2`` and the frequency-dependent effective mode area ``A_{\rm eff}(\omega)``:
+Compute ``\gamma(\omega)`` from the material nonlinear index ``n_2`` and the frequency-dependent effective mode area ``A_{\rm eff}(\omega)``:
 
 ```math
 \gamma(\omega) = \frac{n_2 \omega}{c \, A_{\rm eff}(\omega)}
@@ -62,7 +62,9 @@ Aeff_func = ω -> 80e-12    # Constant Aeff = 80 µm² (standard SMF-28)
 medium = Medium(1.0, γ_model, 0.0, TaylorDispersion([-21.5e-27]), 1550e-9)
 ```
 
-A more realistic ``A_{\rm eff}(\omega)`` would be obtained from a mode solver:
+For frequency-dependent and effective-area models, the supplied spectral coefficient is used directly; `self_steepening` does not add another factor of ``\omega/\omega_0``.
+
+A frequency-dependent ``A_{\rm eff}(\omega)`` can be obtained from a mode solver. The following optional example requires `Interpolations.jl` (`using Pkg; Pkg.add("Interpolations")`):
 
 ```julia
 # Hypothetical frequency-dependent Aeff from numerical mode solver data

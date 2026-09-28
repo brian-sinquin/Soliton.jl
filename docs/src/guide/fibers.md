@@ -33,10 +33,10 @@ pm780 = commercial_fiber("Thorlabs_PM780", length=2.0)
 
 ### Overriding Wavelength or Loss
 
-You can override default parameters when instantiating:
+You can override default parameters when instantiating. A `lambda0` override changes the reference wavelength only; it does not refit the preset dispersion or nonlinear coefficient. For a different operating band, supply appropriate coefficients in a custom `Medium`.
 
 ```julia
-custom_smf = commercial_fiber("Corning_SMF28", length=50.0, lambda0=1310e-9, loss=0.0004)
+custom_smf = commercial_fiber("Corning_SMF28", length=50.0, loss=0.0004)
 ```
 
 ---

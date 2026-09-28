@@ -37,15 +37,17 @@ hcf = HollowCoreFiber(
     lambda0 = 800e-9
 )
 
-params = SimParams(; medium=hcf, z_saves=100)
+params = SimParams(; medium=hcf, raman_model=nothing, z_saves=100)
 sol = solve(pulse, params)
 ```
+
+Set `raman_model=nothing` for noble gases: the default `SimParams` Raman model is for silica.
 
 By default `HollowCoreFiber` is lossless (`loss=0.0`). Pass `confinement_loss=true`
 to additionally include the Marcatili-Schmeltzer capillary confinement loss
 ``\alpha(\lambda) \propto \lambda^2/a^3`` — note this bare-capillary formula is a
 conservative bound that can overestimate loss for real anti-resonant/negative-curvature
-HC-PCF designs (see `docs/src/physics.md`), so it defaults to off.
+HC-PCF designs (see [Physics Background](../physics.md)), so it defaults to off.
 
 ---
 
@@ -54,12 +56,16 @@ HC-PCF designs (see `docs/src/physics.md`), so it defaults to off.
 Molecular gases ($\text{H}_2, \text{N}_2$) exhibit narrow, high-frequency rotational and vibrational Raman transitions:
 
 ```julia
+# Use a hydrogen-filled fiber with the hydrogen Raman response.
+h2_fiber = HollowCoreFiber(; radius=15e-6, gas=:H2, pressure=5.0,
+                          length=0.3, lambda0=grid.lambda0)
+
 # Hydrogen rotational Raman model (17.6 THz shift)
 h2_rot = MolecularRamanGas(:H2_rotational)
 
 # Hydrogen vibrational Raman model (124.6 THz shift)
 h2_vib = MolecularRamanGas(:H2_vibrational)
 
-params = SimParams(; medium=hcf, raman_model=h2_rot, z_saves=100)
+params = SimParams(; medium=h2_fiber, raman_model=h2_rot, z_saves=100)
 sol = solve(pulse, params)
 ```

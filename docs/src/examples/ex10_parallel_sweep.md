@@ -1,6 +1,6 @@
 # Example 10: Multithreaded Parameter Sweep — High-Resolution Supercontinuum Sweep
 
-This example demonstrates how to perform a **high-resolution 100-simulation parameter sweep** over Continuous-Wave / Femtosecond Supercontinuum generation using **Soliton.jl**'s `solve_sweep` API, executing concurrently across 8 Julia worker threads (`julia -t 8`).
+This example demonstrates how to perform a **high-resolution 100-simulation parameter sweep** over femtosecond supercontinuum generation using **Soliton.jl**'s `solve_sweep` API, executing concurrently across 8 Julia worker threads (`julia -t 8`).
 
 Here, we sweep input peak power $P_0$ from **$100\text{ W}$ to $5\text{ kW}$** across **100 parallel simulation trials** in a $15\text{ cm}$ photonic crystal fiber (`NKT_NL_PM_750` at $835\text{ nm}$), capturing the output spectrum across a wide **$500\text{ nm}$ to $1400\text{ nm}$** spectral span (900 nm bandwidth).
 
@@ -10,7 +10,7 @@ Here, we sweep input peak power $P_0$ from **$100\text{ W}$ to $5\text{ kW}$** a
 
 1. **High-Resolution Power Progression ($100\text{ W} \le P_0 \le 5\text{ kW}$):** Sweeping 100 fine power steps reveals the smooth, continuous transition from linear dispersion to high-order soliton fission.
 2. **Soliton Fission & Raman SSFS Tree:** Ejected fundamental solitons continuously red-shift into the near-infrared ($> 1350\text{ nm}$), while phase-matched Cherenkov dispersive waves radiate into the blue/green ($500\text{ nm} - 600\text{ nm}$).
-3. **8-Thread Parallel Speedup:** Running 100 high-resolution GNLSE simulations ($N = 8192$ grid points per run) completes in **40 seconds** on 8 Julia worker threads.
+3. **Parallel execution:** Start Julia with `julia -t 8` to allow eight concurrent trials. Runtime depends on the hardware, Julia version, and solver settings; without multiple threads the sweep runs serially.
 
 ---
 
@@ -18,7 +18,6 @@ Here, we sweep input peak power $P_0$ from **$100\text{ W}$ to $5\text{ kW}$** a
 
 ```@example ex10
 using Soliton
-using FFTW
 using Base.Threads
 
 # 1. Setup Fiber and Grid (Standard NKT NL-PM-750 Photonic Crystal Fiber)
@@ -35,7 +34,8 @@ sols = solve_sweep(powers; progress=false) do P0
 end
 
 # 4. Extract Output Spectrum Matrix over Wide Wavelength Span [500 nm - 1400 nm]
-wavelengths_nm = fftshift((2π * c ./ grid.W) .* 1e9)
+# Solution spectra already align with the monotonic grid.W axis.
+wavelengths_nm = wavelength_grid(grid) .* 1e9
 sort_idx = sortperm(wavelengths_nm)
 wl_plot = wavelengths_nm[sort_idx]
 
@@ -45,7 +45,7 @@ wl_plot = wl_plot[mask]
 
 spec_matrix = zeros(Float64, length(powers), length(wl_plot))
 for (i, sol) in enumerate(sols)
-    AW_out = fftshift(sol.AW[:, end])
+    AW_out = sol.AW[:, end]
     P_db = 10 .* log10.(abs2.(AW_out[sort_idx[mask]]) .+ 1e-6)
     spec_matrix[i, :] .= P_db .- maximum(P_db)
 end
@@ -63,7 +63,7 @@ p = heatmap( # hide
     spec_matrix, # hide
     xlabel = "Wavelength λ [nm]", # hide
     ylabel = "Input Peak Power P₀ [W]", # hide
-    title = "High-Resolution Multithreaded Sweep (100 Trials, 8 Threads)", # hide
+    title = "Power Sweep ($(N_trials) Trials, $(Threads.nthreads()) Threads)", # hide
     color = :turbo, # hide
     clims = (-35, 0), # hide
     colorbar_title = "Spectral Power [dB]", # hide

@@ -52,14 +52,14 @@ raman = LinAgrawal()
 
 ### `Hollenbeck()`
 
-The Hollenbeck & Cantrell (2002) model — the most accurate for fused silica, incorporating both isotropic and anisotropic contributions:
+The Hollenbeck & Cantrell (2002) model uses a 13-oscillator fit to the fused-silica Raman response:
 
 ```julia
 raman = Hollenbeck()
 ```
 
 !!! tip
-    For broadband supercontinuum simulations (>1 octave), `Hollenbeck()` is recommended as it fits the silica Raman gain spectrum most accurately.
+    Compare the Raman models over the bandwidth relevant to your simulation. Resolve the response on the time grid before interpreting changes in the output spectrum.
 
 ## Inspecting the Raman Response
 
@@ -96,9 +96,8 @@ medium = Medium(;
     lambda0  = 1550e-9,
 )
 
-# Fundamental soliton input (T₀=50 fs → ~12 nm SSFS visible over 10 soliton periods)
-# Note: SSFS ∝ T₀⁻⁴; using T₀=200 fs gives only ~0.05 nm (invisible!)
-T0 = 50e-15  # 50 fs soliton half-width
+# Fundamental soliton input. Shorter pulses exhibit a stronger Raman shift.
+T0 = 50e-15  # sech scale parameter [s]
 P0 = abs(medium.dispersion.betas[1]) / (medium.gamma * T0^2)
 pulse = sech_pulse(grid, P0, T0 * 2 * log(1 + sqrt(2)))
 

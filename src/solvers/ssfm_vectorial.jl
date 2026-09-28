@@ -9,7 +9,7 @@ import ..SSFM, ..propagate, ..VectorialPulse, ..SimParams
 """
     propagate(model::PhysicsModel, pulse::VectorialPulse, params::SimParams, solver::SSFM, progress::Bool)
 
-Propagate a `VectorialPulse` using the fixed-step Symmetric Split-Step Fourier Method (SSFM) for Coupled GNLSE.
+Propagate a `VectorialPulse` using the fixed-step Split-Step Fourier Method (SSFM) with a first-order nonlinear substep for Coupled GNLSE.
 """
 function propagate(
     model::PhysicsModel,

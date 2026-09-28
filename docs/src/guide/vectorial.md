@@ -90,7 +90,7 @@ The ``\beta_1`` parameter in `TaylorDispersion` controls the group velocity of e
 # X-axis: reference group velocity
 disp_x = TaylorDispersion([-21.5e-27], 0.0)
 
-# Y-axis: 100 fs/mm faster (walk-off = 1e-10 s/m)
+# Y-axis: 100 fs/mm greater group delay (walk-off = 1e-10 s/m)
 disp_y = TaylorDispersion([-21.5e-27], 1.0e-10)
 ```
 

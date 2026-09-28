@@ -29,6 +29,8 @@ using Soliton
 
 grid = create_grid(2^12, 40e-12, 2600e-9)  # 2.6 μm mid-IR pump, below Si's TPA edge
 
+# Synthetic TPA comparison at the same wavelength; not a physical
+# silicon TPA coefficient at 2.6 μm, where TPA is suppressed.
 soi_tpa = SemiconductorMedium(
     length=0.005, gamma=50.0, alpha2=5.0e-12, Aeff=0.5e-12,
     tau_c=1.0e-9, betas=[-500e-27], lambda0=2600e-9,
@@ -80,7 +82,7 @@ plot!(powers, loss_3pa; marker=:square, lw=2, color=:orangered, label="3PA only 
 | 8 | ~24% | ~1.6×10⁻³ |
 | 32 | ~59% | ~3.2×10⁻² |
 
-The fitted log-log slopes come out close to 1 (TPA) and 2 (3PA), confirming the quadratic-vs-cubic intensity dependence directly in the propagation model — the defining experimental fingerprint used to identify 3PA in mid-IR silicon photonics.
+The slopes approach 1 (TPA) and 2 (3PA) in the weak-depletion limit. The full sweep includes appreciable depletion, so its fitted slopes need not equal those limits. The TPA medium is a synthetic comparison at 2.6 μm, not a physical silicon TPA model at that wavelength.
 
 !!! note "Why 3PA matters beyond 2.2 μm"
     Below the TPA edge ($\hbar\omega_0 < E_g/2$), two-photon transitions are forbidden by energy conservation, and silicon looks nominally lossless to first order — until 3PA (still allowed for $\hbar\omega_0 > E_g/3$) sets the real nonlinear-loss floor. This is why mid-IR silicon supercontinuum and parametric devices must include `alpha3`, not `alpha2`, to correctly predict conversion efficiency (see e.g. Appl. Opt. **59**, 1187 (2020) for SiGe four-wave mixing).

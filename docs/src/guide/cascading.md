@@ -26,6 +26,8 @@ bandpass = Filter(ω -> abs(ω - 2π*2.99792458e8/1550e-9) < 1e12 ? 1.0 : 0.0)
 
 Elements can be applied directly to a pulse:
 ```julia
+grid = create_grid(2^12, 20e-12, 1550e-9)
+pulse = sech_pulse(grid, 1.0, 1e-12)
 amplified_pulse = apply(pulse, amp)
 ```
 
@@ -45,7 +47,7 @@ pulse = sech_pulse(grid, 1000.0, 1e-12)
 
 # Define stages
 fiber1 = SimParams(; medium=Medium(5.0, 0.0011, 0.0, [-21.5e-27], 1550e-9))
-amp    = Amplifier(13.0)    # +13 dB EDFA
+amp    = Amplifier(13.0)    # ideal lumped +13 dB gain
 fiber2 = SimParams(; medium=Medium(10.0, 0.0011, 0.2e-3, [-21.5e-27], 1550e-9))
 filter = Filter(ω -> exp(-((ω - 2π*c/1550e-9)^2) / (2 * (1e12)^2)))
 
@@ -68,15 +70,17 @@ results = solve(pulse, stages)
 # results is a Vector of Pulse/Solution objects, one per stage
 ```
 
+A chain ending in `SimParams` returns a solution; a chain ending in a lumped element returns a pulse. `Amplifier` applies ideal gain only: use [`AmplifyingMedium`](@ref) for gain saturation and ASE noise.
+
 ## Example: Fiber Amplifier Chain
 
 ```julia
 using Soliton
 
-grid = create_grid(2^12, 20e-12, 1550e-9)
+grid = create_grid(2^12, 100e-12, 1550e-9)
 pulse = gaussian_pulse(grid, 1.0, 10e-12)  # low power, 10 ps input
 
-# Stage 1: short pre-amplifier fiber
+# Stage 1: passive input fiber
 pre_amp_fiber = SimParams(;
     medium = Medium(5.0, 0.005, 0.0, [-21.5e-27], 1550e-9),
     raman_model = nothing,
@@ -85,21 +89,21 @@ pre_amp_fiber = SimParams(;
 # Lumped EDFA gain
 edfa = Amplifier(30.0)   # 30 dB = 1000x power
 
-# Stage 2: main amplifier fiber
+# Stage 2: passive output fiber
 main_fiber = SimParams(;
     medium = Medium(20.0, 0.005, 0.0, [-21.5e-27], 1550e-9),
     raman_model = BlowWood(),
     self_steepening = true,
 )
 
-# Band-pass filter to clean up ASE
+# Band-pass filter (this ideal-gain example does not generate ASE)
 bpf = Filter(ω -> begin
     Δω = ω - 2π * 2.99792458e8 / 1550e-9
     exp(-Δω^2 / (2 * (2π * 1e12)^2))  # 1 THz Gaussian filter
 end)
 
 # Run the full chain
-sol = pulse |> pre_amp_fiber |> edfa |> main_fiber |> bpf
+out_pulse = pulse |> pre_amp_fiber |> edfa |> main_fiber |> bpf
 
-println("Output peak power: ", maximum(abs2, sol.At[:, end]), " W")
+println("Output peak power: ", maximum(abs2, out_pulse.At), " W")
 ```
